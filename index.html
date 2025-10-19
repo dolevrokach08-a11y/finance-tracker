@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול פיננסי אישי</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 50px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 2.5em;
+            font-weight: 700;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 50px;
+            font-size: 1.1em;
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .app-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            padding: 30px 40px;
+            border-radius: 15px;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.2);
+            transition: left 0.5s ease;
+        }
+
+        .app-button:hover::before {
+            left: 100%;
+        }
+
+        .app-button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+        }
+
+        .finance-button {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+
+        .portfolio-button {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+
+        .icon {
+            font-size: 3em;
+        }
+
+        .button-content {
+            text-align: right;
+        }
+
+        .button-title {
+            font-size: 1.8em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .button-description {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            .app-button {
+                padding: 25px 20px;
+            }
+
+            .icon {
+                font-size: 2.5em;
+            }
+
+            .button-title {
+                font-size: 1.5em;
+            }
+
+            .button-description {
+                font-size: 0.9em;
+            }
+        }
+
+        .footer {
+            margin-top: 40px;
+            color: #999;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 ניהול פיננסי אישי 📊</h1>
+        <p class="subtitle">בחר את המערכת שברצונך להשתמש</p>
+        
+        <div class="buttons-container">
+            <a href="finance.html" class="app-button finance-button">
+                <div class="button-content">
+                    <div class="button-title">מעקב כספי</div>
+                    <div class="button-description">הכנסות • הוצאות • מעשרות</div>
+                </div>
+                <div class="icon">💵</div>
+            </a>
+
+            <a href="portfolio.html" class="app-button portfolio-button">
+                <div class="button-content">
+                    <div class="button-title">תיק השקעות</div>
+                    <div class="button-description">מניות • אג"ח • מדדים</div>
+                </div>
+                <div class="icon">📈</div>
+            </a>
+        </div>
+
+        <div class="footer">
+            💡 המערכות שומרות נתונים מקומית בדפדפן
+        </div>
+    </div>
+</body>
+</html>
