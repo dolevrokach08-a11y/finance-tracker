@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✅ תיק ההשקעות v32 - ניהול מטבעות מתקדם</title>
+    <style>
+        /* [שמירה על כל הCSS מהמקור - מקוצר לצורך המחשה] */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .glass {
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            color: #6b7280;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+
+        .tab-btn:hover { background: #f3f4f6; }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #374151;
+            margin-bottom: 5px;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border 0.3s;
+        }
+
+        /* ✅ NEW: Currency Balances */
+        .currency-balances {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .currency-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 2px solid #3b82f6;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: transform 0.3s;
+        }
+
+        .currency-card:hover {
+            transform: translateY(-4px);
+        }
+
+        .currency-card.usd {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border-color: #10b981;
+        }
+
+        .currency-card.eur {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border-color: #f59e0b;
+        }
+
+        .currency-symbol {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .currency-amount {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #111827;
+        }
+
+        .currency-label {
+            font-size: 0.9rem;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #10b981;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 9999;
+            font-weight: 600;
+            white-space: pre-line;
+        }
+
+        .notification.show { opacity: 1; }
+        .notification.error { background: #ef4444; }
+        .notification.warning { background: #f59e0b; }
+
+        @media (max-width: 768px) {
+            .header h1 { font-size: 2rem; }
+            .currency-balances { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>💼 תיק ההשקעות שלי</h1>
+            <p>ניהול מטבעות מתקדם + מעקב תזרים 💱</p>
+        </div>
+
+        <div class="glass">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="showTab('cashflow', event)">💰 תזרים כספי</button>
+                <button class="tab-btn" onclick="showTab('holdings', event)">📈 מניות</button>
+                <button class="tab-btn" onclick="showTab('settings', event)">⚙️ הגדרות</button>
+            </div>
+
+            <!-- ✅ Cash Flow Tab with Currency Management -->
+            <div id="tab-cashflow" class="tab-content active">
+                <h3 style="margin-bottom: 20px;">💰 ניהול מזומנים ומטבעות</h3>
+
+                <!-- Currency Balances Display -->
+                <div class="currency-balances">
+                    <div class="currency-card ils">
+                        <div class="currency-symbol">₪</div>
+                        <div class="currency-amount" id="balance-ils">0.00</div>
+                        <div class="currency-label">שקלים</div>
+                    </div>
+                    <div class="currency-card usd">
+                        <div class="currency-symbol">$</div>
+                        <div class="currency-amount" id="balance-usd">0.00</div>
+                        <div class="currency-label">דולרים</div>
+                    </div>
+                    <div class="currency-card eur">
+                        <div class="currency-symbol">€</div>
+                        <div class="currency-amount" id="balance-eur">0.00</div>
+                        <div class="currency-label">יורו</div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <button onclick="showDepositModal()" class="btn btn-success">📥 הפקדה</button>
+                    <button onclick="showWithdrawalModal()" class="btn" style="background: #ef4444; color: white;">📤 משיכה</button>
+                    <button onclick="showCurrencyConversionModal()" class="btn btn-warning">💱 המר מטבע</button>
+                </div>
+
+                <!-- Currency Conversions History -->
+                <div class="glass" style="margin-bottom: 20px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                    <h4 style="margin-bottom: 15px; color: #92400e;">💱 היסטוריית המרות</h4>
+                    <div id="conversions-list"></div>
+                </div>
+
+                <!-- Deposits History -->
+                <div class="glass" style="margin-bottom: 20px; background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);">
+                    <h4 style="margin-bottom: 15px; color: #065f46;">📥 הפקדות</h4>
+                    <div id="deposits-list"></div>
+                </div>
+
+                <!-- Withdrawals History -->
+                <div class="glass" style="margin-bottom: 20px; background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+                    <h4 style="margin-bottom: 15px; color: #7f1d1d;">📤 משיכות</h4>
+                    <div id="withdrawals-list"></div>
+                </div>
+            </div>
+
+            <!-- Holdings Tab -->
+            <div id="tab-holdings" class="tab-content">
+                <h3 style="margin-bottom: 20px;">📈 מניות</h3>
+                <button onclick="showAddHoldingForm()" class="btn btn-success">➕ הוסף החזקה</button>
+
+                <div id="add-holding-form" style="display: none; margin: 20px 0; padding: 20px; background: #f9fafb; border-radius: 12px;">
+                    <h4 style="margin-bottom: 15px;">הוסף החזקה חדשה</h4>
+                    <div class="form-group">
+                        <label>סימול (Symbol)</label>
+                        <input type="text" id="new-symbol" placeholder="AAPL">
+                    </div>
+                    <div class="form-group">
+                        <label>כמות מניות</label>
+                        <input type="number" id="new-shares" placeholder="10" step="0.001">
+                    </div>
+                    <div class="form-group">
+                        <label>מחיר קנייה</label>
+                        <input type="number" id="new-cost" placeholder="150.00" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>מטבע</label>
+                        <select id="new-currency">
+                            <option value="ILS">₪ שקל</option>
+                            <option value="USD">$ דולר</option>
+                            <option value="EUR">€ יורו</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button onclick="addHolding()" class="btn btn-success">✅ שמור</button>
+                        <button onclick="hideAddHoldingForm()" class="btn" style="background: #6b7280; color: white;">❌ ביטול</button>
+                    </div>
+                </div>
+
+                <div id="holdings-list" style="margin-top: 20px;"></div>
+            </div>
+
+            <!-- Settings Tab -->
+            <div id="tab-settings" class="tab-content">
+                <h3 style="margin-bottom: 20px;">⚙️ הגדרות</h3>
+
+                <div class="glass">
+                    <h4 style="margin-bottom: 15px;">💱 שערי המרה</h4>
+                    <p style="color: #6b7280; margin-bottom: 15px; font-size: 0.9rem;">
+                        שערי ברירת מחדל (ניתן לשנות בכל המרה)
+                    </p>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div class="form-group">
+                            <label>דולר ($) לשקל</label>
+                            <input type="number" id="rate-usd" step="0.0001" value="3.7500">
+                        </div>
+                        <div class="form-group">
+                            <label>יורו (€) לשקל</label>
+                            <input type="number" id="rate-eur" step="0.0001" value="4.0500">
+                        </div>
+                    </div>
+                    <button onclick="updateExchangeRates()" class="btn btn-success" style="margin-top: 15px;">💾 שמור שערים</button>
+                </div>
+
+                <div class="glass">
+                    <h4 style="margin-bottom: 15px;">💾 גיבוי ושחזור</h4>
+                    <div style="display: flex; gap: 10px;">
+                        <button onclick="exportData()" class="btn btn-primary">📤 ייצוא נתונים</button>
+                        <label class="btn btn-success" style="cursor: pointer;">
+                            📥 ייבוא נתונים
+                            <input type="file" accept=".json" onchange="importData(event)" style="display: none;">
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ Deposit Modal -->
+    <div id="deposit-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 20px;">📥 הפקדה לתיק</h3>
+            <div class="form-group">
+                <label>סכום ההפקדה</label>
+                <input type="number" id="deposit-amount" placeholder="10000" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>מטבע ההפקדה</label>
+                <select id="deposit-currency">
+                    <option value="ILS">₪ שקל</option>
+                    <option value="USD">$ דולר</option>
+                    <option value="EUR">€ יורו</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>📅 תאריך ההפקדה</label>
+                <input type="date" id="deposit-date">
+            </div>
+            <div class="form-group">
+                <label>הערה (אופציונלי)</label>
+                <input type="text" id="deposit-note" placeholder="השקעה חודשית">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button onclick="hideDepositModal()" class="btn" style="background: #6b7280; color: white;">ביטול</button>
+                <button onclick="submitDeposit()" class="btn btn-success">אישור הפקדה</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ Withdrawal Modal -->
+    <div id="withdrawal-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 20px;">📤 משיכה מהתיק</h3>
+            <div class="form-group">
+                <label>סכום המשיכה</label>
+                <input type="number" id="withdrawal-amount" placeholder="5000" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>מטבע המשיכה</label>
+                <select id="withdrawal-currency">
+                    <option value="ILS">₪ שקל</option>
+                    <option value="USD">$ דולר</option>
+                    <option value="EUR">€ יורו</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>📅 תאריך המשיכה</label>
+                <input type="date" id="withdrawal-date">
+            </div>
+            <div class="form-group">
+                <label>הערה (אופציונלי)</label>
+                <input type="text" id="withdrawal-note" placeholder="רווחים">
+            </div>
+            <div style="padding: 15px; background: #f0f9ff; border-radius: 8px; margin: 15px 0; border: 2px solid #3b82f6;">
+                <div style="font-size: 0.9rem; color: #1e40af; margin-bottom: 5px;">יתרה זמינה:</div>
+                <div id="withdrawal-available" style="font-size: 1.3rem; font-weight: bold; color: #1e40af;">-</div>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button onclick="hideWithdrawalModal()" class="btn" style="background: #6b7280; color: white;">ביטול</button>
+                <button onclick="submitWithdrawal()" class="btn" style="background: #ef4444; color: white;">אישור משיכה</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ Currency Conversion Modal -->
+    <div id="conversion-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 20px;">💱 המרת מטבע</h3>
+            <div class="form-group">
+                <label>ממטבע</label>
+                <select id="conversion-from" onchange="updateConversionPreview()">
+                    <option value="ILS">₪ שקל</option>
+                    <option value="USD">$ דולר</option>
+                    <option value="EUR">€ יורו</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>למטבע</label>
+                <select id="conversion-to" onchange="updateConversionPreview()">
+                    <option value="USD">$ דולר</option>
+                    <option value="ILS">₪ שקל</option>
+                    <option value="EUR">€ יורו</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>סכום להמרה</label>
+                <input type="number" id="conversion-amount" placeholder="5000" step="0.01" oninput="updateConversionPreview()">
+            </div>
+            <div class="form-group">
+                <label>שער המרה</label>
+                <input type="number" id="conversion-rate" step="0.0001" placeholder="3.7500" oninput="updateConversionPreview()">
+                <small style="color: #6b7280; margin-top: 5px;">השאר ריק לשימוש בשער ברירת המחדל</small>
+            </div>
+            <div style="padding: 15px; background: #f0f9ff; border-radius: 8px; margin: 15px 0; border: 2px solid #3b82f6;">
+                <div style="font-size: 0.9rem; color: #1e40af; margin-bottom: 8px;">תקבל:</div>
+                <div id="conversion-preview" style="font-size: 1.5rem; font-weight: bold; color: #1e40af;">-</div>
+            </div>
+            <div class="form-group">
+                <label>📅 תאריך ההמרה</label>
+                <input type="date" id="conversion-date">
+            </div>
+            <div class="form-group">
+                <label>הערה (אופציונלי)</label>
+                <input type="text" id="conversion-note" placeholder="המרה לקניית מניות">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button onclick="hideCurrencyConversionModal()" class="btn" style="background: #6b7280; color: white;">ביטול</button>
+                <button onclick="submitCurrencyConversion()" class="btn btn-warning">אישור המרה</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script>
+        // ===========================================
+        // ✅ DATA STRUCTURE - ENHANCED WITH CURRENCIES
+        // ===========================================
+
+        let portfolio = {
+            holdings: [],
+            cash: { ILS: 0, USD: 0, EUR: 0 },  // ✅ NEW: Separate balances per currency
+            rates: { USD: 3.75, EUR: 4.05 },
+            deposits: [],
+            withdrawals: [],
+            currencyConversions: []  // ✅ NEW: Track currency conversions
+        };
+
+        // ===========================================
+        // UTILITY FUNCTIONS
+        // ===========================================
+
+        function notify(msg, type = 'success') {
+            const notif = document.getElementById('notification');
+            notif.textContent = msg;
+            notif.className = 'notification show';
+            notif.classList.remove('error', 'warning');
+            if (type === 'error') notif.classList.add('error');
+            if (type === 'warning') notif.classList.add('warning');
+            setTimeout(() => notif.classList.remove('show'), 3000);
+        }
+
+        function showTab(tabName, event) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            if (event && event.target) event.target.classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+
+            if (tabName === 'cashflow') {
+                updateCashBalances();
+                renderDeposits();
+                renderWithdrawals();
+                renderCurrencyConversions();
+            } else if (tabName === 'holdings') {
+                renderHoldings();
+            }
+        }
+
+        function getCurrencySymbol(currency) {
+            const symbols = { ILS: '₪', USD: '$', EUR: '€' };
+            return symbols[currency] || currency;
+        }
+
+        // ===========================================
+        // DATA MANAGEMENT
+        // ===========================================
+
+        function saveData() {
+            try {
+                localStorage.setItem('portfolio_integrated', JSON.stringify(portfolio));
+                console.log('✅ Data saved');
+            } catch (error) {
+                console.error('❌ Error saving:', error);
+                notify('⚠️ שגיאה בשמירה', 'error');
+            }
+        }
+
+        function loadData() {
+            try {
+                const saved = localStorage.getItem('portfolio_integrated');
+                if (saved) {
+                    const loaded = JSON.parse(saved);
+                    portfolio = {
+                        holdings: Array.isArray(loaded.holdings) ? loaded.holdings : [],
+                        cash: loaded.cash || { ILS: 0, USD: 0, EUR: 0 },
+                        rates: loaded.rates || { USD: 3.75, EUR: 4.05 },
+                        deposits: Array.isArray(loaded.deposits) ? loaded.deposits : [],
+                        withdrawals: Array.isArray(loaded.withdrawals) ? loaded.withdrawals : [],
+                        currencyConversions: Array.isArray(loaded.currencyConversions) ? loaded.currencyConversions : []
+                    };
+                    console.log('✅ Data loaded');
+                    return true;
+                }
+            } catch (error) {
+                console.error('❌ Error loading:', error);
+            }
+            return false;
+        }
+
+        function exportData() {
+            const json = JSON.stringify(portfolio, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `portfolio-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+            notify('✅ נתונים יוצאו');
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    portfolio = JSON.parse(e.target.result);
+                    saveData();
+                    updateCashBalances();
+                    renderDeposits();
+                    renderWithdrawals();
+                    renderCurrencyConversions();
+                    renderHoldings();
+                    notify('✅ נתונים יובאו');
+                } catch (error) {
+                    notify('❌ שגיאה בקריאת הקובץ', 'error');
+                }
+            };
+            reader.readAsText(file);
+
+            event.target.value = '';
+        }
+
+        // ===========================================
+        // ✅ CASH BALANCES
+        // ===========================================
+
+        function updateCashBalances() {
+            document.getElementById('balance-ils').textContent = portfolio.cash.ILS.toLocaleString('he-IL', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('balance-usd').textContent = portfolio.cash.USD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('balance-eur').textContent = portfolio.cash.EUR.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // ===========================================
+        // ✅ DEPOSITS
+        // ===========================================
+
+        function showDepositModal() {
+            document.getElementById('deposit-modal').style.display = 'flex';
+            document.getElementById('deposit-amount').value = '';
+            document.getElementById('deposit-note').value = '';
+            document.getElementById('deposit-date').value = new Date().toISOString().split('T')[0];
+        }
+
+        function hideDepositModal() {
+            document.getElementById('deposit-modal').style.display = 'none';
+        }
+
+        function submitDeposit() {
+            const amount = parseFloat(document.getElementById('deposit-amount').value);
+            const currency = document.getElementById('deposit-currency').value;
+            const dateInput = document.getElementById('deposit-date').value;
+            const note = document.getElementById('deposit-note').value || '';
+
+            if (isNaN(amount) || amount <= 0) {
+                notify('❌ סכום לא תקין', 'error');
+                return;
+            }
+
+            if (!dateInput) {
+                notify('❌ אנא בחר תאריך', 'error');
+                return;
+            }
+
+            const deposit = {
+                id: Date.now(),
+                date: new Date(dateInput + 'T12:00:00').toISOString(),
+                amount: amount,
+                currency: currency,
+                note: note
+            };
+
+            portfolio.deposits.push(deposit);
+            portfolio.deposits.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // ✅ Update cash balance
+            portfolio.cash[currency] += amount;
+
+            saveData();
+            hideDepositModal();
+            updateCashBalances();
+            renderDeposits();
+
+            notify(`✅ הופקדו ${getCurrencySymbol(currency)}${amount.toLocaleString()}\nיתרה חדשה: ${getCurrencySymbol(currency)}${portfolio.cash[currency].toLocaleString()}`);
+        }
+
+        function renderDeposits() {
+            const container = document.getElementById('deposits-list');
+            if (portfolio.deposits.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 20px;">אין הפקדות עדיין</p>';
+            } else {
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #d1fae5;"><th style="padding: 8px;">תאריך</th><th>סכום</th><th>מטבע</th><th>הערה</th><th>פעולות</th></tr></thead><tbody>';
+                [...portfolio.deposits].sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(d => {
+                    html += `<tr style="border-bottom: 1px solid #d1fae5;">
+                        <td style="padding: 8px;">${new Date(d.date).toLocaleDateString('he-IL')}</td>
+                        <td style="color: #10b981; font-weight: bold;">+${d.amount.toLocaleString()}</td>
+                        <td>${getCurrencySymbol(d.currency)}</td>
+                        <td style="color: #6b7280;">${d.note || '-'}</td>
+                        <td><button onclick="deleteDeposit(${d.id})" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">מחק</button></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            }
+        }
+
+        function deleteDeposit(id) {
+            if (!confirm('למחוק הפקדה זו?')) return;
+            const deposit = portfolio.deposits.find(d => d.id === id);
+            if (deposit) {
+                portfolio.cash[deposit.currency] -= deposit.amount;
+                portfolio.deposits = portfolio.deposits.filter(d => d.id !== id);
+            }
+            saveData();
+            updateCashBalances();
+            renderDeposits();
+            notify('✅ הפקדה נמחקה');
+        }
+
+        // ===========================================
+        // ✅ WITHDRAWALS
+        // ===========================================
+
+        function showWithdrawalModal() {
+            document.getElementById('withdrawal-modal').style.display = 'flex';
+            document.getElementById('withdrawal-amount').value = '';
+            document.getElementById('withdrawal-note').value = '';
+            document.getElementById('withdrawal-date').value = new Date().toISOString().split('T')[0];
+
+            // Show available balance for default currency
+            updateWithdrawalAvailable();
+        }
+
+        function hideWithdrawalModal() {
+            document.getElementById('withdrawal-modal').style.display = 'none';
+        }
+
+        function updateWithdrawalAvailable() {
+            const currency = document.getElementById('withdrawal-currency').value;
+            const available = portfolio.cash[currency];
+            document.getElementById('withdrawal-available').textContent = `${getCurrencySymbol(currency)}${available.toLocaleString()}`;
+        }
+
+        // Add onchange to withdrawal currency selector
+        window.addEventListener('DOMContentLoaded', () => {
+            const selector = document.getElementById('withdrawal-currency');
+            if (selector) {
+                selector.addEventListener('change', updateWithdrawalAvailable);
+            }
+        });
+
+        function submitWithdrawal() {
+            const amount = parseFloat(document.getElementById('withdrawal-amount').value);
+            const currency = document.getElementById('withdrawal-currency').value;
+            const dateInput = document.getElementById('withdrawal-date').value;
+            const note = document.getElementById('withdrawal-note').value || '';
+
+            if (isNaN(amount) || amount <= 0) {
+                notify('❌ סכום לא תקין', 'error');
+                return;
+            }
+
+            if (!dateInput) {
+                notify('❌ אנא בחר תאריך', 'error');
+                return;
+            }
+
+            if (portfolio.cash[currency] < amount) {
+                notify(`❌ אין מספיק ${getCurrencySymbol(currency)}\nזמין: ${portfolio.cash[currency].toLocaleString()}`, 'error');
+                return;
+            }
+
+            const withdrawal = {
+                id: Date.now(),
+                date: new Date(dateInput + 'T12:00:00').toISOString(),
+                amount: amount,
+                currency: currency,
+                note: note
+            };
+
+            portfolio.withdrawals.push(withdrawal);
+            portfolio.withdrawals.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // ✅ Update cash balance
+            portfolio.cash[currency] -= amount;
+
+            saveData();
+            hideWithdrawalModal();
+            updateCashBalances();
+            renderWithdrawals();
+
+            notify(`✅ נמשכו ${getCurrencySymbol(currency)}${amount.toLocaleString()}\nיתרה חדשה: ${getCurrencySymbol(currency)}${portfolio.cash[currency].toLocaleString()}`);
+        }
+
+        function renderWithdrawals() {
+            const container = document.getElementById('withdrawals-list');
+            if (portfolio.withdrawals.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 20px;">אין משיכות עדיין</p>';
+            } else {
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #fee2e2;"><th style="padding: 8px;">תאריך</th><th>סכום</th><th>מטבע</th><th>הערה</th><th>פעולות</th></tr></thead><tbody>';
+                [...portfolio.withdrawals].sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(w => {
+                    html += `<tr style="border-bottom: 1px solid #fee2e2;">
+                        <td style="padding: 8px;">${new Date(w.date).toLocaleDateString('he-IL')}</td>
+                        <td style="color: #ef4444; font-weight: bold;">-${w.amount.toLocaleString()}</td>
+                        <td>${getCurrencySymbol(w.currency)}</td>
+                        <td style="color: #6b7280;">${w.note || '-'}</td>
+                        <td><button onclick="deleteWithdrawal(${w.id})" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">מחק</button></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            }
+        }
+
+        function deleteWithdrawal(id) {
+            if (!confirm('למחוק משיכה זו?')) return;
+            const withdrawal = portfolio.withdrawals.find(w => w.id === id);
+            if (withdrawal) {
+                portfolio.cash[withdrawal.currency] += withdrawal.amount;
+                portfolio.withdrawals = portfolio.withdrawals.filter(w => w.id !== id);
+            }
+            saveData();
+            updateCashBalances();
+            renderWithdrawals();
+            notify('✅ משיכה נמחקה');
+        }
+
+        // ===========================================
+        // ✅ CURRENCY CONVERSION
+        // ===========================================
+
+        function showCurrencyConversionModal() {
+            document.getElementById('conversion-modal').style.display = 'flex';
+            document.getElementById('conversion-amount').value = '';
+            document.getElementById('conversion-rate').value = '';
+            document.getElementById('conversion-note').value = '';
+            document.getElementById('conversion-date').value = new Date().toISOString().split('T')[0];
+            updateConversionPreview();
+        }
+
+        function hideCurrencyConversionModal() {
+            document.getElementById('conversion-modal').style.display = 'none';
+        }
+
+        function updateConversionPreview() {
+            const from = document.getElementById('conversion-from').value;
+            const to = document.getElementById('conversion-to').value;
+            const amount = parseFloat(document.getElementById('conversion-amount').value);
+            let rate = parseFloat(document.getElementById('conversion-rate').value);
+
+            if (isNaN(amount) || amount <= 0) {
+                document.getElementById('conversion-preview').textContent = '-';
+                return;
+            }
+
+            // Use default rate if not specified
+            if (isNaN(rate) || rate <= 0) {
+                rate = getConversionRate(from, to);
+                document.getElementById('conversion-rate').placeholder = rate.toFixed(4);
+            }
+
+            const result = amount * rate;
+            document.getElementById('conversion-preview').textContent = `${getCurrencySymbol(to)}${result.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+
+        function getConversionRate(from, to) {
+            if (from === 'ILS' && to === 'USD') return 1 / portfolio.rates.USD;
+            if (from === 'ILS' && to === 'EUR') return 1 / portfolio.rates.EUR;
+            if (from === 'USD' && to === 'ILS') return portfolio.rates.USD;
+            if (from === 'EUR' && to === 'ILS') return portfolio.rates.EUR;
+            if (from === 'USD' && to === 'EUR') return portfolio.rates.USD / portfolio.rates.EUR;
+            if (from === 'EUR' && to === 'USD') return portfolio.rates.EUR / portfolio.rates.USD;
+            return 1;
+        }
+
+        function submitCurrencyConversion() {
+            const from = document.getElementById('conversion-from').value;
+            const to = document.getElementById('conversion-to').value;
+            const amount = parseFloat(document.getElementById('conversion-amount').value);
+            let rate = parseFloat(document.getElementById('conversion-rate').value);
+            const dateInput = document.getElementById('conversion-date').value;
+            const note = document.getElementById('conversion-note').value || '';
+
+            if (from === to) {
+                notify('❌ לא ניתן להמיר למטבע זהה', 'error');
+                return;
+            }
+
+            if (isNaN(amount) || amount <= 0) {
+                notify('❌ סכום לא תקין', 'error');
+                return;
+            }
+
+            if (!dateInput) {
+                notify('❌ אנא בחר תאריך', 'error');
+                return;
+            }
+
+            if (portfolio.cash[from] < amount) {
+                notify(`❌ אין מספיק ${getCurrencySymbol(from)}\nזמין: ${portfolio.cash[from].toLocaleString()}`, 'error');
+                return;
+            }
+
+            // Use default rate if not specified
+            if (isNaN(rate) || rate <= 0) {
+                rate = getConversionRate(from, to);
+            }
+
+            const result = amount * rate;
+
+            const conversion = {
+                id: Date.now(),
+                date: new Date(dateInput + 'T12:00:00').toISOString(),
+                from: from,
+                to: to,
+                amountFrom: amount,
+                amountTo: result,
+                rate: rate,
+                note: note
+            };
+
+            portfolio.currencyConversions.push(conversion);
+            portfolio.currencyConversions.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // ✅ Update cash balances
+            portfolio.cash[from] -= amount;
+            portfolio.cash[to] += result;
+
+            saveData();
+            hideCurrencyConversionModal();
+            updateCashBalances();
+            renderCurrencyConversions();
+
+            notify(`✅ הומרו ${getCurrencySymbol(from)}${amount.toLocaleString()} ל-${getCurrencySymbol(to)}${result.toLocaleString()}\nשער: ${rate.toFixed(4)}`);
+        }
+
+        function renderCurrencyConversions() {
+            const container = document.getElementById('conversions-list');
+            if (portfolio.currencyConversions.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #92400e; padding: 20px;">אין המרות עדיין</p>';
+            } else {
+                let html = '<table style="width: 100%; border-collapse: collapse;">';
+                html += '<thead><tr style="background: #fde68a;"><th style="padding: 8px;">תאריך</th><th>מ-</th><th>אל-</th><th>שער</th><th>הערה</th><th>פעולות</th></tr></thead><tbody>';
+                [...portfolio.currencyConversions].sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(c => {
+                    html += `<tr style="border-bottom: 1px solid #fde68a;">
+                        <td style="padding: 8px;">${new Date(c.date).toLocaleDateString('he-IL')}</td>
+                        <td style="font-weight: bold;">${getCurrencySymbol(c.from)}${c.amountFrom.toLocaleString()}</td>
+                        <td style="font-weight: bold; color: #10b981;">${getCurrencySymbol(c.to)}${c.amountTo.toLocaleString()}</td>
+                        <td style="color: #6b7280; font-size: 0.85rem;">${c.rate.toFixed(4)}</td>
+                        <td style="color: #92400e;">${c.note || '-'}</td>
+                        <td><button onclick="deleteConversion(${c.id})" style="background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">מחק</button></td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+                container.innerHTML = html;
+            }
+        }
+
+        function deleteConversion(id) {
+            if (!confirm('למחוק המרה זו?')) return;
+            const conversion = portfolio.currencyConversions.find(c => c.id === id);
+            if (conversion) {
+                // Reverse the conversion
+                portfolio.cash[conversion.from] += conversion.amountFrom;
+                portfolio.cash[conversion.to] -= conversion.amountTo;
+                portfolio.currencyConversions = portfolio.currencyConversions.filter(c => c.id !== id);
+            }
+            saveData();
+            updateCashBalances();
+            renderCurrencyConversions();
+            notify('✅ המרה נמחקה');
+        }
+
+        // ===========================================
+        // ✅ HOLDINGS - WITH CURRENCY DEDUCTION
+        // ===========================================
+
+        function showAddHoldingForm() {
+            document.getElementById('add-holding-form').style.display = 'block';
+        }
+
+        function hideAddHoldingForm() {
+            document.getElementById('add-holding-form').style.display = 'none';
+            document.getElementById('new-symbol').value = '';
+            document.getElementById('new-shares').value = '';
+            document.getElementById('new-cost').value = '';
+        }
+
+        function addHolding() {
+            const symbol = document.getElementById('new-symbol').value.trim().toUpperCase();
+            const shares = parseFloat(document.getElementById('new-shares').value);
+            const cost = parseFloat(document.getElementById('new-cost').value);
+            const currency = document.getElementById('new-currency').value;
+
+            if (!symbol || isNaN(shares) || isNaN(cost) || shares <= 0 || cost <= 0) {
+                notify('❌ מלא את כל השדות', 'error');
+                return;
+            }
+
+            const totalCost = shares * cost;
+
+            // ✅ Check if enough cash in this currency
+            if (portfolio.cash[currency] < totalCost) {
+                notify(`❌ אין מספיק ${getCurrencySymbol(currency)}\nזמין: ${portfolio.cash[currency].toLocaleString()}\nנדרש: ${totalCost.toLocaleString()}`, 'error');
+                return;
+            }
+
+            const holding = {
+                id: Date.now(),
+                symbol,
+                shares,
+                costBasis: cost,
+                currentPrice: cost,
+                currency,
+                purchaseDate: new Date().toISOString()
+            };
+
+            portfolio.holdings.push(holding);
+
+            // ✅ Deduct from cash balance
+            portfolio.cash[currency] -= totalCost;
+
+            saveData();
+            hideAddHoldingForm();
+            updateCashBalances();
+            renderHoldings();
+
+            notify(`✅ ${symbol} נוסף בהצלחה!\nהופחתו ${getCurrencySymbol(currency)}${totalCost.toLocaleString()}\nיתרה: ${getCurrencySymbol(currency)}${portfolio.cash[currency].toLocaleString()}`);
+        }
+
+        function renderHoldings() {
+            const container = document.getElementById('holdings-list');
+            if (portfolio.holdings.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 20px;">אין החזקות עדיין</p>';
+            } else {
+                let html = '';
+                portfolio.holdings.forEach(h => {
+                    const value = h.shares * h.currentPrice;
+                    const profit = value - (h.shares * h.costBasis);
+                    const profitPct = (profit / (h.shares * h.costBasis)) * 100;
+
+                    html += `<div style="background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 2px solid #e5e7eb;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <h4 style="margin-bottom: 5px;">${h.symbol}</h4>
+                                <div style="font-size: 0.85rem; color: #6b7280;">${h.shares} מניות @ ${getCurrencySymbol(h.currency)}${h.costBasis.toFixed(2)}</div>
+                            </div>
+                            <div style="text-align: left;">
+                                <div style="font-size: 1.2rem; font-weight: bold;">${getCurrencySymbol(h.currency)}${value.toFixed(2)}</div>
+                                <div style="font-size: 0.85rem; color: ${profit >= 0 ? '#10b981' : '#ef4444'};">
+                                    ${profit >= 0 ? '+' : ''}${getCurrencySymbol(h.currency)}${profit.toFixed(2)} (${profitPct.toFixed(1)}%)
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            }
+        }
+
+        // ===========================================
+        // SETTINGS
+        // ===========================================
+
+        function updateExchangeRates() {
+            const usd = parseFloat(document.getElementById('rate-usd').value);
+            const eur = parseFloat(document.getElementById('rate-eur').value);
+
+            if (!isNaN(usd) && usd > 0) portfolio.rates.USD = usd;
+            if (!isNaN(eur) && eur > 0) portfolio.rates.EUR = eur;
+
+            saveData();
+            notify(`✅ שערים נשמרו!\n$1 = ₪${portfolio.rates.USD.toFixed(4)}\n€1 = ₪${portfolio.rates.EUR.toFixed(4)}`);
+        }
+
+        // ===========================================
+        // INITIALIZATION
+        // ===========================================
+
+        function init() {
+            loadData();
+            updateCashBalances();
+            renderDeposits();
+            renderWithdrawals();
+            renderCurrencyConversions();
+            document.getElementById('rate-usd').value = portfolio.rates.USD.toFixed(4);
+            document.getElementById('rate-eur').value = portfolio.rates.EUR.toFixed(4);
+            notify('💼 מערכת מוכנה עם ניהול מטבעות!');
+            console.log('✅ Portfolio initialized with currency management');
+        }
+
+        window.onload = init;
+
+        // Expose functions to window
+        window.showTab = showTab;
+        window.showDepositModal = showDepositModal;
+        window.hideDepositModal = hideDepositModal;
+        window.submitDeposit = submitDeposit;
+        window.deleteDeposit = deleteDeposit;
+        window.showWithdrawalModal = showWithdrawalModal;
+        window.hideWithdrawalModal = hideWithdrawalModal;
+        window.submitWithdrawal = submitWithdrawal;
+        window.deleteWithdrawal = deleteWithdrawal;
+        window.showCurrencyConversionModal = showCurrencyConversionModal;
+        window.hideCurrencyConversionModal = hideCurrencyConversionModal;
+        window.updateConversionPreview = updateConversionPreview;
+        window.submitCurrencyConversion = submitCurrencyConversion;
+        window.deleteConversion = deleteConversion;
+        window.showAddHoldingForm = showAddHoldingForm;
+        window.hideAddHoldingForm = hideAddHoldingForm;
+        window.addHolding = addHolding;
+        window.updateExchangeRates = updateExchangeRates;
+        window.exportData = exportData;
+        window.importData = importData;
+    </script>
+</body>
+</html>
