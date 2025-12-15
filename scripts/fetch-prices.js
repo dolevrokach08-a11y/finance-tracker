@@ -37,31 +37,120 @@ async function fetchYahooPrice(symbol) {
   return null;
 }
 
-// שליפת מחיר לנייר ישראלי מ-TASE
-async function fetchTASEPrice(securityNumber) {
+// שליפת מחיר לנייר ישראלי מ-TheMarker
+async function fetchTheMarkerPrice(securityNumber) {
   try {
-    const response = await fetch(
-      `https://api.tase.co.il/api/security/${securityNumber}/data`,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Accept-Language': 'he-IL'
-        }
+    const markerUrl = `https://finance.themarker.com/etf/${securityNumber}`;
+    
+    const response = await fetch(markerUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
-    );
+    });
+    
     if (response.ok) {
-      const data = await response.json();
-      if (data && data.LastRate) {
-        return {
-          price: data.LastRate,
-          currency: 'ILS',
-          name: data.SecurityName || securityNumber
-        };
+      const html = await response.text();
+      
+      const patterns = [
+        /שער אחרון[^\d]*\|\s*([0-9,]+\.?[0-9]*)/,
+        /שער אחרון[^|]*\|\s*([0-9,]+\.?[0-9]*)/,
+        /(?:שער אחרון|מחיר נוכחי|שווי יחידה)[\s\S]{0,50}?([0-9,]+\.?[0-9]*)/,
+        /(?:מחיר|שער)[\s:|\-]{1,10}([0-9,]+\.?[0-9]*)/
+      ];
+      
+      for (let i = 0; i < patterns.length; i++) {
+        const match = html.match(patterns[i]);
+        if (match && match[1]) {
+          let priceStr = match[1].trim();
+          let price = parseFloat(priceStr.replace(/,/g, ''));
+          
+          if (price && price > 0) {
+            // Convert from agorot if > 100
+            if (price > 100) {
+              price = price / 100;
+            }
+            return {
+              price: price,
+              currency: 'ILS',
+              name: `Israeli Security ${securityNumber}`
+            };
+          }
+        }
       }
     }
   } catch (error) {
-    console.log(`   ⚠️ TASE failed for ${securityNumber}: ${error.message}`);
+    console.log(`   ⚠️ TheMarker failed for ${securityNumber}: ${error.message}`);
   }
+  return null;
+}
+
+// שליפת מחיר לנייר ישראלי מ-Globes
+async function fetchGlobesPrice(securityNumber) {
+  try {
+    const globesUrl = `https://www.globes.co.il/portal/instrument.aspx?instrumentid=${securityNumber}`;
+    
+    const response = await fetch(globesUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    if (response.ok) {
+      const html = await response.text();
+      
+      const patterns = [
+        /(?:שער|מחיר|שווי)[^\d]{0,30}(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/,
+        /class="[^"]*price[^"]*"[^>]*>(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/
+      ];
+      
+      for (let i = 0; i < patterns.length; i++) {
+        const match = html.match(patterns[i]);
+        if (match && match[1]) {
+          let priceStr = match[1].trim();
+          let price = parseFloat(priceStr.replace(/,/g, ''));
+          
+          if (price && price > 0 && price < 10000) {
+            // Convert from agorot if > 100
+            if (price > 100) {
+              price = price / 100;
+            }
+            return {
+              price: price,
+              currency: 'ILS',
+              name: `Israeli Security ${securityNumber}`
+            };
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.log(`   ⚠️ Globes failed for ${securityNumber}: ${error.message}`);
+  }
+  return null;
+}
+
+// שליפת מחיר לנייר ישראלי - עם כל ה-fallbacks
+async function fetchIsraeliPrice(securityNumber) {
+  console.log(`   🇮🇱 Trying Israeli sources for ${securityNumber}...`);
+  
+  // Try TheMarker first
+  let result = await fetchTheMarkerPrice(securityNumber);
+  if (result) {
+    console.log(`   ✅ TheMarker: ${result.price}`);
+    return result;
+  }
+  
+  // Try Globes
+  result = await fetchGlobesPrice(securityNumber);
+  if (result) {
+    console.log(`   ✅ Globes: ${result.price}`);
+    return result;
+  }
+  
   return null;
 }
 
@@ -69,7 +158,7 @@ async function fetchTASEPrice(securityNumber) {
 async function fetchPrice(symbol, currency) {
   // אם זה מספר (נייר ישראלי)
   if (/^\d+$/.test(symbol)) {
-    return await fetchTASEPrice(symbol);
+    return await fetchIsraeliPrice(symbol);
   }
   
   // אם יש סיומת של בורסה
