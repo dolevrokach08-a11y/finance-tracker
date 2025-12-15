@@ -32,7 +32,7 @@ async function fetchYahooPrice(symbol) {
       };
     }
   } catch (error) {
-    console.log(`⚠️ Yahoo failed for ${symbol}: ${error.message}`);
+    console.log(`   ⚠️ Yahoo failed for ${symbol}: ${error.message}`);
   }
   return null;
 }
@@ -60,7 +60,7 @@ async function fetchTASEPrice(securityNumber) {
       }
     }
   } catch (error) {
-    console.log(`⚠️ TASE failed for ${securityNumber}: ${error.message}`);
+    console.log(`   ⚠️ TASE failed for ${securityNumber}: ${error.message}`);
   }
   return null;
 }
@@ -98,22 +98,28 @@ async function main() {
   
   const todayDate = getTodayDate();
   const prices = {};
+  const allSymbols = new Set();
   
   try {
-    // קריאת כל המשתמשים
-    const usersSnapshot = await db.collection('users').get();
+    // גישה ישירה לכל ה-portfolio/data documents
+    console.log('📂 Looking for user portfolios...');
     
-    const allSymbols = new Set();
+    const usersRef = db.collection('users');
+    const usersListSnap = await usersRef.listDocuments();
     
-    for (const userDoc of usersSnapshot.docs) {
-      const portfolioRef = db.collection('users').doc(userDoc.id).collection('portfolio').doc('data');
-      const portfolioSnap = await portfolioRef.get();
+    console.log(`   Found ${usersListSnap.length} user references`);
+    
+    for (const userDocRef of usersListSnap) {
+      const portfolioDataRef = userDocRef.collection('portfolio').doc('data');
+      const portfolioSnap = await portfolioDataRef.get();
       
       if (portfolioSnap.exists) {
         const data = portfolioSnap.data();
+        console.log(`   ✅ Found data for user ${userDocRef.id}`);
         
         // איסוף סימבולים מהחזקות
         if (data.holdings && Array.isArray(data.holdings)) {
+          console.log(`      Holdings: ${data.holdings.length}`);
           data.holdings.forEach(h => {
             if (h.symbol) allSymbols.add(h.symbol);
           });
@@ -121,6 +127,7 @@ async function main() {
         
         // איסוף סימבולים מאג"ח
         if (data.bonds && Array.isArray(data.bonds)) {
+          console.log(`      Bonds: ${data.bonds.length}`);
           data.bonds.forEach(b => {
             if (b.symbol) allSymbols.add(b.symbol);
             if (b.securityNumber) allSymbols.add(b.securityNumber);
@@ -129,9 +136,11 @@ async function main() {
       }
     }
     
-    console.log(`📊 Found ${allSymbols.size} unique symbols`);
+    console.log(`\n📊 Found ${allSymbols.size} unique symbols:`);
+    allSymbols.forEach(s => console.log(`   - ${s}`));
     
     // שליפת מחירים לכל הסימבולים
+    console.log('\n💰 Fetching prices...');
     for (const symbol of allSymbols) {
       console.log(`   Fetching ${symbol}...`);
       const result = await fetchPrice(symbol);
@@ -157,6 +166,8 @@ async function main() {
       await db.collection('dailyPrices').doc(todayDate).set({
         date: todayDate,
         prices: prices,
+        fetchedSymbols: Object.keys(prices).length,
+        totalSymbols: allSymbols.size,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       
