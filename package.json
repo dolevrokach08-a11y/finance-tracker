@@ -1,0 +1,12 @@
+{
+  "name": "finance-tracker-scripts",
+  "version": "1.0.0",
+  "description": "Scripts for daily price fetching",
+  "scripts": {
+    "fetch-prices": "node fetch-prices.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "yahoo-finance2": "^2.11.0"
+  }
+}
