@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ניהול פיננסי אישי</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#00f0ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Finance">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-base: #0a0a0f;
+            --bg-surface: #12121a;
+            --bg-elevated: #1a1a24;
+            --bg-hover: #22222e;
+            --accent: #00f5d4;
+            --accent-dim: rgba(0, 245, 212, 0.15);
+            --accent-secondary: #4dabf7;
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6a6a7a;
+            --border: rgba(255, 255, 255, 0.1);
+            --profit: #00f5d4;
+            --loss: #ff6b6b;
+        }
+
+        body {
+            font-family: 'Heebo', 'Space Grotesk', -apple-system, sans-serif;
+            background: var(--bg-base);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            position: relative;
+        }
+
+        /* Accent glow line at top */
+        .container::before {
+            content: '';
+            position: absolute;
+            top: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            border-radius: 2px;
+        }
+
+        h1 {
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            margin-bottom: 36px;
+            font-size: 0.95rem;
+        }
+
+        .buttons-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .app-button {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 24px 28px;
+            border-radius: 16px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+        }
+
+        .app-button:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 30px rgba(0, 245, 212, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .finance-button {
+            border-color: var(--profit);
+        }
+
+        .finance-button:hover {
+            border-color: var(--profit);
+            box-shadow: 0 0 30px rgba(0, 245, 212, 0.15);
+        }
+
+        .portfolio-button {
+            border-color: var(--accent-secondary);
+        }
+
+        .portfolio-button:hover {
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 30px rgba(77, 171, 247, 0.15);
+        }
+
+        .icon {
+            font-size: 2.5rem;
+            opacity: 0.9;
+        }
+
+        .button-content {
+            text-align: right;
+        }
+
+        .button-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--text-primary);
+        }
+
+        .button-description {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .footer {
+            margin-top: 32px;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .user-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 2px solid var(--accent);
+        }
+
+        .logout-btn {
+            background: transparent;
+            color: var(--loss);
+            border: 1px solid var(--loss);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255, 107, 107, 0.1);
+        }
+
+        .loading-screen {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: var(--accent);
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 28px 20px;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .app-button {
+                padding: 20px;
+            }
+
+            .icon {
+                font-size: 2rem;
+            }
+
+            .button-title {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-screen" id="loadingScreen">
+        טוען... 🔄
+    </div>
+
+    <div class="container" id="mainContainer" style="display: none;">
+        <div class="user-header">
+            <div class="user-info" id="userInfo">
+                <img id="userAvatar" class="user-avatar" src="" alt="User">
+                <span id="userName"></span>
+            </div>
+            <button class="logout-btn" id="logoutBtn">🚪 התנתק</button>
+        </div>
+
+        <h1>💰 ניהול פיננסי אישי 📊</h1>
+        <p class="subtitle">בחר את המערכת שברצונך להשתמש</p>
+        
+        <div class="buttons-container">
+            <a href="finance.html" class="app-button finance-button">
+                <div class="button-content">
+                    <div class="button-title">מעקב כספי</div>
+                    <div class="button-description">הכנסות • הוצאות • מעשרות</div>
+                </div>
+                <div class="icon">💵</div>
+            </a>
+
+            <a href="portfolio.html" class="app-button portfolio-button">
+                <div class="button-content">
+                    <div class="button-title">תיק השקעות</div>
+                    <div class="button-description">מניות • אג"ח • מדדים</div>
+                </div>
+                <div class="icon">📈</div>
+            </a>
+        </div>
+
+        <div class="footer">
+            💡 הנתונים מסונכרנים בענן בין כל המכשירים שלך
+        </div>
+    </div>
+
+    <script type="module">
+        import { auth, signOut, onAuthStateChanged } from './firebase-config.js';
+
+        const loadingScreen = document.getElementById('loadingScreen');
+        const mainContainer = document.getElementById('mainContainer');
+        const userAvatar = document.getElementById('userAvatar');
+        const userName = document.getElementById('userName');
+        const logoutBtn = document.getElementById('logoutBtn');
+
+        // Check if user is signed in
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in
+                console.log('User is signed in:', user.email);
+                
+                // Update UI
+                userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300f5d4"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+                userName.textContent = user.displayName || user.email;
+                
+                // Show main content
+                loadingScreen.style.display = 'none';
+                mainContainer.style.display = 'block';
+                
+            } else {
+                // User is not signed in, redirect to login
+                console.log('User is not signed in, redirecting to login...');
+                window.location.href = 'login.html';
+            }
+        });
+
+        // Logout button
+        logoutBtn.addEventListener('click', async () => {
+            try {
+                await signOut(auth);
+                console.log('User signed out');
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Sign out error:', error);
+                alert('שגיאה בהתנתקות. נסה שוב.');
+            }
+        });
+
+        // Register Service Worker
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js')
+                    .then(registration => {
+                        console.log('✅ Service Worker registered:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('⚠️ Service Worker registration failed:', error);
+                    });
+            });
+        }
+    </script>
+</body>
+</html>

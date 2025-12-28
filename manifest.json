@@ -1,0 +1,25 @@
+{
+  "name": "ניהול פיננסי אישי",
+  "short_name": "Finance",
+  "description": "מעקב כספי ותיק השקעות",
+  "start_url": "/finance-tracker/index.html",
+  "scope": "/finance-tracker/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#00f5d4",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
