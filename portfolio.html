@@ -2741,6 +2741,65 @@
         let charts = {};
 
         // ===========================================
+        // 🌐 GLOBAL CORS PROXIES
+        // ===========================================
+        const CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.org/?',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
+        // ===========================================
+        // 🔧 FETCH UTILITIES
+        // ===========================================
+
+        // 🔄 Fetch with AbortController timeout
+        function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            return fetch(url, { ...options, signal: controller.signal })
+                .finally(() => clearTimeout(timeoutId));
+        }
+
+        // 🔄 Retry wrapper with exponential backoff
+        async function fetchWithRetry(fetchFn, maxRetries = 2, baseDelay = 1500) {
+            let lastError;
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    const result = await fetchFn();
+                    return result;
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < maxRetries) {
+                        const delay = baseDelay * Math.pow(2, attempt);
+                        console.log(`🔄 Retry ${attempt + 1}/${maxRetries} in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                    }
+                }
+            }
+            throw lastError;
+        }
+
+        // ===========================================
+        // 💾 PRICE CACHE (TTL: 5 דקות)
+        // ===========================================
+        const priceCache = {};
+        const CACHE_TTL = 5 * 60 * 1000; // 5 דקות
+
+        function getCachedPrice(symbol) {
+            const entry = priceCache[symbol];
+            if (entry && (Date.now() - entry.timestamp) < CACHE_TTL) {
+                console.log(`💾 Cache hit: ${symbol} = ${entry.price}`);
+                return entry.price;
+            }
+            return null;
+        }
+
+        function setCachedPrice(symbol, price) {
+            priceCache[symbol] = { price, timestamp: Date.now() };
+        }
+
+        // ===========================================
         // TWR ENHANCEMENT v45 - Multi-Currency Cash Tracking
         // ===========================================
         
@@ -4504,13 +4563,13 @@ function calculateTWRv3() {
                 console.log(`📊 Strategy 1: TASE Official Site (market.tase.co.il)...`);
                 const taseUrl = `https://market.tase.co.il/he/market_data/security/${securityNumber}/major_data`;
                 
-                const response = await fetch(taseUrl, {
+                const response = await fetchWithTimeout(taseUrl, {
                     method: 'GET',
                     headers: {
                         'Accept': 'text/html',
                         'User-Agent': 'Mozilla/5.0'
                     }
-                });
+                }, 10000);
                 
                 if (response.ok) {
                     const html = await response.text();
@@ -4556,13 +4615,13 @@ function calculateTWRv3() {
                 console.log(`📊 Strategy 2: TheMarker (end-of-day prices)...`);
                 const markerUrl = `https://finance.themarker.com/etf/${securityNumber}`;
                 
-                const response = await fetch(markerUrl, {
+                const response = await fetchWithTimeout(markerUrl, {
                     method: 'GET',
                     headers: {
                         'Accept': 'text/html',
                         'User-Agent': 'Mozilla/5.0'
                     }
-                });
+                }, 10000);
                 
                 if (response.ok) {
                     const html = await response.text();
@@ -4610,13 +4669,13 @@ function calculateTWRv3() {
                 console.log(`📊 Strategy 3: Globes...`);
                 const globesUrl = `https://www.globes.co.il/portal/instrument.aspx?instrumentid=${securityNumber}`;
                 
-                const response = await fetch(globesUrl, {
+                const response = await fetchWithTimeout(globesUrl, {
                     method: 'GET',
                     headers: {
                         'Accept': 'text/html',
                         'User-Agent': 'Mozilla/5.0'
                     }
-                });
+                }, 10000);
                 
                 if (response.ok) {
                     const html = await response.text();
@@ -4711,69 +4770,78 @@ function calculateTWRv3() {
         
         async function fetchStockPrice(symbol) {
             console.log(`🔍 Fetching price for: ${symbol}`);
-            
-            // First, check if this is an Israeli security
-            if (isIsraeliSecurity(symbol)) {
-                console.log('🇮🇱 Detected Israeli security number, trying TASE first...');
-                try {
-                    const price = await fetchTASEPrice(symbol);
-                    return price;
-                } catch (e) {
-                    console.log('⚠️ TASE fetch failed, will try alternatives if available');
-                }
-            }
-            
-            // ניסוי 3 שיטות שונות
-            const methods = [
-                () => fetchYahooChart(symbol),
-                () => fetchYahooQuote(symbol),
-                () => fetchYahooV10(symbol)
-            ];
-            
-            // ניסיון עם הסימול המקורי
-            for (const method of methods) {
-                try {
-                    const price = await method();
-                    if (price && price > 0) {
-                        console.log(`✅ Success: ${price}`);
-                        return price;
-                    }
-                } catch (e) {
-                    console.log(`❌ Method failed: ${e.message}`);
-                }
-            }
-            
-            // ניסיון עם סימולים חלופיים
-            const alternatives = getAlternativeSymbols(symbol);
-            for (const alt of alternatives) {
-                console.log(`🔄 Trying alternative: ${alt}`);
-                for (const method of methods) {
+
+            // 💾 בדיקת cache
+            const cached = getCachedPrice(symbol);
+            if (cached !== null) return cached;
+
+            // 🔄 עטיפה עם retry - אם כל ה-methods נכשלו, ננסה שוב
+            return await fetchWithRetry(async () => {
+                // First, check if this is an Israeli security
+                if (isIsraeliSecurity(symbol)) {
+                    console.log('🇮🇱 Detected Israeli security number, trying TASE first...');
                     try {
-                        const price = await method.call(null, alt);
+                        const price = await fetchTASEPrice(symbol);
                         if (price && price > 0) {
-                            console.log(`✅ Success with alternative: ${price}`);
+                            setCachedPrice(symbol, price);
                             return price;
                         }
                     } catch (e) {
-                        // שקט, ממשיכים הלאה
+                        console.log('⚠️ TASE fetch failed, will try alternatives if available');
                     }
                 }
-            }
-            
-            throw new Error(`Could not fetch price for ${symbol}`);
+
+                // ניסוי 3 שיטות שונות
+                const methods = [
+                    () => fetchYahooChart(symbol),
+                    () => fetchYahooQuote(symbol),
+                    () => fetchYahooV10(symbol)
+                ];
+
+                // ניסיון עם הסימול המקורי
+                for (const method of methods) {
+                    try {
+                        const price = await method();
+                        if (price && price > 0) {
+                            console.log(`✅ Success: ${price}`);
+                            setCachedPrice(symbol, price);
+                            return price;
+                        }
+                    } catch (e) {
+                        console.log(`❌ Method failed: ${e.message}`);
+                    }
+                }
+
+                // ניסיון עם סימולים חלופיים
+                const alternatives = getAlternativeSymbols(symbol);
+                for (const alt of alternatives) {
+                    console.log(`🔄 Trying alternative: ${alt}`);
+                    for (const method of methods) {
+                        try {
+                            const price = await method.call(null, alt);
+                            if (price && price > 0) {
+                                console.log(`✅ Success with alternative: ${price}`);
+                                setCachedPrice(symbol, price);
+                                return price;
+                            }
+                        } catch (e) {
+                            // שקט, ממשיכים הלאה
+                        }
+                    }
+                }
+
+                throw new Error(`Could not fetch price for ${symbol}`);
+            }, 2, 2000);
         }
         
         async function fetchYahooChart(symbol) {
             // Using CORS proxy to bypass CORS restrictions
-            const proxies = [
-                `https://api.allorigins.win/raw?url=`,
-                `https://corsproxy.org/?`
-            ];
+            const proxies = CORS_PROXIES;
             
             for (const proxy of proxies) {
                 try {
                     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-                    const response = await fetch(proxy + encodeURIComponent(url));
+                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
                     if (!response.ok) continue;
                     const data = await response.json();
                     const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
@@ -4802,29 +4870,26 @@ function calculateTWRv3() {
                 const start = Math.floor(firstDepositDate.getTime() / 1000);
                 const end = Math.floor(Date.now() / 1000);
                 
-                const proxies = [
-                    `https://api.allorigins.win/raw?url=`,
-                    `https://corsproxy.org/?`
-                ];
-                
+                const proxies = CORS_PROXIES;
+
                 let priceHistory = null;
                 let timestamps = null;
-                
+
                 for (const proxy of proxies) {
                     try {
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetch(proxy + encodeURIComponent(url), { timeout: 8000 });
-                        
+                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
+
                         if (!response.ok) continue;
-                        
+
                         const data = await response.json();
                         const result = data.chart?.result?.[0];
-                        
+
                         if (!result) continue;
-                        
+
                         priceHistory = result.indicators?.quote?.[0]?.close;
                         timestamps = result.timestamp;
-                        
+
                         if (priceHistory && timestamps && priceHistory.length > 0) {
                             console.log(`✅ Fetched ${priceHistory.length} days of ${symbol} history`);
                             break;
@@ -4927,26 +4992,23 @@ function calculateTWRv3() {
                 const start = Math.floor(firstSnapshotDate.getTime() / 1000) - (7 * 24 * 60 * 60); // שבוע לפני
                 const end = Math.floor(Date.now() / 1000);
                 
-                const proxies = [
-                    `https://api.allorigins.win/raw?url=`,
-                    `https://corsproxy.org/?`
-                ];
-                
+                const proxies = CORS_PROXIES;
+
                 let priceHistory = null;
                 let timestamps = null;
-                
+
                 for (const proxy of proxies) {
                     try {
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetch(proxy + encodeURIComponent(url), { timeout: 8000 });
-                        
+                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
+
                         if (!response.ok) continue;
-                        
+
                         const data = await response.json();
                         const result = data.chart?.result?.[0];
-                        
+
                         if (!result) continue;
-                        
+
                         priceHistory = result.indicators?.quote?.[0]?.close;
                         timestamps = result.timestamp;
                         
@@ -5130,15 +5192,12 @@ function calculateTWRv3() {
                 const start = Math.floor(new Date(startDate).getTime() / 1000);
                 const end = Math.floor(Date.now() / 1000);
                 
-                const proxies = [
-                    `https://api.allorigins.win/raw?url=`,
-                    `https://corsproxy.org/?`
-                ];
-                
+                const proxies = CORS_PROXIES;
+
                 for (const proxy of proxies) {
                     try {
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetch(proxy + encodeURIComponent(url), { timeout: 5000 });
+                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
                         
                         if (!response.ok) continue;
                         
@@ -5208,15 +5267,12 @@ function calculateTWRv3() {
         }
         
         async function fetchYahooQuote(symbol) {
-            const proxies = [
-                `https://api.allorigins.win/raw?url=`,
-                `https://corsproxy.org/?`
-            ];
+            const proxies = CORS_PROXIES;
             
             for (const proxy of proxies) {
                 try {
                     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
-                    const response = await fetch(proxy + encodeURIComponent(url));
+                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
                     if (!response.ok) continue;
                     const data = await response.json();
                     const price = data.quoteResponse?.result?.[0]?.regularMarketPrice;
@@ -5229,15 +5285,12 @@ function calculateTWRv3() {
         }
         
         async function fetchYahooV10(symbol) {
-            const proxies = [
-                `https://api.allorigins.win/raw?url=`,
-                `https://corsproxy.org/?`
-            ];
+            const proxies = CORS_PROXIES;
             
             for (const proxy of proxies) {
                 try {
                     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=price`;
-                    const response = await fetch(proxy + encodeURIComponent(url));
+                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
                     if (!response.ok) continue;
                     const data = await response.json();
                     const price = data.quoteSummary?.result?.[0]?.price?.regularMarketPrice?.raw;
@@ -5338,31 +5391,35 @@ function calculateTWRv3() {
             const errors = [];
             const manualUpdateNeeded = [];
             
+            // 🚀 שאיבה ב-batches של 3 במקביל (במקום סדרתי)
+            const BATCH_SIZE = 3;
+            const holdingsToFetch = [];
+
             for (let i = 0; i < portfolio.holdings.length; i++) {
                 const holding = portfolio.holdings[i];
-                
-                // 🔒 Skip manually updated prices!
                 if (holding.isManualPrice) {
                     console.log(`🔒 Skipping ${holding.symbol} - manual price protected`);
                     skippedCount++;
-                    continue;
+                } else {
+                    holdingsToFetch.push(holding);
                 }
-                
-                // Update progress
-                notif.textContent = `🔄 מרענן מחירים... ${i + 1}/${portfolio.holdings.length} (${holding.symbol})`;
-                
-                try {
+            }
+
+            for (let batchStart = 0; batchStart < holdingsToFetch.length; batchStart += BATCH_SIZE) {
+                const batch = holdingsToFetch.slice(batchStart, batchStart + BATCH_SIZE);
+
+                // עדכון התקדמות
+                notif.textContent = `🔄 מרענן מחירים... ${batchStart + 1}-${Math.min(batchStart + BATCH_SIZE, holdingsToFetch.length)}/${holdingsToFetch.length}`;
+
+                const results = await Promise.allSettled(batch.map(async (holding) => {
                     let price = null;
-                    
-                    // Strategy: Try Israeli TASE first if applicable, then altTicker, then main symbol
+
                     if (isIsraeliSecurity(holding.symbol)) {
-                        // Try TASE for Israeli securities
                         try {
                             price = await fetchStockPrice(holding.symbol);
                             console.log(`✅ ${holding.symbol}: ₪${price} (from TASE)`);
                         } catch (e) {
                             console.log(`⚠️ TASE failed for ${holding.symbol}: ${e.message}`);
-                            // If TASE fails and there's an alternative ticker, try it
                             if (holding.altTicker) {
                                 try {
                                     price = await fetchStockPrice(holding.altTicker);
@@ -5374,29 +5431,36 @@ function calculateTWRv3() {
                                 }
                             } else {
                                 manualUpdateNeeded.push(holding.symbol);
-                                throw e; // Re-throw if no alternative
+                                throw e;
                             }
                         }
                     } else {
-                        // For non-Israeli securities, use altTicker if available, otherwise main symbol
                         const tickerToUse = holding.altTicker || holding.symbol;
                         price = await fetchStockPrice(tickerToUse);
                         console.log(`✅ ${holding.symbol}: ${getCurrencySymbol(holding.currency)}${price} (from ${tickerToUse})`);
                     }
-                    
-                    holding.currentPrice = price;
-                    holding.lastUpdate = new Date().toISOString();
-                    // Clear manual flag if automatic update succeeds
-                    delete holding.isManualPrice;
-                    successCount++;
-                } catch (error) {
-                    console.error(`❌ Failed: ${holding.symbol}${holding.altTicker ? ` (alt: ${holding.altTicker})` : ''}`, error);
-                    errorCount++;
-                    errors.push(holding.symbol);
+
+                    return { holding, price };
+                }));
+
+                // עיבוד תוצאות ה-batch
+                for (const result of results) {
+                    if (result.status === 'fulfilled') {
+                        const { holding, price } = result.value;
+                        holding.currentPrice = price;
+                        holding.lastUpdate = new Date().toISOString();
+                        delete holding.isManualPrice;
+                        successCount++;
+                    } else {
+                        errorCount++;
+                        errors.push(result.reason?.message || 'unknown');
+                    }
                 }
-                
-                // המתנה קצרה בין בקשות
-                await new Promise(resolve => setTimeout(resolve, 200));
+
+                // המתנה בין batches
+                if (batchStart + BATCH_SIZE < holdingsToFetch.length) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
             }
             
             saveData();
@@ -11516,145 +11580,124 @@ ${msg}`, 'warning');
             const firstDate = getFirstPurchaseDate();
             console.log('📅 First purchase date:', firstDate.toISOString().split('T')[0]);
             
-            // ✅ חישוב TWR של אינדקסים - השוואה הוגנת!
-            let acwiReturn = 10;   // fallback - MSCI ACWI
-            let spyReturn = 12;    // fallback - S&P 500
-            let qqqReturn = 15;    // fallback - NASDAQ
-            let ta125Return = 8;   // fallback - ת"א 125
+            // ✅ חישוב TWR של אינדקסים - השוואה הוגנת! (עם retry והצגה חלקית)
+            const indexResults = {};
             let dataSource = 'ממוצע היסטורי';
             let useTWR = false;
-            
+
+            // הגדרת אינדקסים
+            const indexConfig = [
+                { key: 'ACWI', label: 'MSCI ACWI', color: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6' },
+                { key: 'SPY', label: 'S&P 500', color: 'rgba(102, 126, 234, 0.8)', border: '#667eea' },
+                { key: 'QQQ', label: 'NASDAQ', color: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b' },
+                { key: 'TA125', label: 'ת"א 125', color: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6', symbol: '%5ETA125.TA', firebaseKey: '^TA125.TA' }
+            ];
+
             try {
                 const hasSnapshots = Array.isArray(portfolio.snapshots) && portfolio.snapshots.length > 0;
-                
+
                 if (hasSnapshots) {
                     console.log('🌐 Calculating index TWR based on', portfolio.snapshots.length, 'snapshots...');
-                    
+
                     // ✅ שלב 1: נסה קודם לקרוא מ-Firebase
                     const firebaseData = await fetchIndexHistoryFromFirebase();
-                    
+
                     if (firebaseData && Object.keys(firebaseData).length > 0) {
                         console.log('📊 Using index history from Firebase');
-                        
-                        if (firebaseData['ACWI']) {
-                            const result = calculateIndexTWRFromHistory(firebaseData['ACWI'], portfolio.snapshots);
-                            if (result !== null) {
-                                acwiReturn = result;
-                                useTWR = true;
-                                console.log('✅ ACWI TWR (Firebase):', acwiReturn.toFixed(2) + '%');
+
+                        for (const idx of indexConfig) {
+                            const fbKey = idx.firebaseKey || idx.key;
+                            if (firebaseData[fbKey]) {
+                                const result = calculateIndexTWRFromHistory(firebaseData[fbKey], portfolio.snapshots);
+                                if (result !== null) {
+                                    indexResults[idx.key] = result;
+                                    useTWR = true;
+                                    console.log(`✅ ${idx.key} TWR (Firebase): ${result.toFixed(2)}%`);
+                                }
                             }
                         }
-                        
-                        if (firebaseData['SPY']) {
-                            const result = calculateIndexTWRFromHistory(firebaseData['SPY'], portfolio.snapshots);
-                            if (result !== null) {
-                                spyReturn = result;
-                                console.log('✅ SPY TWR (Firebase):', spyReturn.toFixed(2) + '%');
-                            }
-                        }
-                        
-                        if (firebaseData['QQQ']) {
-                            const result = calculateIndexTWRFromHistory(firebaseData['QQQ'], portfolio.snapshots);
-                            if (result !== null) {
-                                qqqReturn = result;
-                                console.log('✅ QQQ TWR (Firebase):', qqqReturn.toFixed(2) + '%');
-                            }
-                        }
-                        
-                        if (firebaseData['^TA125.TA']) {
-                            const result = calculateIndexTWRFromHistory(firebaseData['^TA125.TA'], portfolio.snapshots);
-                            if (result !== null) {
-                                ta125Return = result;
-                                console.log('✅ TA125 TWR (Firebase):', ta125Return.toFixed(2) + '%');
-                            }
-                        }
-                        
+
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
-                        
+
                     } else {
-                        // ✅ שלב 2: Fallback - נסה פרוקסים
-                        console.log('⚠️ No Firebase data, trying proxies...');
-                        
-                        const [acwiResult, spyResult, qqqResult, ta125Result] = await Promise.allSettled([
-                            calculateIndexTWR('ACWI'),
-                            calculateIndexTWR('SPY'),
-                            calculateIndexTWR('QQQ'),
-                            calculateIndexTWR('%5ETA125.TA')
-                        ]);
-                        
-                        if (acwiResult.status === 'fulfilled' && acwiResult.value !== null) {
-                            acwiReturn = acwiResult.value;
-                            useTWR = true;
-                            console.log('✅ ACWI TWR:', acwiReturn.toFixed(2) + '%');
-                        }
-                        
-                        if (spyResult.status === 'fulfilled' && spyResult.value !== null) {
-                            spyReturn = spyResult.value;
-                            console.log('✅ SPY TWR:', spyReturn.toFixed(2) + '%');
-                        }
-                        
-                        if (qqqResult.status === 'fulfilled' && qqqResult.value !== null) {
-                            qqqReturn = qqqResult.value;
-                            console.log('✅ QQQ TWR:', qqqReturn.toFixed(2) + '%');
-                        }
-                        
-                        if (ta125Result.status === 'fulfilled' && ta125Result.value !== null) {
-                            ta125Return = ta125Result.value;
-                            console.log('✅ TA125 TWR:', ta125Return.toFixed(2) + '%');
-                        }
-                        
+                        // ✅ שלב 2: Fallback - נסה פרוקסים עם retry
+                        console.log('⚠️ No Firebase data, trying proxies with retry...');
+
+                        const proxyResults = await Promise.allSettled(
+                            indexConfig.map(idx =>
+                                fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 1500)
+                            )
+                        );
+
+                        indexConfig.forEach((idx, i) => {
+                            if (proxyResults[i].status === 'fulfilled' && proxyResults[i].value !== null) {
+                                indexResults[idx.key] = proxyResults[i].value;
+                                useTWR = true;
+                                console.log(`✅ ${idx.key} TWR: ${proxyResults[i].value.toFixed(2)}%`);
+                            } else {
+                                console.log(`❌ ${idx.key} TWR failed`);
+                            }
+                        });
+
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
                     }
                 } else {
-                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון
-                    console.log('🌐 No snapshots, using simple return calculation');
-                    const [acwiResult, spyResult, qqqResult, ta125Result] = await Promise.allSettled([
-                        fetchHistoricalReturn('ACWI', firstDate),
-                        fetchHistoricalReturn('SPY', firstDate),
-                        fetchHistoricalReturn('QQQ', firstDate),
-                        fetchHistoricalReturn('%5ETA125.TA', firstDate)
-                    ]);
-                    
-                    if (acwiResult.status === 'fulfilled' && acwiResult.value !== null) acwiReturn = acwiResult.value;
-                    if (spyResult.status === 'fulfilled' && spyResult.value !== null) spyReturn = spyResult.value;
-                    if (qqqResult.status === 'fulfilled' && qqqResult.value !== null) qqqReturn = qqqResult.value;
-                    if (ta125Result.status === 'fulfilled' && ta125Result.value !== null) ta125Return = ta125Result.value;
-                    
+                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון עם retry
+                    console.log('🌐 No snapshots, using simple return calculation with retry');
+                    const simpleResults = await Promise.allSettled(
+                        indexConfig.map(idx =>
+                            fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 1500)
+                        )
+                    );
+
+                    indexConfig.forEach((idx, i) => {
+                        if (simpleResults[i].status === 'fulfilled' && simpleResults[i].value !== null) {
+                            indexResults[idx.key] = simpleResults[i].value;
+                        }
+                    });
+
                     dataSource = `מ-${firstDate.toLocaleDateString('he-IL')}`;
                 }
-                
+
             } catch (error) {
-                console.error('❌ Using averages:', error.message);
+                console.error('❌ Index comparison error:', error.message);
             }
-            
-            console.log('📊 Performance:', portfolioReturn.toFixed(1) + '% | ACWI:', acwiReturn.toFixed(1) + '% | SPY:', spyReturn.toFixed(1) + '% | QQQ:', qqqReturn.toFixed(1) + '% | TA125:', ta125Return.toFixed(1) + '%');
-            
+
+            // 📊 בניית נתוני גרף - הצגה חלקית (רק אינדקסים שהצליחו)
+            const chartLabels = [`התיק שלך (${comparisonNote})`];
+            const chartData = [portfolioReturn];
+            const chartBgColors = [portfolioReturn >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'];
+            const chartBorderColors = [portfolioReturn >= 0 ? '#10b981' : '#ef4444'];
+
+            for (const idx of indexConfig) {
+                if (indexResults[idx.key] !== undefined) {
+                    chartLabels.push(idx.label);
+                    chartData.push(indexResults[idx.key]);
+                    chartBgColors.push(idx.color);
+                    chartBorderColors.push(idx.border);
+                }
+            }
+
+            const loadedCount = Object.keys(indexResults).length;
+            console.log(`📊 Performance chart: ${loadedCount}/${indexConfig.length} indices loaded`);
+            if (loadedCount > 0) {
+                console.log('📊 Indices:', Object.entries(indexResults).map(([k, v]) => `${k}: ${v.toFixed(1)}%`).join(' | '));
+            }
+
             // הרס גרף קיים אם יש
             if (advancedCharts.performanceComparison) {
                 advancedCharts.performanceComparison.destroy();
             }
-            
+
             advancedCharts.performanceComparison = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: [`התיק שלך (${comparisonNote})`, 'MSCI ACWI', 'S&P 500', 'NASDAQ', 'ת"א 125'],
+                    labels: chartLabels,
                     datasets: [{
                         label: `תשואה (${dataSource})`,
-                        data: [portfolioReturn, acwiReturn, spyReturn, qqqReturn, ta125Return],
-                        backgroundColor: [
-                            portfolioReturn >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)',
-                            'rgba(59, 130, 246, 0.8)',
-                            'rgba(102, 126, 234, 0.8)',
-                            'rgba(245, 158, 11, 0.8)',
-                            'rgba(139, 92, 246, 0.8)'
-                        ],
-                        borderColor: [
-                            portfolioReturn >= 0 ? '#10b981' : '#ef4444',
-                            '#3b82f6',
-                            '#667eea',
-                            '#f59e0b',
-                            '#8b5cf6'
-                        ],
+                        data: chartData,
+                        backgroundColor: chartBgColors,
+                        borderColor: chartBorderColors,
                         borderWidth: 2,
                         borderRadius: 8
                     }]
