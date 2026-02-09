@@ -11585,12 +11585,12 @@ ${msg}`, 'warning');
             let dataSource = 'ממוצע היסטורי';
             let useTWR = false;
 
-            // הגדרת אינדקסים
+            // הגדרת אינדקסים (עם fallback ממוצע היסטורי למקרה שהשאיבה נכשלת)
             const indexConfig = [
-                { key: 'ACWI', label: 'MSCI ACWI', color: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6' },
-                { key: 'SPY', label: 'S&P 500', color: 'rgba(102, 126, 234, 0.8)', border: '#667eea' },
-                { key: 'QQQ', label: 'NASDAQ', color: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b' },
-                { key: 'TA125', label: 'ת"א 125', color: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6', symbol: '%5ETA125.TA', firebaseKey: '^TA125.TA' }
+                { key: 'ACWI', label: 'MSCI ACWI', color: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6', fallback: 10 },
+                { key: 'SPY', label: 'S&P 500', color: 'rgba(102, 126, 234, 0.8)', border: '#667eea', fallback: 12 },
+                { key: 'QQQ', label: 'NASDAQ', color: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b', fallback: 15 },
+                { key: 'TA125', label: 'ת"א 125', color: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6', symbol: '%5ETA125.TA', firebaseKey: '^TA125.TA', fallback: 8 }
             ];
 
             try {
@@ -11663,22 +11663,30 @@ ${msg}`, 'warning');
                 console.error('❌ Index comparison error:', error.message);
             }
 
-            // 📊 בניית נתוני גרף - הצגה חלקית (רק אינדקסים שהצליחו)
+            // 📊 בניית נתוני גרף - הצגה חלקית עם fallback לאינדקסים שנכשלו
             const chartLabels = [`התיק שלך (${comparisonNote})`];
             const chartData = [portfolioReturn];
             const chartBgColors = [portfolioReturn >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'];
             const chartBorderColors = [portfolioReturn >= 0 ? '#10b981' : '#ef4444'];
+            const loadedCount = Object.keys(indexResults).length;
 
             for (const idx of indexConfig) {
-                if (indexResults[idx.key] !== undefined) {
-                    chartLabels.push(idx.label);
-                    chartData.push(indexResults[idx.key]);
-                    chartBgColors.push(idx.color);
-                    chartBorderColors.push(idx.border);
-                }
+                const hasReal = indexResults[idx.key] !== undefined;
+                const value = hasReal ? indexResults[idx.key] : idx.fallback;
+                // אינדקס שנכשל מוצג בשקיפות נמוכה יותר עם סימון ⚠️
+                chartLabels.push(hasReal ? idx.label : `${idx.label} ⚠️`);
+                chartData.push(value);
+                chartBgColors.push(hasReal ? idx.color : idx.color.replace('0.8', '0.35'));
+                chartBorderColors.push(hasReal ? idx.border : idx.border + '80');
             }
 
-            const loadedCount = Object.keys(indexResults).length;
+            // עדכון dataSource אם חלק מהאינדקסים הם fallback
+            if (loadedCount > 0 && loadedCount < indexConfig.length) {
+                dataSource += ` (${loadedCount}/${indexConfig.length} אמיתי)`;
+            } else if (loadedCount === 0) {
+                dataSource = 'ממוצע היסטורי (⚠️ לא הצליח לשאוב נתונים)';
+            }
+
             console.log(`📊 Performance chart: ${loadedCount}/${indexConfig.length} indices loaded`);
             if (loadedCount > 0) {
                 console.log('📊 Indices:', Object.entries(indexResults).map(([k, v]) => `${k}: ${v.toFixed(1)}%`).join(' | '));
