@@ -2595,6 +2595,46 @@
                 </div>
             </div>
 
+            <!-- Edit Purchase Modal -->
+            <div id="edit-purchase-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                <div style="background: var(--bg-surface); border-radius: 12px; padding: 25px; max-width: 500px; width: 90%; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+                    <h3 style="margin-bottom: 20px;">✏️ עריכת קנייה</h3>
+
+                    <div style="padding: 15px; background: #f0f9ff; border-radius: 8px; margin-bottom: 15px;">
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                            נכס: <strong id="edit-purchase-symbol"></strong> |
+                            מטבע: <strong id="edit-purchase-currency"></strong>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>📅 תאריך קנייה</label>
+                        <input type="date" id="edit-purchase-date" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; width: 100%;">
+                    </div>
+
+                    <div class="form-group">
+                        <label>כמות (מניות/יחידות)</label>
+                        <input type="number" id="edit-purchase-shares" placeholder="10" step="0.001">
+                    </div>
+
+                    <div class="form-group">
+                        <label>מחיר למניה (במטבע מקורי)</label>
+                        <input type="number" id="edit-purchase-price" placeholder="100.50" step="0.01">
+                    </div>
+
+                    <div class="form-group">
+                        <label>עמלה (אופציונלי)</label>
+                        <input type="number" id="edit-purchase-fee" placeholder="0" step="0.01" value="0">
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">עמלת קנייה - תתווסף למחיר הממוצע</small>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button onclick="hideEditPurchaseModal()" class="btn" style="background: var(--text-muted);">ביטול</button>
+                        <button onclick="submitEditPurchase()" class="btn btn-success">💾 שמור שינויים</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Performance Tab -->
 
             <!-- Settings Tab -->
@@ -8295,17 +8335,21 @@ ${msg}`, 'warning');
                         ${t.amount >= 0 ? '+' : ''}₪${Math.round(Math.abs(t.amount)).toLocaleString()}
                     </td>
                     <td>
-                        ${t.type === 'purchase' || t.type === 'sale' ? 
-                            `<button onclick="showEditTransactionDate('${t.type}', ${t.id})" 
+                        ${t.type === 'purchase' ?
+                            `<button onclick="showEditPurchaseModal(${t.id})"
+                                style="background: var(--info); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 5px;">
+                                ✏️ ערוך קנייה
+                            </button>` :
+                          t.type === 'sale' ?
+                            `<button onclick="showEditTransactionDate('${t.type}', ${t.id})"
                                 style="background: var(--info); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 5px;">
                                 ✏️ ערוך תאריך
-                            </button>
-                            <span style="color: #9ca3af; font-size: 0.85rem;">תקן פרטים בטאב החזקות</span>` :
-                            `<button onclick="showEditTransactionDate('${t.type}', ${t.id})" 
+                            </button>` :
+                            `<button onclick="showEditTransactionDate('${t.type}', ${t.id})"
                                 style="background: var(--info); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 5px;">
                                 ✏️
                             </button>
-                            <button onclick="deleteTransaction('${t.type}', ${t.id})" 
+                            <button onclick="deleteTransaction('${t.type}', ${t.id})"
                                 style="background: var(--loss); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
                             מחק
                         </button>`}
@@ -8482,6 +8526,172 @@ ${msg}`, 'warning');
         }
         
         // ===========================================
+        // ✏️ EDIT PURCHASE (עריכת קנייה מטאב היסטוריה)
+        // ===========================================
+        let editingPurchaseId = null;
+
+        function showEditPurchaseModal(purchaseId) {
+            const purchase = portfolio.purchases.find(p => p.id === purchaseId);
+            if (!purchase) {
+                notify('❌ עסקה לא נמצאה', 'error');
+                return;
+            }
+
+            editingPurchaseId = purchaseId;
+            const currency = purchase.original_currency || purchase.currency || 'ILS';
+
+            // מילוי הטופס בנתונים הקיימים
+            document.getElementById('edit-purchase-symbol').textContent = purchase.symbol || '-';
+            document.getElementById('edit-purchase-currency').textContent = currency;
+            document.getElementById('edit-purchase-date').value = new Date(purchase.date).toISOString().split('T')[0];
+            document.getElementById('edit-purchase-shares').value = purchase.shares;
+            document.getElementById('edit-purchase-price').value = purchase.original_price || purchase.price || '';
+            document.getElementById('edit-purchase-fee').value = purchase.fee || 0;
+
+            document.getElementById('edit-purchase-modal').style.display = 'flex';
+            console.log('✏️ Editing purchase:', purchaseId, purchase);
+        }
+
+        function hideEditPurchaseModal() {
+            document.getElementById('edit-purchase-modal').style.display = 'none';
+            editingPurchaseId = null;
+        }
+
+        function submitEditPurchase() {
+            const purchase = portfolio.purchases.find(p => p.id === editingPurchaseId);
+            if (!purchase) {
+                notify('❌ עסקה לא נמצאה', 'error');
+                return;
+            }
+
+            // קריאת ערכים מהטופס
+            const newDate = document.getElementById('edit-purchase-date').value;
+            const newShares = parseFloat(document.getElementById('edit-purchase-shares').value);
+            const newPrice = parseFloat(document.getElementById('edit-purchase-price').value);
+            const newFee = parseFloat(document.getElementById('edit-purchase-fee').value) || 0;
+
+            // ולידציה
+            if (!newDate) { notify('❌ אנא בחר תאריך', 'error'); return; }
+            if (isNaN(newShares) || newShares <= 0) { notify('❌ כמות לא תקינה', 'error'); return; }
+            if (isNaN(newPrice) || newPrice <= 0) { notify('❌ מחיר לא תקין', 'error'); return; }
+            if (isNaN(newFee) || newFee < 0) { notify('❌ עמלה לא תקינה', 'error'); return; }
+
+            const currency = purchase.original_currency || purchase.currency || 'ILS';
+            const newAmount = newShares * newPrice + newFee;
+            const newAmountILS = convertToILS(newAmount, currency);
+
+            console.log('✏️ Updating purchase:', {
+                old: { shares: purchase.shares, price: purchase.original_price || purchase.price, fee: purchase.fee },
+                new: { shares: newShares, price: newPrice, fee: newFee }
+            });
+
+            // עדכון רשומת הקנייה
+            purchase.date = new Date(newDate + 'T12:00:00.000Z').toISOString();
+            purchase.shares = newShares;
+            purchase.price = newPrice;
+            purchase.original_price = newPrice;
+            purchase.original_amount = newShares * newPrice;
+            purchase.fee = newFee;
+            purchase.amount = newAmountILS;
+            purchase.originalAmount = newAmount;
+            purchase.note = `קנייה: ${newShares} × ${getCurrencySymbol(currency)}${newPrice.toFixed(2)}` +
+                            (newFee > 0 ? ` + ${getCurrencySymbol(currency)}${newFee.toFixed(2)} עמלה` : '');
+
+            // מיון מחדש לפי תאריך
+            portfolio.purchases.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            // 🔄 חישוב מחדש של ההחזקה המקושרת
+            recalcHoldingFromPurchases(purchase.symbol, purchase.assetId);
+
+            // 🔄 בנייה מחדש של מזומן
+            rebuildCashFromHistory();
+
+            // 💾 שמירה ועדכון תצוגה
+            saveData();
+            renderTransactions();
+            renderCashFlow();
+            renderHoldingsList();
+            updateOverview();
+
+            notify('✅ הקנייה עודכנה בהצלחה', 'success');
+            hideEditPurchaseModal();
+            console.log('✅ Purchase updated and holding recalculated');
+        }
+
+        // 🔄 חישוב מחדש של החזקה מכל הקניות שלה
+        function recalcHoldingFromPurchases(symbol, assetId) {
+            // מצא את ההחזקה - לפי assetId או symbol
+            let holding = null;
+            if (assetId) {
+                holding = portfolio.holdings.find(h => h.id === assetId);
+            }
+            if (!holding) {
+                holding = portfolio.holdings.find(h => h.symbol === symbol);
+            }
+
+            if (!holding) {
+                console.log(`⚠️ No holding found for symbol=${symbol}, assetId=${assetId}`);
+                return;
+            }
+
+            // מצא את כל הקניות עבור החזקה זו
+            const purchases = portfolio.purchases.filter(p =>
+                (p.assetId && p.assetId === holding.id) ||
+                (!p.assetId && p.symbol === holding.symbol && p.assetType !== 'bonds')
+            );
+
+            if (purchases.length === 0) {
+                console.log(`⚠️ No purchases found for ${symbol}`);
+                return;
+            }
+
+            // מצא את כל המכירות עבור החזקה זו
+            const sales = (portfolio.sales || []).filter(s =>
+                (s.assetId && s.assetId === holding.id) ||
+                (!s.assetId && s.symbol === holding.symbol && s.assetType !== 'bonds')
+            );
+
+            // סך כל המניות שנקנו + ממוצע משוקלל
+            let totalSharesBought = 0;
+            let totalCostWeighted = 0;
+
+            purchases.forEach(p => {
+                const price = p.original_price || p.price || 0;
+                const fee = p.fee || 0;
+                const actualCost = p.shares > 0 ? (p.shares * price + fee) / p.shares : 0;
+                totalSharesBought += p.shares;
+                totalCostWeighted += p.shares * actualCost;
+            });
+
+            // סך כל המניות שנמכרו
+            let totalSharesSold = 0;
+            sales.forEach(s => {
+                totalSharesSold += s.shares || 0;
+            });
+
+            const currentShares = totalSharesBought - totalSharesSold;
+            const avgCost = totalSharesBought > 0 ? totalCostWeighted / totalSharesBought : 0;
+
+            // תאריך קנייה ראשון
+            const firstPurchaseDate = purchases
+                .map(p => new Date(p.date))
+                .sort((a, b) => a - b)[0];
+
+            console.log(`🔄 Recalc ${symbol}: ${totalSharesBought} bought - ${totalSharesSold} sold = ${currentShares} shares, avg cost = ${avgCost.toFixed(4)}`);
+
+            // עדכון ההחזקה
+            holding.shares = currentShares;
+            holding.costBasis = avgCost;
+            if (firstPurchaseDate) {
+                holding.purchaseDate = firstPurchaseDate.toISOString();
+            }
+            holding.lastUpdate = new Date().toISOString();
+
+            if (currentShares <= 0) {
+                console.log(`🗑️ Holding ${symbol} has 0 shares after recalc`);
+            }
+        }
+
         // ===========================================
         // DATA MIGRATION
         // ===========================================
@@ -11921,6 +12131,10 @@ ${msg}`, 'warning');
         window.showEditTransactionDate = showEditTransactionDate;
         window.hideEditDateModal = hideEditDateModal;
         window.submitEditDate = submitEditDate;
+        window.showEditPurchaseModal = showEditPurchaseModal;
+        window.hideEditPurchaseModal = hideEditPurchaseModal;
+        window.submitEditPurchase = submitEditPurchase;
+        window.recalcHoldingFromPurchases = recalcHoldingFromPurchases;
         window.deleteDeposit = deleteDeposit;
         window.deleteWithdrawal = deleteWithdrawal;
         window.showCalculateCapitalFromHoldings = showCalculateCapitalFromHoldings;
