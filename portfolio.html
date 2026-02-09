@@ -4186,15 +4186,15 @@ function calculateTWRv3() {
                     // שימוש בשדות החדשים אם קיימים
                     let currency = p.original_currency || getAssetCurrency(p.symbol);
                     let amount = p.original_amount;
-                    let fee = p.fee || 0;
+                    let fee = (p.fee !== undefined && p.fee !== null) ? p.fee : undefined;
                     let feeCurrency = p.fee_currency || currency;
-                    
+
                     // אם אין original_amount - נסה לשחזר מ-amount
                     if (!amount && p.amount) {
                         const rate = portfolio.rates[currency] || 1;
                         amount = p.amount / rate;
                     }
-                    
+
                     allEvents.push({
                         type: 'purchase',
                         date: new Date(p.date),
@@ -4272,10 +4272,10 @@ function calculateTWRv3() {
                         purchaseCountBySymbol[event.symbol] = purchaseCount + 1;
                         
                         // חישוב עמלה - שימוש בעמלה מהעסקה אם יש, אחרת חישוב
-                        let fee = event.fee || 0;
+                        let fee = (event.fee != null) ? event.fee : 0;
                         let feeCurrency = event.feeCurrency || event.currency;
-                        
-                        if (!event.fee) {
+
+                        if (event.fee === undefined || event.fee === null) {
                             // אין עמלה שמורה - חשב לפי הכללים
                             const feeCalc = calculateFeeForTransaction(event.symbol, 'buy', purchaseCount);
                             fee = feeCalc.fee;
@@ -8568,7 +8568,8 @@ ${msg}`, 'warning');
             const newDate = document.getElementById('edit-purchase-date').value;
             const newShares = parseFloat(document.getElementById('edit-purchase-shares').value);
             const newPrice = parseFloat(document.getElementById('edit-purchase-price').value);
-            const newFee = parseFloat(document.getElementById('edit-purchase-fee').value) || 0;
+            const newFeeRaw = document.getElementById('edit-purchase-fee').value;
+            const newFee = parseFloat(newFeeRaw);
 
             // ולידציה
             if (!newDate) { notify('❌ אנא בחר תאריך', 'error'); return; }
@@ -8577,13 +8578,25 @@ ${msg}`, 'warning');
             if (isNaN(newFee) || newFee < 0) { notify('❌ עמלה לא תקינה', 'error'); return; }
 
             const currency = purchase.original_currency || purchase.currency || 'ILS';
-            const newAmount = newShares * newPrice + newFee;
-            const newAmountILS = convertToILS(newAmount, currency);
+
+            // 💰 שמירת ערכי הקנייה הישנים לפני העדכון (לחישוב דלתא)
+            const oldShares = purchase.shares || 0;
+            const oldPrice = purchase.original_price || purchase.price || 0;
+            const oldFee = purchase.fee || 0;
+            const oldFeeCurrency = purchase.fee_currency || currency;
+            const oldCashImpact = oldShares * oldPrice; // סכום בלי עמלה (amount)
+            const oldFeeImpact = oldFee; // העמלה בנפרד
 
             console.log('✏️ Updating purchase:', {
-                old: { shares: purchase.shares, price: purchase.original_price || purchase.price, fee: purchase.fee },
+                old: { shares: oldShares, price: oldPrice, fee: oldFee, cashImpact: oldCashImpact },
                 new: { shares: newShares, price: newPrice, fee: newFee }
             });
+
+            // 💰 חישוב דלתא - ההפרש בין ההשפעה הישנה והחדשה על המזומן
+            const newCashImpact = newShares * newPrice;
+            const newFeeImpact = newFee;
+            const cashDelta = newCashImpact - oldCashImpact; // חיובי = צריך להוריד עוד מהמזומן
+            const feeDelta = newFeeImpact - oldFeeImpact;
 
             // עדכון רשומת הקנייה
             purchase.date = new Date(newDate + 'T12:00:00.000Z').toISOString();
@@ -8592,8 +8605,10 @@ ${msg}`, 'warning');
             purchase.original_price = newPrice;
             purchase.original_amount = newShares * newPrice;
             purchase.fee = newFee;
+            const newAmountTotal = newShares * newPrice + newFee;
+            const newAmountILS = convertToILS(newAmountTotal, currency);
             purchase.amount = newAmountILS;
-            purchase.originalAmount = newAmount;
+            purchase.originalAmount = newAmountTotal;
             purchase.note = `קנייה: ${newShares} × ${getCurrencySymbol(currency)}${newPrice.toFixed(2)}` +
                             (newFee > 0 ? ` + ${getCurrencySymbol(currency)}${newFee.toFixed(2)} עמלה` : '');
 
@@ -8603,8 +8618,18 @@ ${msg}`, 'warning');
             // 🔄 חישוב מחדש של ההחזקה המקושרת
             recalcHoldingFromPurchases(purchase.symbol, purchase.assetId);
 
-            // 🔄 בנייה מחדש של מזומן
-            rebuildCashFromHistory();
+            // 💰 עדכון מזומן לפי דלתא (ולא בנייה מחדש מאפס!)
+            // קנייה מורידה מזומן, אז אם הסכום החדש גדול יותר → צריך להוריד עוד
+            if (cashDelta !== 0) {
+                portfolio.cash[currency] = (portfolio.cash[currency] || 0) - cashDelta;
+                console.log(`💰 Cash ${currency} adjusted by ${-cashDelta.toFixed(2)} (amount delta)`);
+            }
+            // עמלה - אותו עיקרון, עמלה מורידה מזומן
+            const feeCurrency = purchase.fee_currency || currency;
+            if (feeDelta !== 0) {
+                portfolio.cash[feeCurrency] = (portfolio.cash[feeCurrency] || 0) - feeDelta;
+                console.log(`💰 Cash ${feeCurrency} adjusted by ${-feeDelta.toFixed(2)} (fee delta)`);
+            }
 
             // 💾 שמירה ועדכון תצוגה
             saveData();
@@ -8615,7 +8640,7 @@ ${msg}`, 'warning');
 
             notify('✅ הקנייה עודכנה בהצלחה', 'success');
             hideEditPurchaseModal();
-            console.log('✅ Purchase updated and holding recalculated');
+            console.log('✅ Purchase updated and holding recalculated (delta-based cash)');
         }
 
         // 🔄 חישוב מחדש של החזקה מכל הקניות שלה
