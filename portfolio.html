@@ -2745,7 +2745,7 @@
         // ===========================================
         const CORS_PROXIES = [
             'https://api.allorigins.win/raw?url=',
-            'https://corsproxy.io/?url=',
+            'https://corsproxy.io/?',
             'https://api.codetabs.com/v1/proxy?quest='
         ];
 
@@ -2759,6 +2759,18 @@
             const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
             return fetch(url, { ...options, signal: controller.signal })
                 .finally(() => clearTimeout(timeoutId));
+        }
+
+        // 🛡️ Fetch JSON בטוח - בודק content-type לפני parse
+        async function safeFetchJSON(url, options = {}, timeoutMs = 10000) {
+            const response = await fetchWithTimeout(url, options, timeoutMs);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const text = await response.text();
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error(`Not JSON: ${text.substring(0, 80)}...`);
+            }
         }
 
         // 🔄 Retry wrapper with exponential backoff
@@ -2797,6 +2809,38 @@
 
         function setCachedPrice(symbol, price) {
             priceCache[symbol] = { price, timestamp: Date.now() };
+        }
+
+        // ===========================================
+        // 💾 INDEX HISTORY CACHE (localStorage, TTL: 24 שעות)
+        // ===========================================
+        const INDEX_CACHE_KEY = 'indexHistoryCache';
+        const INDEX_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 שעות
+
+        function getCachedIndexHistory(symbol) {
+            try {
+                const raw = localStorage.getItem(INDEX_CACHE_KEY);
+                if (!raw) return null;
+                const cache = JSON.parse(raw);
+                const entry = cache[symbol];
+                if (entry && (Date.now() - entry.timestamp) < INDEX_CACHE_TTL) {
+                    console.log(`💾 Index cache hit: ${symbol} (${entry.data.length || 0} points)`);
+                    return entry.data;
+                }
+            } catch (e) { /* שקט */ }
+            return null;
+        }
+
+        function setCachedIndexHistory(symbol, data) {
+            try {
+                const raw = localStorage.getItem(INDEX_CACHE_KEY);
+                const cache = raw ? JSON.parse(raw) : {};
+                cache[symbol] = { data, timestamp: Date.now() };
+                localStorage.setItem(INDEX_CACHE_KEY, JSON.stringify(cache));
+                console.log(`💾 Index cache saved: ${symbol}`);
+            } catch (e) {
+                console.log('⚠️ Failed to save index cache:', e.message);
+            }
         }
 
         // ===========================================
@@ -4841,9 +4885,7 @@ function calculateTWRv3() {
             for (const proxy of proxies) {
                 try {
                     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
-                    if (!response.ok) continue;
-                    const data = await response.json();
+                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
                     const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
                     if (price && price > 0) return price;
                 } catch (e) {
@@ -4878,11 +4920,7 @@ function calculateTWRv3() {
                 for (const proxy of proxies) {
                     try {
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
-
-                        if (!response.ok) continue;
-
-                        const data = await response.json();
+                        const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
                         const result = data.chart?.result?.[0];
 
                         if (!result) continue;
@@ -4992,35 +5030,40 @@ function calculateTWRv3() {
                 const start = Math.floor(firstSnapshotDate.getTime() / 1000) - (7 * 24 * 60 * 60); // שבוע לפני
                 const end = Math.floor(Date.now() / 1000);
                 
-                const proxies = CORS_PROXIES;
-
+                // 💾 בדיקת cache ב-localStorage
+                const cached = getCachedIndexHistory(`TWR_${symbol}`);
                 let priceHistory = null;
                 let timestamps = null;
 
-                for (const proxy of proxies) {
-                    try {
-                        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
+                if (cached) {
+                    priceHistory = cached.prices;
+                    timestamps = cached.timestamps;
+                } else {
+                    const proxies = CORS_PROXIES;
 
-                        if (!response.ok) continue;
+                    for (const proxy of proxies) {
+                        try {
+                            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+                            const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
+                            const result = data.chart?.result?.[0];
 
-                        const data = await response.json();
-                        const result = data.chart?.result?.[0];
+                            if (!result) continue;
 
-                        if (!result) continue;
+                            priceHistory = result.indicators?.quote?.[0]?.close;
+                            timestamps = result.timestamp;
 
-                        priceHistory = result.indicators?.quote?.[0]?.close;
-                        timestamps = result.timestamp;
-                        
-                        if (priceHistory && timestamps && priceHistory.length > 0) {
-                            console.log(`✅ [TWR] Fetched ${priceHistory.length} days of ${symbol} history`);
-                            break;
+                            if (priceHistory && timestamps && priceHistory.length > 0) {
+                                console.log(`✅ [TWR] Fetched ${priceHistory.length} days of ${symbol} history`);
+                                // 💾 שמור ב-cache
+                                setCachedIndexHistory(`TWR_${symbol}`, { prices: priceHistory, timestamps });
+                                break;
+                            }
+                        } catch (e) {
+                            console.log(`Failed to fetch ${symbol} for TWR:`, e.message);
                         }
-                    } catch (e) {
-                        console.log(`Failed to fetch ${symbol} for TWR:`, e.message);
                     }
                 }
-                
+
                 if (!priceHistory || !timestamps) {
                     console.log(`❌ Could not fetch ${symbol} history for TWR`);
                     return null;
@@ -5189,41 +5232,47 @@ function calculateTWRv3() {
         // ✅ פונקציה חדשה: שליפת נתונים היסטוריים
         async function fetchHistoricalReturn(symbol, startDate) {
             try {
+                // 💾 בדיקת cache
+                const cacheKey = `HIST_${symbol}_${new Date(startDate).toISOString().split('T')[0]}`;
+                const cached = getCachedIndexHistory(cacheKey);
+                if (cached !== null) {
+                    console.log(`💾 Using cached historical return for ${symbol}: ${cached}%`);
+                    return cached;
+                }
+
                 const start = Math.floor(new Date(startDate).getTime() / 1000);
                 const end = Math.floor(Date.now() / 1000);
-                
+
                 const proxies = CORS_PROXIES;
 
                 for (const proxy of proxies) {
                     try {
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const response = await fetchWithTimeout(proxy + encodeURIComponent(url), {}, 10000);
-                        
-                        if (!response.ok) continue;
-                        
-                        const data = await response.json();
+                        const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
                         const quotes = data.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-                        
+
                         if (!quotes || quotes.length < 2) continue;
-                        
+
                         // מחיר ראשון ואחרון (מסנן null values)
                         const validPrices = quotes.filter(p => p !== null && p > 0);
                         if (validPrices.length < 2) continue;
-                        
+
                         const firstPrice = validPrices[0];
                         const lastPrice = validPrices[validPrices.length - 1];
-                        
+
                         // חישוב תשואה
                         const returnPct = ((lastPrice - firstPrice) / firstPrice) * 100;
-                        
+
                         console.log(`✅ ${symbol}: ${firstPrice.toFixed(2)} → ${lastPrice.toFixed(2)} = ${returnPct.toFixed(2)}%`);
+                        // 💾 שמור ב-cache
+                        setCachedIndexHistory(cacheKey, returnPct);
                         return returnPct;
-                        
+
                     } catch (e) {
                         console.log(`Failed to fetch ${symbol} from ${proxy}:`, e.message);
                     }
                 }
-                
+
                 throw new Error(`Could not fetch historical data for ${symbol}`);
             } catch (error) {
                 console.error(`fetchHistoricalReturn failed for ${symbol}:`, error);
@@ -5272,9 +5321,7 @@ function calculateTWRv3() {
             for (const proxy of proxies) {
                 try {
                     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
-                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
-                    if (!response.ok) continue;
-                    const data = await response.json();
+                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
                     const price = data.quoteResponse?.result?.[0]?.regularMarketPrice;
                     if (price && price > 0) return price;
                 } catch (e) {
@@ -5290,9 +5337,7 @@ function calculateTWRv3() {
             for (const proxy of proxies) {
                 try {
                     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=price`;
-                    const response = await fetchWithTimeout(proxy + encodeURIComponent(url));
-                    if (!response.ok) continue;
-                    const data = await response.json();
+                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
                     const price = data.quoteSummary?.result?.[0]?.price?.regularMarketPrice?.raw;
                     if (price && price > 0) return price;
                 } catch (e) {
