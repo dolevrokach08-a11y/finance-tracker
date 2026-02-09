@@ -1,5 +1,5 @@
 // Service Worker for Finance Tracker PWA
-const CACHE_NAME = 'finance-tracker-v2';
+const CACHE_NAME = 'finance-tracker-v3';
 const urlsToCache = [
   '/finance-tracker/',
   '/finance-tracker/index.html',
@@ -45,12 +45,20 @@ self.addEventListener('activate', event => {
 });
 
 // Fetch - network first, fallback to cache
+// ⚠️ רק לקבצי האפליקציה - לא מיירט בקשות API/proxy חיצוניות
 self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
+  // אל תיירט בקשות cross-origin (API calls, CORS proxies)
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then(response => {
         // Clone and cache successful responses
-        if (response && response.status === 200) {
+        if (response && response.status === 200 && response.type === 'basic') {
           const responseClone = response.clone();
           caches.open(CACHE_NAME)
             .then(cache => {
