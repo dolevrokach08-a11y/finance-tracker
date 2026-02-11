@@ -754,6 +754,16 @@
     </script>
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <script>
+        // Global loading timeout - show retry button if page doesn't load in 20s
+        window.__loadingTimeout = setTimeout(function() {
+            var ls = document.getElementById('loadingScreen');
+            if (ls && ls.style.display !== 'none') {
+                var retry = document.getElementById('loadingRetry');
+                if (retry) retry.style.display = 'block';
+            }
+        }, 20000);
+    </script>
     </head>
 <body class="p-4">
     <!-- Dark Mode Toggle Button -->
@@ -764,8 +774,12 @@
     <!-- Loading Screen -->
     <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-base); display: flex; justify-content: center; align-items: center; z-index: 9999; flex-direction: column; gap: 20px;">
         <div style="font-size: 4em; animation: fadeInDown 0.6s ease;">💰</div>
-        <div style="color: var(--text-primary); font-size: 1.5em; font-weight: 600; animation: fadeInUp 0.6s ease 0.2s both;">טוען נתונים...</div>
-        <div style="width: 60px; height: 60px; border: 5px solid rgba(255,255,255,0.3); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div id="loadingText" style="color: var(--text-primary); font-size: 1.5em; font-weight: 600; animation: fadeInUp 0.6s ease 0.2s both;">טוען נתונים...</div>
+        <div id="loadingSpinner" style="width: 60px; height: 60px; border: 5px solid rgba(255,255,255,0.3); border-top-color: var(--text-primary); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <div id="loadingRetry" style="display: none; text-align: center;">
+            <div style="color: var(--text-secondary); font-size: 0.9em; margin-bottom: 12px;">הטעינה לוקחת יותר מדי זמן</div>
+            <button onclick="window.location.reload()" style="padding: 10px 24px; background: var(--accent, #00f5d4); color: #000; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer;">נסה שוב</button>
+        </div>
     </div>
     
     <div id="mainContent" style="display: none;">
@@ -1229,26 +1243,85 @@
     <div id="notif" class="notification"></div>
 
     <script type="module">
-        // Firebase Import
-        import { auth, db, onAuthStateChanged, doc, setDoc, getDoc } from './firebase-config.js';
+        // Firebase Import with error handling
+        let auth, db, onAuthStateChanged, doc, setDoc, getDoc;
+        let firebaseLoaded = false;
+
+        try {
+            const fb = await import('./firebase-config.js');
+            auth = fb.auth;
+            db = fb.db;
+            onAuthStateChanged = fb.onAuthStateChanged;
+            doc = fb.doc;
+            setDoc = fb.setDoc;
+            getDoc = fb.getDoc;
+            firebaseLoaded = true;
+        } catch (e) {
+            console.error('Firebase module failed to load:', e);
+            // Show retry button on loading screen
+            const retryEl = document.getElementById('loadingRetry');
+            const textEl = document.getElementById('loadingText');
+            const spinnerEl = document.getElementById('loadingSpinner');
+            if (retryEl) retryEl.style.display = 'block';
+            if (textEl) textEl.textContent = 'שגיאה בטעינת המערכת';
+            if (spinnerEl) spinnerEl.style.display = 'none';
+        }
 
         // Check authentication
         let currentUser = null;
         let authChecked = false;
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                console.log('User authenticated:', user.email);
+        // Auth timeout - if auth doesn't respond in 15 seconds, show retry
+        let authTimeoutId = null;
+        if (firebaseLoaded) {
+            authTimeoutId = setTimeout(() => {
                 if (!authChecked) {
+                    console.warn('Auth check timed out after 15s');
+                    // Try to proceed with localStorage data
                     authChecked = true;
-                    init();
+                    initOffline();
                 }
-            } else {
-                console.log('No user, redirecting to login...');
-                window.location.href = 'login.html';
-            }
-        });
+            }, 15000);
+
+            onAuthStateChanged(auth, (user) => {
+                clearTimeout(authTimeoutId);
+                if (user) {
+                    currentUser = user;
+                    console.log('User authenticated:', user.email);
+                    if (!authChecked) {
+                        authChecked = true;
+                        init();
+                    }
+                } else {
+                    console.log('No user, redirecting to login...');
+                    window.location.href = 'login.html';
+                }
+            });
+        }
+
+        // Fallback init when auth times out - load from localStorage
+        async function initOffline() {
+            console.log('Attempting offline init from localStorage');
+            clearTimeout(window.__loadingTimeout);
+            loadFromLocalStorage();
+
+            const months = getMonths();
+            const cur = getMonthKey();
+            const opts = months.map(m => `<option value="${m.val}" ${m.val===cur?'selected':''}>${m.txt}</option>`).join('');
+
+            ['overview-month','add-month','import-month','fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = opts;
+            });
+
+            updateReportPeriodSelector();
+            renderCategorySelects();
+            updateOverview();
+            notify('טעינה מנתונים מקומיים - בדוק חיבור אינטרנט');
+
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
 
         // Data
         let data = {
@@ -1459,34 +1532,39 @@
                 console.warn('No user logged in, cannot load');
                 return false;
             }
-            
+
             // Check if we're offline
             if (!navigator.onLine) {
                 console.log('📴 Offline - loading from localStorage');
-                notify('⚠️ אופליין - טוען נתונים מקומיים');
+                notify('אופליין - טוען נתונים מקומיים');
                 return loadFromLocalStorage();
             }
-            
+
             try {
                 const userDocRef = doc(db, 'users', currentUser.uid, 'finance', 'data');
-                const docSnap = await getDoc(userDocRef);
-                
+
+                // Race between Firebase load and timeout
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Firebase load timeout')), 10000)
+                );
+                const docSnap = await Promise.race([getDoc(userDocRef), timeoutPromise]);
+
                 if (docSnap.exists()) {
                     const firebaseData = docSnap.data();
-                    
+
                     // Track the lastModified for conflict detection
                     cloudLastModified = firebaseData.lastModified || null;
                     localLoadTime = new Date().toISOString();
-                    
+
                     delete firebaseData.lastModified; // Remove metadata from data object
                     data = firebaseData;
-                    
+
                     // Ensure all required fields exist
                     if (!data.categoryRules) data.categoryRules = [];
                     if (!data.budgets) data.budgets = {};
-                    
+
                     console.log('✅ Data loaded from Firebase', { cloudLastModified });
-                    
+
                     // Also save to localStorage as backup
                     localStorage.setItem('financeTrackerData', JSON.stringify(data));
                     return true;
@@ -1498,7 +1576,7 @@
             } catch(e) {
                 console.error('❌ Firebase load failed:', e);
                 // Fallback to localStorage
-                notify('⚠️ בעיה בטעינה מהענן - טוען מקומית');
+                notify('בעיה בטעינה מהענן - טוען מקומית');
                 return loadFromLocalStorage();
             }
         }
@@ -2205,11 +2283,11 @@
         // Init
         async function init() {
             await loadFromFirebase();
-            
+
             const months = getMonths();
             const cur = getMonthKey();
             const opts = months.map(m=>`<option value="${m.val}" ${m.val===cur?'selected':''}>${m.txt}</option>`).join('');
-            
+
             ['overview-month','add-month','import-month','fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
                 const el = document.getElementById(id);
                 if(el) el.innerHTML = opts;
@@ -2219,8 +2297,9 @@
             renderCategorySelects();
             updateOverview();
             notify('מערכת מוכנה');
-            
-            // Hide loading screen and show content
+
+            // Clear global loading timeout and hide loading screen
+            clearTimeout(window.__loadingTimeout);
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
         }
