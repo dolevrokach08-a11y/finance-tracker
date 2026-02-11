@@ -547,6 +547,185 @@
             background: var(--bg-elevated) !important;
             color: var(--text-secondary) !important;
         }
+
+        /* ==================== EDIT MODAL ==================== */
+        .edit-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .edit-modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            animation: fadeInUp 0.3s ease;
+            overflow: hidden;
+        }
+
+        .edit-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .edit-modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .edit-modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .edit-modal-close:hover {
+            color: var(--loss);
+        }
+
+        .edit-modal-body {
+            padding: 20px;
+        }
+
+        .edit-field {
+            margin-bottom: 14px;
+        }
+
+        .edit-field label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .edit-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .edit-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .edit-modal-footer {
+            display: flex;
+            gap: 10px;
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+            justify-content: flex-end;
+        }
+
+        .edit-btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .edit-btn:hover {
+            opacity: 0.85;
+        }
+
+        .edit-btn-cancel {
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .edit-btn-save {
+            background: var(--accent);
+            color: #000;
+        }
+
+        /* ==================== QUICK CATEGORY MODAL ==================== */
+        .cat-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .cat-modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            animation: fadeInUp 0.3s ease;
+            overflow: hidden;
+        }
+
+        .cat-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .cat-modal-header h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .cat-option-btn {
+            display: block;
+            width: 100%;
+            padding: 10px 16px;
+            text-align: right;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-bottom: 6px;
+        }
+
+        .cat-option-btn:hover {
+            background: var(--accent-dim);
+            border-color: var(--accent);
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
@@ -712,6 +891,65 @@
                 <div class="glass p-6">
                     <h3 class="text-xl font-semibold mb-4">רשומות החודש</h3>
                     <div id="month-list" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Edit Transaction Modal -->
+            <div id="editModal" class="edit-modal-overlay" style="display: none;">
+                <div class="edit-modal">
+                    <div class="edit-modal-header">
+                        <h3 id="editModalTitle">עריכת רשומה</h3>
+                        <button onclick="closeEditModal()" class="edit-modal-close">&times;</button>
+                    </div>
+                    <div class="edit-modal-body">
+                        <input type="hidden" id="edit-trans-id">
+                        <input type="hidden" id="edit-trans-type">
+                        <div class="edit-field">
+                            <label>תיאור</label>
+                            <input type="text" id="edit-desc" class="edit-input">
+                        </div>
+                        <div class="edit-field">
+                            <label>סכום</label>
+                            <input type="number" id="edit-amt" class="edit-input" step="0.01" min="0">
+                        </div>
+                        <div class="edit-field">
+                            <label>קטגוריה</label>
+                            <select id="edit-cat" class="edit-input"></select>
+                        </div>
+                        <div class="edit-field" id="edit-exempt-field" style="display: none;">
+                            <label class="flex items-center gap-2" style="cursor:pointer;">
+                                <input type="checkbox" id="edit-exempt">
+                                <span>פטור ממעשר</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="edit-modal-footer">
+                        <button onclick="closeEditModal()" class="edit-btn edit-btn-cancel">ביטול</button>
+                        <button onclick="saveEditModal()" class="edit-btn edit-btn-save">שמור</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Category Assignment Modal -->
+            <div id="catModal" class="cat-modal-overlay" style="display: none;">
+                <div class="cat-modal">
+                    <div class="cat-modal-header">
+                        <h3>סיווג לקטגוריה</h3>
+                        <button onclick="closeCatModal()" class="edit-modal-close">&times;</button>
+                    </div>
+                    <div style="padding: 16px 20px;">
+                        <div class="edit-field">
+                            <label>מילת חיפוש (תיאור שמכיל):</label>
+                            <input type="text" id="cat-keyword" class="edit-input">
+                        </div>
+                        <div class="edit-field">
+                            <label>בחר קטגוריה:</label>
+                            <div id="cat-options-list"></div>
+                        </div>
+                    </div>
+                    <div class="edit-modal-footer">
+                        <button onclick="closeCatModal()" class="edit-btn edit-btn-cancel">ביטול</button>
+                    </div>
                 </div>
             </div>
 
@@ -1903,25 +2141,65 @@
 
 
         let editingTransId = null;
-        
+
         function startEdit(id) {
             const trans = data.transactions.find(t => t.id === id);
             if (!trans) return;
-            
-            editingTransId = id;
-            
+
+            document.getElementById('edit-trans-id').value = id;
+            document.getElementById('edit-trans-type').value = trans.type;
+            document.getElementById('edit-desc').value = trans.desc || '';
+            document.getElementById('edit-amt').value = trans.amt;
+
+            const categories = trans.type === 'income' ? data.incomeCategories : data.expenseCategories;
+            document.getElementById('edit-cat').innerHTML = categories.map(c =>
+                `<option value="${c}" ${c === trans.cat ? 'selected' : ''}>${c}</option>`
+            ).join('');
+
+            const exemptField = document.getElementById('edit-exempt-field');
             if (trans.type === 'income') {
-                document.getElementById('inc-desc').value = trans.desc;
-                document.getElementById('inc-amt').value = trans.amt;
-                document.getElementById('inc-cat').value = trans.cat;
-                document.getElementById('inc-exempt').checked = trans.titheExempt || false;
-            } else if (trans.type === 'expense') {
-                document.getElementById('exp-desc').value = trans.desc;
-                document.getElementById('exp-amt').value = trans.amt;
-                document.getElementById('exp-cat').value = trans.cat;
+                exemptField.style.display = '';
+                document.getElementById('edit-exempt').checked = trans.titheExempt || false;
+            } else {
+                exemptField.style.display = 'none';
             }
-            
-            notify('✏️ מצב עריכה');
+
+            document.getElementById('editModalTitle').textContent = trans.type === 'income' ? 'עריכת הכנסה' : 'עריכת הוצאה';
+            document.getElementById('editModal').style.display = 'flex';
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function saveEditModal() {
+            const id = parseInt(document.getElementById('edit-trans-id').value);
+            const trans = data.transactions.find(t => t.id === id);
+            if (!trans) return;
+
+            const newDesc = document.getElementById('edit-desc').value.trim();
+            const newAmt = parseFloat(document.getElementById('edit-amt').value);
+            const newCat = document.getElementById('edit-cat').value;
+
+            if (!newDesc || !newAmt || newAmt <= 0) {
+                notify('מלא את כל השדות');
+                return;
+            }
+
+            trans.desc = newDesc;
+            trans.amt = newAmt;
+            trans.cat = newCat;
+
+            if (trans.type === 'income') {
+                trans.titheExempt = document.getElementById('edit-exempt').checked;
+            }
+
+            saveToLocalStorage();
+            closeEditModal();
+            loadMonthTransactions();
+            updateOverview();
+            updateTithe();
+            notify('הרשומה עודכנה');
         }
 
         // Init
@@ -2033,31 +2311,19 @@
             const cat = document.getElementById('inc-cat').value;
             const month = document.getElementById('add-month').value;
             const exempt = document.getElementById('inc-exempt').checked;
-            
+
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
-            if (editingTransId) {
-                const trans = data.transactions.find(t => t.id === editingTransId);
-                if (trans) { 
-                    trans.desc = desc; 
-                    trans.amt = amt; 
-                    trans.cat = cat;
-                    trans.titheExempt = exempt;
-                }
-                editingTransId = null;
-                notify('✅ עודכן');
-            } else {
-                data.transactions.push({
-                    id:Date.now(),
-                    type:'income',
-                    desc,
-                    amt,
-                    cat,
-                    month,
-                    titheExempt: exempt,
-                    time:new Date().toISOString()
-                });
-                notify('✅ נוסף');
-            }
+            data.transactions.push({
+                id:Date.now(),
+                type:'income',
+                desc,
+                amt,
+                cat,
+                month,
+                titheExempt: exempt,
+                time:new Date().toISOString()
+            });
+            notify('נוסף');
             saveToLocalStorage();
             document.getElementById('inc-desc').value = '';
             document.getElementById('inc-amt').value = '';
@@ -2073,15 +2339,8 @@
             const cat = document.getElementById('exp-cat').value;
             const month = document.getElementById('add-month').value;
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
-            if (editingTransId) {
-                const trans = data.transactions.find(t => t.id === editingTransId);
-                if (trans) { trans.desc = desc; trans.amt = amt; trans.cat = cat; }
-                editingTransId = null;
-                notify('✅ עודכן');
-            } else {
-                data.transactions.push({id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()});
-                notify('✅ נוסף');
-            }
+            data.transactions.push({id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()});
+            notify('נוסף');
             saveToLocalStorage();
             document.getElementById('exp-desc').value = '';
             document.getElementById('exp-amt').value = '';
@@ -2121,7 +2380,7 @@
                     <div class="flex items-center gap-2">
                         <div class="font-bold ${t.type==='income'?'text-green-600':'text-red-600'}">${t.type==='income'?'+':'-'}₪${(t.amt||t.amount).toLocaleString()}</div>
                         ${canToggleExempt ? `<button onclick="toggleTitheExempt(${t.id})" class="text-orange-500 hover:text-orange-700 px-2 text-sm" title="${isExempt ? 'הסר פטור ממעשר' : 'סמן כפטור ממעשר'}">${isExempt ? '💰' : '🚫'}</button>` : ''}
-                        ${showRuleBtn ? `<button onclick="quickAddRule(${t.id}, '${t.type}', '${(t.desc||'').replace(/'/g, "\\'")}', '${t.cat}')" class="text-purple-500 hover:text-purple-700 px-2 text-xs" title="צור חוק זיהוי">🔖</button>` : ''}
+                        ${showRuleBtn ? `<button onclick="quickAddRule(${t.id})" class="text-purple-500 hover:text-purple-700 px-2 text-xs" title="סווג לקטגוריה">🔖</button>` : ''}
                         ${!t.fixed ? `<button onclick="startEdit(${t.id})" class="text-blue-500 hover:text-blue-700 px-2 text-sm">✏️</button><button onclick="delTrans(${t.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>` : ''}
                     </div>
                 </div>`;
@@ -2142,34 +2401,52 @@
             notify(`✅ ${trans.desc} - ${status}`);
         }
 
-        function quickAddRule(transId, type, desc, currentCat) {
+        let catModalTransId = null;
+
+        function quickAddRule(transId) {
             const trans = data.transactions.find(t => t.id === transId);
             if (!trans) return;
-            
-            const keyword = prompt(`צור חוק זיהוי אוטומטי:\n\nמילת חיפוש (תיאור שמכיל):`, desc);
-            if (!keyword || !keyword.trim()) return;
-            
-            const categories = type === 'income' ? data.incomeCategories : data.expenseCategories;
-            let categoryOptions = categories.map((c, i) => `${i+1}. ${c}`).join('\n');
-            const categoryChoice = prompt(`בחר קטגוריה:\n\n${categoryOptions}\n\nהקלד מספר או שם קטגוריה:`, currentCat);
-            
-            if (!categoryChoice) return;
-            
-            const choiceNum = parseInt(categoryChoice);
-            let selectedCategory;
-            if (!isNaN(choiceNum) && choiceNum > 0 && choiceNum <= categories.length) {
-                selectedCategory = categories[choiceNum - 1];
-            } else {
-                selectedCategory = categories.find(c => c === categoryChoice) || categoryChoice;
+
+            catModalTransId = transId;
+            document.getElementById('cat-keyword').value = trans.desc || '';
+
+            const categories = trans.type === 'income' ? data.incomeCategories : data.expenseCategories;
+            document.getElementById('cat-options-list').innerHTML = categories
+                .filter(c => c !== 'אחר')
+                .map(c => `<button class="cat-option-btn" onclick="applyCategoryRule('${c.replace(/'/g, "\\'")}')">${c}</button>`)
+                .join('');
+
+            document.getElementById('catModal').style.display = 'flex';
+        }
+
+        function closeCatModal() {
+            document.getElementById('catModal').style.display = 'none';
+            catModalTransId = null;
+        }
+
+        function applyCategoryRule(category) {
+            const trans = data.transactions.find(t => t.id === catModalTransId);
+            if (!trans) return;
+
+            const keyword = document.getElementById('cat-keyword').value.trim();
+            if (!keyword) {
+                notify('הזן מילת חיפוש');
+                return;
             }
-            
-            if (addCategoryRule(keyword.trim(), type, selectedCategory)) {
-                trans.cat = selectedCategory;
+
+            if (addCategoryRule(keyword, trans.type, category)) {
+                trans.cat = category;
                 saveToLocalStorage();
+                closeCatModal();
                 loadMonthTransactions();
-                notify(`✅ חוק נוסף: "${keyword}" → ${selectedCategory}`);
+                notify(`חוק נוסף: "${keyword}" → ${category}`);
             } else {
-                notify('⚠️ חוק זה כבר קיים');
+                // Rule exists but still apply category to this transaction
+                trans.cat = category;
+                saveToLocalStorage();
+                closeCatModal();
+                loadMonthTransactions();
+                notify(`קטגוריה עודכנה: ${category}`);
             }
         }
 
@@ -3763,6 +4040,10 @@
         window.resetAll = resetAll;
         window.delTrans = delTrans;
         window.startEdit = startEdit;
+        window.closeEditModal = closeEditModal;
+        window.saveEditModal = saveEditModal;
+        window.closeCatModal = closeCatModal;
+        window.applyCategoryRule = applyCategoryRule;
         window.toggleTitheExempt = toggleTitheExempt;
         window.delDonation = delDonation;
         window.handleImportFile = handleImportFile;
@@ -3806,6 +4087,18 @@
         loadTheme();
 
         // Don't call init on window.onload - it's called after auth check
+
+        // Close modals on overlay click or Escape key
+        document.addEventListener('click', function(e) {
+            if (e.target === document.getElementById('editModal')) closeEditModal();
+            if (e.target === document.getElementById('catModal')) closeCatModal();
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeEditModal();
+                closeCatModal();
+            }
+        });
 
         // Register Service Worker
         if ('serviceWorker' in navigator) {
