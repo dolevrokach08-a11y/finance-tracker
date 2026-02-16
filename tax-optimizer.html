@@ -127,9 +127,22 @@ a { color: #c4944a; }
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
-  import { auth, db, onAuthStateChanged, doc, getDoc } from './firebase-config.js';
+  import { auth, db, onAuthStateChanged, doc, getDoc, setDoc } from './firebase-config.js';
 
   window.__taxData = { loaded: false, years: {}, availableYears: [] };
+  window.__taxSettings = null;
+
+  // Save settings to Firebase
+  window.__saveTaxSettings = async (settings) => {
+    const user = auth.currentUser;
+    if (!user) return;
+    try {
+      const ref = doc(db, 'users', user.uid, 'finance', 'taxSettings');
+      await setDoc(ref, { ...settings, lastModified: new Date().toISOString() });
+    } catch (e) {
+      console.error('Failed to save tax settings:', e);
+    }
+  };
 
   onAuthStateChanged(auth, async (user) => {
     const loading = document.getElementById('auth-loading');
@@ -238,6 +251,17 @@ a { color: #c4944a; }
       }
     } catch (e) {
       console.error('Failed to load finance data:', e);
+    }
+
+    // Load saved tax optimizer settings
+    try {
+      const settingsRef = doc(db, 'users', user.uid, 'finance', 'taxSettings');
+      const settingsSnap = await getDoc(settingsRef);
+      if (settingsSnap.exists()) {
+        window.__taxSettings = settingsSnap.data();
+      }
+    } catch (e) {
+      console.error('Failed to load tax settings:', e);
     }
 
     // Show app
@@ -368,21 +392,33 @@ function R({ label, amount, color, bold }) {
 
 function App() {
   const taxData = window.__taxData || { loaded: false, years: {}, availableYears: [] };
+  const saved = window.__taxSettings;
 
   const [selectedYear, setSelectedYear] = useState('');
-  const [autoApplied, setAutoApplied] = useState(false);
-  const [fM, setFM] = useState(6000);
-  const [mM, setMM] = useState(5000);
-  const [children, setChildren] = useState([
+  const [autoApplied, setAutoApplied] = useState(!!saved);
+  const [fM, setFM] = useState(saved?.fM ?? 6000);
+  const [mM, setMM] = useState(saved?.mM ?? 5000);
+  const [children, setChildren] = useState(saved?.children ?? [
     { id: 1, age: 3 },
     { id: 2, age: 2 },
     { id: 3, age: 0 },
   ]);
-  const [nextId, setNextId] = useState(4);
-  const [stl, setStl] = useState(true);
-  const [jnt, setJnt] = useState(true);
-  const [cg, setCg] = useState(80000);
+  const [nextId, setNextId] = useState(saved?.nextId ?? 4);
+  const [stl, setStl] = useState(saved?.stl ?? true);
+  const [jnt, setJnt] = useState(saved?.jnt ?? true);
+  const [cg, setCg] = useState(saved?.cg ?? 80000);
   const [det, setDet] = useState(false);
+
+  // Auto-save settings on change (debounced)
+  const saveTimerRef = React.useRef(null);
+  useEffect(() => {
+    if (!window.__saveTaxSettings) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      window.__saveTaxSettings({ fM, mM, children, nextId, stl, jnt, cg });
+    }, 1500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [fM, mM, children, nextId, stl, jnt, cg]);
 
   // Auto-select best year on load
   useEffect(() => {
