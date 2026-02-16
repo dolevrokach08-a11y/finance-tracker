@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מחשבון אופטימיזציה — מס, מענקים ורווחי הון</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Noto Sans Hebrew', 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(170deg, #0e0e1f 0%, #161630 40%, #0c1825 100%); color: #e0dcd0; min-height: 100vh; }
+input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.1); border-radius: 4px; outline: none; cursor: pointer; accent-color: #c4944a; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #c4944a; cursor: pointer; }
+a { color: #c4944a; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+const CREDIT_POINT_VALUE_2026 = 2904;
+const CG_TAX_RATE = 0.25;
+const SETTLEMENT_RATE = 0.12;
+const SETTLEMENT_CEILING = 213240;
+
+function fatherChildPoints(age) {
+  if (age < 0) return 0;
+  if (age === 0) return 2.5;
+  if (age <= 2) return 4.5;
+  if (age === 3) return 3.5;
+  if (age <= 5) return 2.5;
+  return 0;
+}
+
+function motherChildPoints(age) {
+  if (age < 0) return 0;
+  if (age === 0) return 2.5;
+  if (age <= 2) return 4.5;
+  if (age === 3) return 3.5;
+  if (age <= 5) return 2.5;
+  if (age <= 17) return 1;
+  if (age === 18) return 0.5;
+  return 0;
+}
+
+const TAX_BRACKETS = [
+  { limit: 84120, rate: 0.10 },
+  { limit: 120720, rate: 0.14 },
+  { limit: 193800, rate: 0.20 },
+  { limit: 269280, rate: 0.31 },
+  { limit: 560280, rate: 0.35 },
+  { limit: 698280, rate: 0.47 },
+  { limit: Infinity, rate: 0.50 },
+];
+
+function calcTax(annual) {
+  let tax = 0, prev = 0;
+  for (const b of TAX_BRACKETS) {
+    if (annual <= prev) break;
+    const t = Math.min(annual, b.limit) - prev;
+    if (t > 0) tax += t * b.rate;
+    prev = b.limit;
+  }
+  return Math.round(tax);
+}
+
+function calcGrant(monthly, nKids) {
+  const min = 2390, max = nKids >= 3 ? 7910 : 7220;
+  if (monthly < min || monthly > max) return { grant: 0, ok: false };
+  let base = 0;
+  if (nKids >= 3) {
+    if (monthly <= 4340) base = Math.min(420, (monthly - min) * 0.215);
+    else if (monthly <= 5410) base = 420;
+    else base = Math.max(0, 420 - (monthly - 5410) * 0.168);
+  } else {
+    if (monthly <= 4340) base = Math.min(290, (monthly - min) * 0.149);
+    else if (monthly <= 5140) base = 290;
+    else base = Math.max(0, 290 - (monthly - 5140) * 0.139);
+  }
+  const m = base * 1.5;
+  return { grant: Math.round(m * 12), ok: m > 2 };
+}
+
+function calcToddler(monthly, nToddlers, nKids) {
+  if (!nToddlers) return 0;
+  const max = nKids >= 3 ? 9243 : 8582;
+  if (monthly < 2400 || monthly > max) return 0;
+  let g = nToddlers * 500;
+  if (monthly > 6000) g *= Math.max(0, 1 - (monthly - 6000) / (max - 6000));
+  return Math.max(0, Math.round(g * 12));
+}
+
+function InfoTip({ text }) {
+  const [s, setS] = useState(false);
+  return (
+    <span style={{ position: "relative", display: "inline-block", marginRight: 4, cursor: "pointer" }}
+      onMouseEnter={() => setS(true)} onMouseLeave={() => setS(false)} onClick={() => setS(!s)}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "#1a1a2e", fontSize: 10, fontWeight: 700 }}>?</span>
+      {s && <span style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "#e0dcd0", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
+    </span>
+  );
+}
+
+function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
+  return (
+    <div style={{ gridColumn: wide ? "1 / -1" : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <label style={{ fontSize: 12, color: "#a0a0b8", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0" }}>{value < 0 ? "—" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
+    </div>
+  );
+}
+
+function Tog({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12,
+      border: `1px solid ${active ? "#c4944a" : "rgba(255,255,255,0.1)"}`,
+      background: active ? "rgba(196,148,74,0.15)" : "transparent",
+      color: active ? "#c4944a" : "#7a7a9a", fontWeight: active ? 600 : 400
+    }}>{active ? "✓ " : ""}{label}</button>
+  );
+}
+
+function R({ label, amount, color, bold }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: bold ? 14 : 12, fontWeight: bold ? 700 : 400, marginBottom: bold ? 0 : 4, paddingTop: bold ? 6 : 0, borderTop: bold ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
+      <span>{label}</span><span style={{ color: color || "#e0dcd0" }}>{amount}</span>
+    </div>
+  );
+}
+
+function App() {
+  const [fM, setFM] = useState(6000);
+  const [mM, setMM] = useState(5000);
+  const [children, setChildren] = useState([
+    { id: 1, age: 3 },
+    { id: 2, age: 2 },
+    { id: 3, age: 0 },
+  ]);
+  const [nextId, setNextId] = useState(4);
+  const [stl, setStl] = useState(true);
+  const [jnt, setJnt] = useState(true);
+  const [cg, setCg] = useState(80000);
+  const [det, setDet] = useState(false);
+
+  const addChild = () => {
+    setChildren(prev => [...prev, { id: nextId, age: 0 }]);
+    setNextId(prev => prev + 1);
+  };
+  const removeChild = (id) => setChildren(prev => prev.filter(c => c.id !== id));
+  const updateChildAge = (id, age) => setChildren(prev => prev.map(c => c.id === id ? { ...c, age } : c));
+
+  const r = useMemo(() => {
+    const ages = children.map(c => c.age);
+    const nK = ages.length, nT = ages.filter(a => a >= 0 && a < 3).length;
+
+    const calc = (monthly, isMother) => {
+      const annual = monthly * 12;
+      const baseP = isMother ? 2.75 : 2.25;
+      const childP = ages.reduce((s, a) => s + (isMother ? motherChildPoints(a) : fatherChildPoints(a)), 0);
+      const totalP = baseP + childP;
+      const pVal = Math.round(totalP * CREDIT_POINT_VALUE_2026);
+      const sCredit = stl ? Math.round(Math.min(annual, SETTLEMENT_CEILING) * SETTLEMENT_RATE) : 0;
+      const totalCr = pVal + sCredit;
+      const tax = calcTax(annual);
+      const unused = Math.max(0, totalCr - tax);
+      const wg = calcGrant(monthly, nK);
+      const tg = calcToddler(monthly, nT, nK);
+      return { annual, baseP, childP, totalP, pVal, sCredit, totalCr, tax, unused, wg, tg };
+    };
+
+    const f = calc(fM, false), m = calc(mM, true);
+    const fShare = jnt ? cg / 2 : cg, mShare = jnt ? cg / 2 : 0;
+    const fCGTax = Math.round(fShare * CG_TAX_RATE), mCGTax = Math.round(mShare * CG_TAX_RATE);
+    const fSaved = Math.min(fCGTax, f.unused), mSaved = Math.min(mCGTax, m.unused);
+    const fOpt = f.unused > 0 ? Math.round(f.unused / CG_TAX_RATE) : 0;
+    const mOpt = m.unused > 0 ? Math.round(m.unused / CG_TAX_RATE) : 0;
+    const hUnused = f.unused + m.unused;
+    const hGrant = f.wg.grant + m.wg.grant + f.tg + m.tg;
+    const hOpt = jnt ? fOpt + mOpt : fOpt;
+
+    return { f, m, fShare, mShare, fCGTax, mCGTax, fSaved, mSaved, fOpt, mOpt, hUnused, hGrant, hOpt, nK, nT, ages };
+  }, [fM, mM, children, stl, jnt, cg]);
+
+  const fm = n => n.toLocaleString("he-IL");
+
+  return (
+    <div style={{ minHeight: "100vh", color: "#e0dcd0", padding: 0 }}>
+      <div style={{ background: "linear-gradient(135deg,#181835,#251838)", borderBottom: "2px solid #c4944a", padding: "24px 20px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "#c4944a", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>מחשבון אופטימיזציה ביתי</div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px", background: "linear-gradient(90deg,#c4944a,#e8c878,#c4944a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          נקודות זיכוי × מענק עבודה × רווחי הון
+        </h1>
+        <p style={{ fontSize: 12, color: "#7a7a9a", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
+      </div>
+
+      <div style={{ margin: "16px 14px", padding: "14px 16px", background: "rgba(30,120,30,0.1)", border: "1px solid rgba(30,120,30,0.35)", borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 20 }}>✅</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#5ab85a" }}>אין קונפליקט — רווחי הון לא פוגעים במענק</span>
+        </div>
+        <p style={{ fontSize: 12, lineHeight: 1.7, margin: 0, color: "#a8cca8" }}>
+          החוק מגדיר "הכנסה חייבת" <strong>למעט רווח הון</strong>. מימוש רווחי הון לא משנה את ההכנסה לצורך זכאות למענק עבודה.
+        </p>
+      </div>
+
+      <div style={{ padding: "0 14px 32px", maxWidth: 720, margin: "0 auto" }}>
+        {/* INPUTS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <Sl label="הכנסתך (חודשי ברוטו)" value={fM} onChange={setFM} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
+            <Sl label="הכנסת בת הזוג (חודשי)" value={mM} onChange={setMM} min={0} max={15000} step={250} suf="₪" />
+          </div>
+
+          {/* CHILDREN */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "#a0a0b8" }}>👶 ילדים ({children.length})</label>
+              <button onClick={addChild} style={{
+                padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.1)", color: "#c4944a"
+              }}>+ הוסף ילד</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {children.map((child, i) => (
+                <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 12, color: "#7a7a9a", minWidth: 50 }}>ילד {i + 1}</span>
+                  <input type="range" min={0} max={18} step={1} value={child.age}
+                    onChange={e => updateChildAge(child.id, +e.target.value)}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0", minWidth: 55, textAlign: "center" }}>
+                    {child.age === 0 ? "לידה" : `${child.age} ${child.age === 1 ? "שנה" : "שנים"}`}
+                  </span>
+                  <button onClick={() => removeChild(child.id)} style={{
+                    width: 24, height: 24, borderRadius: "50%", cursor: "pointer", fontSize: 14,
+                    border: "1px solid rgba(224,112,112,0.3)", background: "rgba(224,112,112,0.1)",
+                    color: "#e07070", display: "flex", alignItems: "center", justifyContent: "center",
+                    lineHeight: 1, padding: 0
+                  }}>×</button>
+                </div>
+              ))}
+              {children.length === 0 && (
+                <div style={{ fontSize: 12, color: "#6a6a8a", textAlign: "center", padding: 10 }}>
+                  אין ילדים. לחץ "הוסף ילד" כדי להתחיל.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+            <Tog label="ישוב מזכה" active={stl} onClick={() => setStl(!stl)} />
+            <Tog label="חשבון משותף" active={jnt} onClick={() => setJnt(!jnt)} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Sl label="רווחי הון צבורים לממש" value={cg} onChange={setCg} min={0} max={500000} step={5000} suf="₪" tip="בחשבון משותף מתחלק 50/50" wide />
+          </div>
+        </div>
+
+        {/* CREDIT POINTS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>📊 נקודות זיכוי</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[{ d: r.f, icon: "👨", clr: "#7ab8e0", lbl: "האב", base: "2.25 (תושב)" },
+              { d: r.m, icon: "👩", clr: "#d898c8", lbl: "האם", base: "2.75 (תושבת+אישה)" }].map(({ d, icon, clr, lbl, base }) => (
+              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
+                <R label="בסיס" amount={base} />
+                <R label="ילדים" amount={d.childP.toFixed(1)} />
+                <R label="סה״כ נקודות" amount={d.totalP.toFixed(2)} bold />
+                <div style={{ marginTop: 8 }}>
+                  <R label="שווי נקודות" amount={`${fm(d.pVal)} ₪`} />
+                  {stl && <R label="זיכוי ישוב" amount={`${fm(d.sCredit)} ₪`} />}
+                  <R label="סה״כ זיכויים" amount={`${fm(d.totalCr)} ₪`} color="#c4944a" bold />
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  <R label="מס הכנסה שנתי" amount={`${fm(d.tax)} ₪`} color="#e07070" />
+                  <R label="עודפים" amount={`${fm(d.unused)} ₪`} color="#c4944a" bold />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(196,148,74,0.08)", borderRadius: 10, textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "#a0a0b8" }}>סה״כ זיכויים עודפים למשק הבית</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "#c4944a" }}>{fm(r.hUnused)} ₪</div>
+            <div style={{ fontSize: 11, color: "#7a7a9a" }}>הולכים לאיבוד — אלא אם מממשים רווחי הון</div>
+          </div>
+        </div>
+
+        {/* WORK GRANT */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[{ d: r.f, m: fM, icon: "👨", clr: "#7ab8e0", lbl: "האב" },
+              { d: r.m, m: mM, icon: "👩", clr: "#d898c8", lbl: "האם" }].map(({ d, m: mo, icon, clr, lbl }) => (
+              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
+                {d.wg.ok ? (
+                  <>
+                    <R label="מענק כללי" amount={`${fm(d.wg.grant)} ₪`} />
+                    <R label="מענק פעוטות" amount={`${fm(d.tg)} ₪`} />
+                    <R label="סה״כ" amount={`${fm(d.wg.grant + d.tg)} ₪`} color="#5ab85a" bold />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#c08080" }}>
+                    ⚠️ הכנסה {mo < 2390 ? "מתחת" : "מעל"} לטווח
+                    {d.tg > 0 && <div style={{ color: "#a8cca8", marginTop: 4 }}>✓ מענק פעוטות: {fm(d.tg)} ₪</div>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, padding: "8px 14px", background: "rgba(30,120,30,0.08)", borderRadius: 8, fontSize: 12, color: "#a8cca8" }}>
+            סה״כ מענקים: <strong>{fm(r.hGrant)} ₪/שנה</strong> (הערכה. <a href="https://www.misim.gov.il/gmmhszakaut/" target="_blank">סימולטור</a> לחישוב מדויק)
+          </div>
+        </div>
+
+        {/* CAPITAL GAINS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(196,148,74,0.3)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+            {[{ lbl: "👨 חלק האב", sh: r.fShare, tx: r.fCGTax, sv: r.fSaved, clr: "#7ab8e0" },
+              { lbl: "👩 חלק האם", sh: r.mShare, tx: r.mCGTax, sv: r.mSaved, clr: "#d898c8" }].map(x => (
+              <div key={x.lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: x.clr, marginBottom: 8 }}>{x.lbl}</div>
+                <R label="רווח הון" amount={`${fm(x.sh)} ₪`} />
+                <R label="מס 25%" amount={`${fm(x.tx)} ₪`} color="#e07070" />
+                <R label="קיזוז מזיכויים" amount={`-${fm(x.sv)} ₪`} color="#5ab85a" />
+                <R label="מס נותר" amount={`${fm(x.tx - x.sv)} ₪`} bold />
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(196,148,74,0.1),rgba(196,148,74,0.03))", border: "1px solid rgba(196,148,74,0.25)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#c4944a", marginBottom: 6 }}>💰 סכום מימוש אופטימלי</div>
+            <p style={{ fontSize: 13, lineHeight: 1.7, margin: "0 0 4px" }}>
+              לניצול מלוא הזיכויים ({fm(r.hUnused)} ₪): ממש <strong>{fm(r.hOpt)} ₪</strong>
+              {jnt && ` (${fm(r.fOpt)} אב + ${fm(r.mOpt)} אם)`}
+            </p>
+            <p style={{ fontSize: 13, margin: 0 }}>החזר מס צפוי: <strong>{fm(r.hUnused)} ₪</strong> — מס אפקטיבי 0%.</p>
+          </div>
+        </div>
+
+        {/* BOTTOM LINE */}
+        <div style={{ background: "linear-gradient(135deg,rgba(196,148,74,0.06),rgba(196,148,74,0.02))", borderRadius: 14, border: "1px solid rgba(196,148,74,0.2)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ fontSize: 12, color: "#8a8aaa", marginBottom: 6 }}>ללא מימוש</div>
+              <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
+              <R label="חיסכון מס" amount="0 ₪" />
+              <R label="סה״כ" amount={`${fm(r.hGrant)} ₪`} bold />
+            </div>
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(30,120,30,0.06)", border: "1px solid rgba(30,120,30,0.25)" }}>
+              <div style={{ fontSize: 12, color: "#5ab85a", marginBottom: 6, fontWeight: 600 }}>✨ מימוש אופטימלי</div>
+              <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
+              <R label="חיסכון מס" amount={`${fm(r.hUnused)} ₪`} color="#5ab85a" />
+              <R label="סה״כ" amount={`${fm(r.hGrant + r.hUnused)} ₪`} color="#5ab85a" bold />
+            </div>
+          </div>
+          <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(196,148,74,0.1)", textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "#a0a0b8" }}>רווח נוסף מהמימוש</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "#c4944a" }}>+{fm(r.hUnused)} ₪</div>
+            <div style={{ fontSize: 12, color: "#7a7a9a" }}>לשנה, בנוסף למענקים</div>
+          </div>
+        </div>
+
+        {/* DETAIL TABLE */}
+        <button onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "#a0a0b8", fontWeight: 600, marginBottom: 16 }}>
+          {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל (רפורמת 2024)
+        </button>
+        {det && (
+          <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
+                  {["גיל", "אב בסיס", "רפורמה", "אב סה״כ", "אם בסיס", "רפורמה", "אם סה״כ"].map(h => (
+                    <th key={h} style={{ padding: "8px 4px", textAlign: "center", color: "#a0a0b8", fontSize: 11 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["לידה", 1.5, 1, 2.5, 1.5, 1, 2.5],
+                  ["1-2", 2.5, 2, 4.5, 2.5, 2, 4.5],
+                  ["3", 2.5, 1, 3.5, 2.5, 1, 3.5],
+                  ["4-5", 2.5, 0, 2.5, 2.5, 0, 2.5],
+                  ["6-17", 0, 0, 0, 1, 0, 1],
+                  ["18", 0, 0, 0, 0.5, 0, 0.5],
+                ].map(row => (
+                  <tr key={row[0]} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <td style={{ padding: "6px 4px", fontWeight: 600, textAlign: "center" }}>{row[0]}</td>
+                    <td style={{ textAlign: "center", color: "#7ab8e0" }}>{row[1]}</td>
+                    <td style={{ textAlign: "center", color: row[2] ? "#5ab85a" : "#4a4a5a" }}>{row[2] ? `+${row[2]}` : "—"}</td>
+                    <td style={{ textAlign: "center", color: "#7ab8e0", fontWeight: 700 }}>{row[3]}</td>
+                    <td style={{ textAlign: "center", color: "#d898c8" }}>{row[4]}</td>
+                    <td style={{ textAlign: "center", color: row[5] ? "#5ab85a" : "#4a4a5a" }}>{row[5] ? `+${row[5]}` : "—"}</td>
+                    <td style={{ textAlign: "center", color: "#d898c8", fontWeight: 700 }}>{row[6]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ fontSize: 11, color: "#6a6a8a", marginTop: 10, marginBottom: 0 }}>
+              * עד גיל 5 סה״כ זהה לשני ההורים (מסעיפים שונים). מגיל 6 רק האם מקבלת.
+            </p>
+          </div>
+        )}
+
+        {/* STEPS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🗂️ צעדים</h2>
+          {[
+            ["1", "הגשת בקשה למענק עבודה", "שני בני הזוג בנפרד, לשנת 2024 (עד 31.12.26) ו-2025 (עד 31.12.27)"],
+            ["2", "בדיקת רווחים צבורים", "בקש טופס 867 מהבנק/ברוקר"],
+            ["3", `מימוש עד ${fm(r.hOpt)} ₪`, "לפני 30.12 (אירופה) / 31.12 (ארה״ב) — קנה מחדש מיד"],
+            ["4", "הגשת דוח שנתי", "עם רו״ח, כלול 867 + כל ההכנסות → החזר מס"],
+            ["5", "עדכון טופס 101", "פרטי ילדים + ישוב מזכה"],
+          ].map(([n, t, d]) => (
+            <div key={n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#c4944a", color: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
+              <div><div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 11, color: "#7a7a9a" }}>{d}</div></div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: "12px", borderRadius: 10, background: "rgba(200,140,80,0.05)", border: "1px solid rgba(200,140,80,0.12)", fontSize: 11, color: "#908070", lineHeight: 1.7 }}>
+          <strong>⚠️</strong> סכומי המענק הם הערכה. הכנסת בן/בת הזוג משפיעה על המענק. נקודות הזיכוי מדויקות לפי רפורמת 2024.
+          מדרגות המס ושווי נקודת זיכוי עשויים להשתנות משנה לשנה — עדכן בהתאם. אין לראות בזה ייעוץ מס — התייעצו עם רו״ח.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.render(<App />, document.getElementById('root'));
+</script>
+</body>
+</html>
