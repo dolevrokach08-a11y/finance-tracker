@@ -1210,7 +1210,11 @@
                             <option value="father">👨 אב</option>
                             <option value="mother">👩 אם</option>
                         </select>
-                        <button onclick="addCategoryRuleFromForm()" class="btn btn-success text-white py-3 rounded-lg font-medium">הוסף חוק</button>
+                        <div class="flex gap-2">
+                            <button id="rule-add-btn" onclick="addCategoryRuleFromForm()" class="btn btn-success text-white py-3 rounded-lg font-medium flex-1">הוסף חוק</button>
+                            <button id="rule-update-btn" onclick="updateCategoryRule()" class="btn btn-primary text-white py-3 rounded-lg font-medium flex-1 hidden">עדכן והחל</button>
+                            <button id="rule-cancel-btn" onclick="cancelEditRule()" class="btn bg-gray-500 text-white py-3 rounded-lg font-medium hidden" style="flex: 0 0 auto; padding: 0 16px;">ביטול</button>
+                        </div>
                     </div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2146,6 +2150,106 @@
             saveToLocalStorage();
         }
 
+        let editingRuleId = null;
+
+        function editCategoryRule(id) {
+            const rule = data.categoryRules.find(r => r.id === id);
+            if (!rule) return;
+
+            editingRuleId = id;
+            document.getElementById('rule-type').value = rule.type;
+            updateRuleCategoryOptions();
+            updateRuleEarnerVisibility();
+            document.getElementById('rule-keyword').value = rule.keyword;
+            document.getElementById('rule-category').value = rule.category;
+            if (rule.type === 'income') {
+                document.getElementById('rule-earner').value = rule.earner || '';
+            }
+
+            // Switch buttons
+            document.getElementById('rule-add-btn').classList.add('hidden');
+            document.getElementById('rule-update-btn').classList.remove('hidden');
+            document.getElementById('rule-cancel-btn').classList.remove('hidden');
+            notify('מצב עריכה — עדכן את החוק');
+        }
+
+        function cancelEditRule() {
+            editingRuleId = null;
+            document.getElementById('rule-keyword').value = '';
+            document.getElementById('rule-earner').value = '';
+            document.getElementById('rule-add-btn').classList.remove('hidden');
+            document.getElementById('rule-update-btn').classList.add('hidden');
+            document.getElementById('rule-cancel-btn').classList.add('hidden');
+        }
+
+        function updateCategoryRule() {
+            if (!editingRuleId) return;
+            const rule = data.categoryRules.find(r => r.id === editingRuleId);
+            if (!rule) return;
+
+            const keyword = document.getElementById('rule-keyword').value.trim();
+            const type = document.getElementById('rule-type').value;
+            const category = document.getElementById('rule-category').value;
+            const earner = type === 'income' ? (document.getElementById('rule-earner').value || null) : null;
+
+            if (!keyword) { notify('❌ הזן מילת חיפוש'); return; }
+
+            rule.keyword = keyword;
+            rule.type = type;
+            rule.category = category;
+            rule.earner = earner;
+
+            // Apply to all existing matching transactions
+            const applied = applyRuleToExistingData(rule);
+
+            saveToLocalStorage();
+            cancelEditRule();
+            renderCategoryRules();
+            loadMonthTransactions();
+            updateOverview();
+            updateTithe();
+            notify(`✅ חוק עודכן — ${applied} רשומות עודכנו`);
+        }
+
+        function applyRuleToExistingData(rule) {
+            let count = 0;
+            const keyword = rule.keyword.toLowerCase();
+
+            data.transactions.forEach(t => {
+                if (t.type !== rule.type) return;
+                const desc = (t.desc || '').toLowerCase();
+                if (!desc.includes(keyword)) return;
+
+                let changed = false;
+                if (t.cat !== rule.category) { t.cat = rule.category; changed = true; }
+                if (rule.type === 'income' && rule.earner && t.earner !== rule.earner) { t.earner = rule.earner; changed = true; }
+                if (changed) count++;
+            });
+
+            // Also apply to fixed incomes
+            if (rule.type === 'income') {
+                data.fixedIncomes.forEach(f => {
+                    const desc = (f.description || '').toLowerCase();
+                    if (!desc.includes(keyword)) return;
+
+                    let changed = false;
+                    if (f.category !== rule.category) { f.category = rule.category; changed = true; }
+                    if (rule.earner && f.earner !== rule.earner) { f.earner = rule.earner; changed = true; }
+                    if (changed) count++;
+                });
+            }
+
+            if (rule.type === 'expense') {
+                data.fixedExpenses.forEach(f => {
+                    const desc = (f.description || '').toLowerCase();
+                    if (!desc.includes(keyword)) return;
+                    if (f.category !== rule.category) { f.category = rule.category; count++; }
+                });
+            }
+
+            return count;
+        }
+
         function renderCategoryRules() {
             const incomeRules = data.categoryRules.filter(r => r.type === 'income');
             const expenseRules = data.categoryRules.filter(r => r.type === 'expense');
@@ -2157,17 +2261,23 @@
                         <span class="text-gray-600"> → ${r.category}</span>
                         ${r.earner === 'father' ? ' <span class="text-blue-600">👨 אב</span>' : r.earner === 'mother' ? ' <span class="text-pink-600">👩 אם</span>' : ''}
                     </div>
-                    <button onclick="deleteCategoryRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
+                    <div class="flex gap-1">
+                        <button onclick="editCategoryRule(${r.id})" class="text-blue-500 hover:text-blue-700 px-2">ערוך</button>
+                        <button onclick="deleteCategoryRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
+                    </div>
                 </div>
             `).join('') : '<div class="text-gray-500 text-sm p-2">אין חוקים</div>';
-            
+
             const expenseHtml = expenseRules.length ? expenseRules.map(r => `
                 <div class="flex justify-between items-center p-2 bg-red-50 rounded text-sm">
                     <div>
                         <span class="font-medium">"${r.keyword}"</span>
                         <span class="text-gray-600"> → ${r.category}</span>
                     </div>
-                    <button onclick="deleteCategoryRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
+                    <div class="flex gap-1">
+                        <button onclick="editCategoryRule(${r.id})" class="text-blue-500 hover:text-blue-700 px-2">ערוך</button>
+                        <button onclick="deleteCategoryRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
+                    </div>
                 </div>
             `).join('') : '<div class="text-gray-500 text-sm p-2">אין חוקים</div>';
             
@@ -2193,10 +2303,17 @@
             }
 
             if (addCategoryRule(keyword, type, category, earner)) {
+                // Apply new rule to existing data
+                const newRule = data.categoryRules[data.categoryRules.length - 1];
+                const applied = applyRuleToExistingData(newRule);
+                if (applied > 0) saveToLocalStorage();
+
                 document.getElementById('rule-keyword').value = '';
                 document.getElementById('rule-earner').value = '';
                 renderCategoryRules();
-                notify('✅ חוק נוסף');
+                loadMonthTransactions();
+                updateOverview();
+                notify(applied > 0 ? `✅ חוק נוסף — ${applied} רשומות עודכנו` : '✅ חוק נוסף');
             } else {
                 notify('⚠️ חוק זה כבר קיים');
             }
@@ -4271,6 +4388,9 @@
         window.delCat = delCat;
         window.addCategoryRuleFromForm = addCategoryRuleFromForm;
         window.deleteCategoryRule = deleteCategoryRule;
+        window.editCategoryRule = editCategoryRule;
+        window.updateCategoryRule = updateCategoryRule;
+        window.cancelEditRule = cancelEditRule;
         window.quickAddRule = quickAddRule;
         window.setBudget = setBudget;
         window.deleteBudget = deleteBudget;
