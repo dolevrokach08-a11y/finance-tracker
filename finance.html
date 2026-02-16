@@ -892,6 +892,14 @@
                             <input type="checkbox" id="inc-exempt" class="w-4 h-4 rounded">
                             <label for="inc-exempt" class="text-sm text-gray-700">פטור ממעשר (מתנה, החזר, הלוואה וכו')</label>
                         </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            <label class="text-sm font-medium">בעל/ת הכנסה:</label>
+                            <select id="inc-earner" class="p-2 border rounded-lg text-sm">
+                                <option value="">לא צוין</option>
+                                <option value="father">👨 אב</option>
+                                <option value="mother">👩 אם</option>
+                            </select>
+                        </div>
                         <button onclick="addIncome()" class="btn btn-success w-full text-white py-3 rounded-lg font-medium">הוסף הכנסה</button>
                     </div>
                     <div class="glass p-6">
@@ -936,6 +944,14 @@
                                 <span>פטור ממעשר</span>
                             </label>
                         </div>
+                        <div class="edit-field" id="edit-earner-field" style="display: none;">
+                            <label>בעל/ת הכנסה</label>
+                            <select id="edit-earner" class="edit-input">
+                                <option value="">לא צוין</option>
+                                <option value="father">👨 אב</option>
+                                <option value="mother">👩 אם</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="edit-modal-footer">
                         <button onclick="closeEditModal()" class="edit-btn edit-btn-cancel">ביטול</button>
@@ -963,6 +979,28 @@
                     </div>
                     <div class="edit-modal-footer">
                         <button onclick="closeCatModal()" class="edit-btn edit-btn-cancel">ביטול</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Earner Assignment Modal -->
+            <div id="earnerModal" class="edit-modal-overlay" style="display: none;">
+                <div class="edit-modal" style="max-width: 500px;">
+                    <div class="edit-modal-header">
+                        <h3>שיוך הכנסות לאב/אם</h3>
+                        <button onclick="closeEarnerModal()" class="edit-modal-close">&times;</button>
+                    </div>
+                    <div style="padding: 16px 20px;">
+                        <p class="text-sm text-gray-600 mb-3">בחר עבור כל הכנסה למי היא שייכת:</p>
+                        <div class="flex gap-2 mb-4">
+                            <button onclick="setAllEarner('father')" class="btn bg-blue-500 text-white py-2 px-4 rounded-lg text-sm">👨 הכל אב</button>
+                            <button onclick="setAllEarner('mother')" class="btn bg-pink-500 text-white py-2 px-4 rounded-lg text-sm">👩 הכל אם</button>
+                        </div>
+                        <div id="earner-items-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
+                    </div>
+                    <div class="edit-modal-footer">
+                        <button onclick="closeEarnerModal()" class="edit-btn edit-btn-cancel">דלג</button>
+                        <button onclick="saveEarnerAssignments()" class="edit-btn edit-btn-save">שמור</button>
                     </div>
                 </div>
             </div>
@@ -1157,13 +1195,18 @@
                     <h3 class="text-xl font-semibold mb-2">זיהוי אוטומטי של קטגוריות</h3>
                     <p class="text-sm text-gray-600 mb-4">הגדר חוקים לזיהוי אוטומטי של קטגוריות בייבוא. למשל: אם התיאור מכיל "משכורת" → קטגוריה "משכורת"</p>
                     
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                        <select id="rule-type" onchange="updateRuleCategoryOptions()" class="p-3 border rounded-lg">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-3 mb-4">
+                        <select id="rule-type" onchange="updateRuleCategoryOptions(); updateRuleEarnerVisibility()" class="p-3 border rounded-lg">
                             <option value="income">הכנסה</option>
                             <option value="expense">הוצאה</option>
                         </select>
                         <input type="text" id="rule-keyword" placeholder='מילת חיפוש (למשל: "משכורת")' class="p-3 border rounded-lg col-span-2">
                         <select id="rule-category" class="p-3 border rounded-lg"></select>
+                        <select id="rule-earner" class="p-3 border rounded-lg">
+                            <option value="">ללא שיוך</option>
+                            <option value="father">👨 אב</option>
+                            <option value="mother">👩 אם</option>
+                        </select>
                         <button onclick="addCategoryRuleFromForm()" class="btn btn-success text-white py-3 rounded-lg font-medium">הוסף חוק</button>
                     </div>
                     
@@ -1199,6 +1242,14 @@
                         <input type="text" id="fix-inc-desc" placeholder="תיאור" class="w-full p-3 border rounded-lg mb-3">
                         <input type="number" id="fix-inc-amt" placeholder="סכום חודשי" class="w-full p-3 border rounded-lg mb-3">
                         <select id="fix-inc-cat" class="w-full p-3 border rounded-lg mb-3"></select>
+                        <div class="flex items-center gap-2 mb-3">
+                            <label class="text-sm font-medium">בעל/ת הכנסה:</label>
+                            <select id="fix-inc-earner" class="p-2 border rounded-lg text-sm">
+                                <option value="">לא צוין</option>
+                                <option value="father">👨 אב</option>
+                                <option value="mother">👩 אם</option>
+                            </select>
+                        </div>
                         <div class="grid grid-cols-2 gap-2 mb-3">
                             <div><label class="text-xs text-gray-600 block mb-1">מחודש</label><select id="fix-inc-start" class="w-full p-3 border rounded-lg"></select></div>
                             <div><label class="text-xs text-gray-600 block mb-1">עד חודש</label><select id="fix-inc-end" class="w-full p-3 border rounded-lg"></select></div>
@@ -1414,7 +1465,7 @@
             }
             if(tab==='analysis') { updateAnalysis(); }
             if(tab==='tithe') { updateTithe(); renderDonations(); }
-            if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); renderBudgets(); updateBudgetCategorySelect(); }
+            if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
         }
 
         // טאבים פנימיים בדוחות
@@ -1856,18 +1907,20 @@
                         }
                         
                         if (creditAmount > 0) {
-                            const isDuplicate = existingTransactions.some(t => 
+                            const isDuplicate = existingTransactions.some(t =>
                                 t.type === 'income' && t.desc === desc && Math.abs(t.amt - creditAmount) < 0.01
                             );
-                            
+
                             if (!isDuplicate) {
                                 const category = findCategoryByRules(desc, 'income');
+                                const earner = findEarnerByRules(desc);
                                 data.transactions.push({
                                     id: Date.now() + importedIncome * 10 + 5,
                                     type: 'income',
                                     desc: desc,
                                     amt: creditAmount,
                                     cat: category,
+                                    earner: earner,
                                     month: selectedMonth,
                                     time: new Date().toISOString()
                                 });
@@ -1891,9 +1944,16 @@
                             setTimeout(() => {
                                 if (confirm(`יובאו ${importedIncome} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\n(מתנות, החזרים, הלוואות וכו')\n\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
                                     showTitheExemptDialog(selectedMonth);
-                                } else {
-                                    notify(`✅ יובאו ${totalImported} תנועות (${importedIncome} הכנסות, ${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
                                 }
+                                // Show earner assignment dialog for untagged income
+                                setTimeout(() => {
+                                    const untagged = data.transactions.filter(t => t.month === selectedMonth && t.type === 'income' && !t.earner);
+                                    if (untagged.length > 0) {
+                                        showEarnerDialog(selectedMonth);
+                                    } else {
+                                        notify(`✅ יובאו ${totalImported} תנועות (${importedIncome} הכנסות, ${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
+                                    }
+                                }, 300);
                             }, 500);
                         } else {
                             notify(`✅ יובאו ${totalImported} תנועות (${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
@@ -1962,34 +2022,115 @@
             updateOverview();
             notify(`✅ ${marked} הכנסות סומנו כפטורות ממעשר`);
         }
+        // ========== Earner Assignment Dialog ==========
+        let earnerDialogMonth = null;
+
+        function showEarnerDialog(month) {
+            earnerDialogMonth = month;
+            const incomes = data.transactions.filter(t => t.month === month && t.type === 'income' && !t.earner);
+
+            if (incomes.length === 0) {
+                notify('כל ההכנסות כבר משויכות');
+                return;
+            }
+
+            document.getElementById('earner-items-list').innerHTML = incomes.map((inc, i) => `
+                <div class="p-3 rounded-lg flex justify-between items-center" style="background: var(--bg-elevated); border: 1px solid var(--border);">
+                    <div class="flex-1">
+                        <div class="font-medium text-sm">${inc.desc}</div>
+                        <div class="text-xs text-gray-500">₪${inc.amt.toLocaleString()}</div>
+                    </div>
+                    <div class="flex gap-1">
+                        <button onclick="setEarnerItem(${inc.id}, 'father', this)" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👨 אב</button>
+                        <button onclick="setEarnerItem(${inc.id}, 'mother', this)" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👩 אם</button>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('earnerModal').style.display = 'flex';
+        }
+
+        function setEarnerItem(id, earner, btn) {
+            const trans = data.transactions.find(t => t.id === id);
+            if (trans) trans.earner = earner;
+
+            // Update button styles
+            const parent = btn.parentElement;
+            parent.querySelectorAll('.earner-btn').forEach(b => {
+                b.style.background = 'transparent';
+                b.style.borderColor = 'rgba(255,255,255,0.1)';
+                b.style.fontWeight = '400';
+            });
+            btn.style.background = earner === 'father' ? 'rgba(59,130,246,0.2)' : 'rgba(236,72,153,0.2)';
+            btn.style.borderColor = earner === 'father' ? '#3b82f6' : '#ec4899';
+            btn.style.fontWeight = '600';
+        }
+
+        function setAllEarner(earner) {
+            const incomes = data.transactions.filter(t => t.month === earnerDialogMonth && t.type === 'income' && !t.earner);
+            incomes.forEach(t => t.earner = earner);
+
+            // Update all buttons
+            document.querySelectorAll('#earner-items-list .earner-btn').forEach(btn => {
+                const isMatch = (earner === 'father' && btn.textContent.includes('אב')) || (earner === 'mother' && btn.textContent.includes('אם'));
+                btn.style.background = isMatch ? (earner === 'father' ? 'rgba(59,130,246,0.2)' : 'rgba(236,72,153,0.2)') : 'transparent';
+                btn.style.borderColor = isMatch ? (earner === 'father' ? '#3b82f6' : '#ec4899') : 'rgba(255,255,255,0.1)';
+                btn.style.fontWeight = isMatch ? '600' : '400';
+            });
+        }
+
+        function saveEarnerAssignments() {
+            saveToLocalStorage();
+            closeEarnerModal();
+            loadMonthTransactions();
+            notify('✅ שיוך הכנסות נשמר');
+        }
+
+        function closeEarnerModal() {
+            document.getElementById('earnerModal').style.display = 'none';
+            earnerDialogMonth = null;
+        }
         // ====================================
 
-        
+
         // ========== Auto-Categorization ==========
         function findCategoryByRules(description, type) {
             const desc = description.toLowerCase().trim();
-            
+
             for (let rule of data.categoryRules) {
                 if (rule.type === type && desc.includes(rule.keyword.toLowerCase())) {
                     return rule.category;
                 }
             }
-            
+
             return 'אחר';
         }
 
-        function addCategoryRule(keyword, type, category) {
-            const exists = data.categoryRules.some(r => 
-                r.keyword.toLowerCase() === keyword.toLowerCase() && 
+        function findEarnerByRules(description) {
+            const desc = description.toLowerCase().trim();
+
+            for (let rule of data.categoryRules) {
+                if (rule.type === 'income' && rule.earner && desc.includes(rule.keyword.toLowerCase())) {
+                    return rule.earner;
+                }
+            }
+
+            return null;
+        }
+
+        function addCategoryRule(keyword, type, category, earner) {
+            const exists = data.categoryRules.some(r =>
+                r.keyword.toLowerCase() === keyword.toLowerCase() &&
                 r.type === type
             );
-            
+
             if (!exists) {
                 data.categoryRules.push({
                     id: Date.now(),
                     keyword: keyword.trim(),
                     type: type,
-                    category: category
+                    category: category,
+                    earner: earner || null
                 });
                 saveToLocalStorage();
                 return true;
@@ -2011,6 +2152,7 @@
                     <div>
                         <span class="font-medium">"${r.keyword}"</span>
                         <span class="text-gray-600"> → ${r.category}</span>
+                        ${r.earner === 'father' ? ' <span class="text-blue-600">👨 אב</span>' : r.earner === 'mother' ? ' <span class="text-pink-600">👩 אם</span>' : ''}
                     </div>
                     <button onclick="deleteCategoryRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
                 </div>
@@ -2030,18 +2172,26 @@
             document.getElementById('expense-rules-list').innerHTML = expenseHtml;
         }
 
+        function updateRuleEarnerVisibility() {
+            const type = document.getElementById('rule-type').value;
+            const earnerSelect = document.getElementById('rule-earner');
+            earnerSelect.style.display = type === 'income' ? '' : 'none';
+        }
+
         function addCategoryRuleFromForm() {
             const keyword = document.getElementById('rule-keyword').value.trim();
             const type = document.getElementById('rule-type').value;
             const category = document.getElementById('rule-category').value;
-            
+            const earner = type === 'income' ? (document.getElementById('rule-earner').value || null) : null;
+
             if (!keyword) {
                 notify('❌ הזן מילת חיפוש');
                 return;
             }
-            
-            if (addCategoryRule(keyword, type, category)) {
+
+            if (addCategoryRule(keyword, type, category, earner)) {
                 document.getElementById('rule-keyword').value = '';
+                document.getElementById('rule-earner').value = '';
                 renderCategoryRules();
                 notify('✅ חוק נוסף');
             } else {
@@ -2235,11 +2385,15 @@
             ).join('');
 
             const exemptField = document.getElementById('edit-exempt-field');
+            const earnerField = document.getElementById('edit-earner-field');
             if (trans.type === 'income') {
                 exemptField.style.display = '';
+                earnerField.style.display = '';
                 document.getElementById('edit-exempt').checked = trans.titheExempt || false;
+                document.getElementById('edit-earner').value = trans.earner || '';
             } else {
                 exemptField.style.display = 'none';
+                earnerField.style.display = 'none';
             }
 
             document.getElementById('editModalTitle').textContent = trans.type === 'income' ? 'עריכת הכנסה' : 'עריכת הוצאה';
@@ -2270,6 +2424,7 @@
 
             if (trans.type === 'income') {
                 trans.titheExempt = document.getElementById('edit-exempt').checked;
+                trans.earner = document.getElementById('edit-earner').value || null;
             }
 
             saveToLocalStorage();
@@ -2390,6 +2545,7 @@
             const cat = document.getElementById('inc-cat').value;
             const month = document.getElementById('add-month').value;
             const exempt = document.getElementById('inc-exempt').checked;
+            const earner = document.getElementById('inc-earner').value || null;
 
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
             data.transactions.push({
@@ -2400,6 +2556,7 @@
                 cat,
                 month,
                 titheExempt: exempt,
+                earner,
                 time:new Date().toISOString()
             });
             notify('נוסף');
@@ -2407,6 +2564,7 @@
             document.getElementById('inc-desc').value = '';
             document.getElementById('inc-amt').value = '';
             document.getElementById('inc-exempt').checked = false;
+            document.getElementById('inc-earner').value = '';
             loadMonthTransactions();
             updateTithe();
             updateOverview();
@@ -2446,13 +2604,15 @@
                 const isIncome = t.type === 'income';
                 const isExempt = t.titheExempt || false;
                 const canToggleExempt = isIncome && !t.fixed;
-                
+                const earnerLabel = t.earner === 'father' ? '👨 אב' : t.earner === 'mother' ? '👩 אם' : '';
+
                 return `<div class="item-${t.type} p-3 rounded-lg flex justify-between items-center">
                     <div class="flex-1">
                         <div class="font-medium">
                             ${t.desc||t.description}
                             ${t.fixed?' <span class="text-xs bg-gray-200 px-2 py-1 rounded">קבוע</span>':''}
                             ${isExempt?' <span class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">פטור ממעשר</span>':''}
+                            ${earnerLabel?' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">'+earnerLabel+'</span>':''}
                         </div>
                         <div class="text-sm text-gray-600">${t.cat||t.category}</div>
                     </div>
@@ -2533,9 +2693,10 @@
         function renderFixedItems() {
             document.getElementById('fix-inc-list').innerHTML = data.fixedIncomes.map(f=>{
                 const mc = getMonthsInRange(f.start,f.end).length;
+                const earnerBadge = f.earner === 'father' ? ' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👨 אב</span>' : f.earner === 'mother' ? ' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👩 אם</span>' : '';
                 return `<div class="item-income p-3 rounded-lg">
                     <div class="flex justify-between items-start">
-                        <div class="flex-1"><div class="font-medium">${f.description}</div>
+                        <div class="flex-1"><div class="font-medium">${f.description}${earnerBadge}</div>
                         <div class="text-sm text-gray-600">${f.category} • ₪${f.amount.toLocaleString()}/חודש</div>
                         <div class="text-xs text-gray-500">${getMonthName(f.start)} - ${getMonthName(f.end)} (${mc} חודשים)</div></div>
                         <div class="flex gap-2">
@@ -2566,13 +2727,15 @@
             const desc = document.getElementById('fix-inc-desc').value.trim();
             const amt = parseFloat(document.getElementById('fix-inc-amt').value);
             const cat = document.getElementById('fix-inc-cat').value;
+            const earner = document.getElementById('fix-inc-earner').value || null;
             const start = document.getElementById('fix-inc-start').value;
             const end = document.getElementById('fix-inc-end').value;
             if(!desc||!amt||amt<=0) return notify('מלא את כל השדות');
-            data.fixedIncomes.push({id:Date.now(),description:desc,amount:amt,category:cat,start,end});
+            data.fixedIncomes.push({id:Date.now(),description:desc,amount:amt,category:cat,earner,start,end});
             saveToLocalStorage();
             document.getElementById('fix-inc-desc').value='';
             document.getElementById('fix-inc-amt').value='';
+            document.getElementById('fix-inc-earner').value='';
             renderFixedItems();
             updateTithe();
             notify('הכנסה קבועה נוספה');
@@ -2600,6 +2763,7 @@
             document.getElementById('fix-inc-desc').value = f.description;
             document.getElementById('fix-inc-amt').value = f.amount;
             document.getElementById('fix-inc-cat').value = f.category;
+            document.getElementById('fix-inc-earner').value = f.earner || '';
             document.getElementById('fix-inc-start').value = f.start;
             document.getElementById('fix-inc-end').value = f.end;
             document.getElementById('fix-inc-add').classList.add('hidden');
@@ -2613,11 +2777,12 @@
             const desc = document.getElementById('fix-inc-desc').value.trim();
             const amt = parseFloat(document.getElementById('fix-inc-amt').value);
             const cat = document.getElementById('fix-inc-cat').value;
+            const earner = document.getElementById('fix-inc-earner').value || null;
             const start = document.getElementById('fix-inc-start').value;
             const end = document.getElementById('fix-inc-end').value;
             if(!desc||!amt||amt<=0) return notify('מלא את כל השדות');
             const idx = data.fixedIncomes.findIndex(x=>x.id===editingFixed.id);
-            if(idx!==-1) { data.fixedIncomes[idx] = {id:editingFixed.id,description:desc,amount:amt,category:cat,start,end}; saveToLocalStorage(); }
+            if(idx!==-1) { data.fixedIncomes[idx] = {id:editingFixed.id,description:desc,amount:amt,category:cat,earner,start,end}; saveToLocalStorage(); }
             cancelEditFixedIncome();
             renderFixedItems();
             updateTithe();
@@ -4132,6 +4297,12 @@
         window.updateAnalysis = updateAnalysis;
         window.updateOverview = updateOverview;
         window.updateRuleCategoryOptions = updateRuleCategoryOptions;
+        window.updateRuleEarnerVisibility = updateRuleEarnerVisibility;
+        window.showEarnerDialog = showEarnerDialog;
+        window.setEarnerItem = setEarnerItem;
+        window.setAllEarner = setAllEarner;
+        window.saveEarnerAssignments = saveEarnerAssignments;
+        window.closeEarnerModal = closeEarnerModal;
 
         // ============== DARK MODE FUNCTIONALITY ==============
         function toggleTheme() {

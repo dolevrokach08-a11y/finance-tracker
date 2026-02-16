@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מחשבון אופטימיזציה — מס, מענקים ורווחי הון</title>
+<title>🧮 אופטימיזציית מס</title>
+
+<!-- PWA Meta Tags -->
+<meta name="theme-color" content="#c4944a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,15 +19,238 @@ body { font-family: 'Noto Sans Hebrew', 'Segoe UI', Tahoma, sans-serif; backgrou
 input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.1); border-radius: 4px; outline: none; cursor: pointer; accent-color: #c4944a; }
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #c4944a; cursor: pointer; }
 a { color: #c4944a; }
+
+/* Navigation Bar */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+.nav-links { display: flex; gap: 8px; align-items: center; }
+.nav-links a {
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  color: #a0a0b8;
+  border: 1px solid rgba(255,255,255,0.08);
+  transition: all 0.2s;
+}
+.nav-links a:hover { background: rgba(255,255,255,0.05); color: #e0dcd0; }
+.nav-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #7a7a9a;
+}
+.nav-user img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(196,148,74,0.4);
+}
+
+/* Auth loading */
+#auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  font-size: 16px;
+  color: #7a7a9a;
+}
+
+/* Data banner */
+.data-banner {
+  margin: 12px 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.data-banner.success { background: rgba(30,120,30,0.1); border: 1px solid rgba(30,120,30,0.3); color: #a8cca8; }
+.data-banner.warning { background: rgba(196,148,74,0.1); border: 1px solid rgba(196,148,74,0.3); color: #c4944a; }
+.data-banner.info { background: rgba(77,171,247,0.1); border: 1px solid rgba(77,171,247,0.3); color: #7ab8e0; }
+
+/* Year selector */
+.year-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 6px 12px;
+}
+.year-selector select {
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: #e0dcd0;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.year-selector select option { background: #1a1a2e; }
 </style>
 </head>
 <body>
-<div id="root"></div>
+
+<!-- Navigation -->
+<nav class="nav-bar">
+  <div class="nav-links">
+    <a href="index.html">🏠 ראשי</a>
+    <a href="finance.html">💰 הכנסות/הוצאות</a>
+    <a href="portfolio.html">📈 תיק השקעות</a>
+  </div>
+  <div class="nav-user" id="nav-user"></div>
+</nav>
+
+<div id="auth-loading">טוען...</div>
+<div id="root" style="display:none;"></div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+
+<!-- Firebase Auth & Data Loading -->
+<script type="module">
+  import { auth, db, onAuthStateChanged, doc, getDoc } from './firebase-config.js';
+
+  window.__taxData = { loaded: false, years: {}, availableYears: [] };
+
+  onAuthStateChanged(auth, async (user) => {
+    const loading = document.getElementById('auth-loading');
+    const root = document.getElementById('root');
+
+    if (!user) {
+      window.location.href = 'login.html';
+      return;
+    }
+
+    // Show user in nav
+    document.getElementById('nav-user').innerHTML = `
+      ${user.photoURL ? `<img src="${user.photoURL}" alt="">` : ''}
+      <span>${user.displayName || user.email}</span>
+    `;
+
+    // Load finance data from Firebase
+    try {
+      const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
+      const docSnap = await getDoc(userDocRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const transactions = data.transactions || [];
+        const fixedIncomes = data.fixedIncomes || [];
+
+        // Analyze income by year and earner
+        // IMPORTANT: Month offset - the tracker runs 15th-to-15th,
+        // so salary entering on the 10th is logged in the tracker's "current" month
+        // but belongs to the PREVIOUS month for tax purposes.
+        // e.g. tracker "January 2025" = tax "December 2024"
+        const yearMap = {};
+
+        function shiftMonthBack(trackerMonth) {
+          // trackerMonth is "YYYY-MM", shift back 1 month for tax purposes
+          const [y, m] = trackerMonth.split('-').map(Number);
+          if (m === 1) return `${y - 1}-12`;
+          return `${y}-${String(m - 1).padStart(2, '0')}`;
+        }
+
+        function addToYearMap(taxMonth, amt, earner) {
+          const taxYear = taxMonth.substring(0, 4);
+          const taxMM = taxMonth.substring(5, 7);
+          if (!yearMap[taxYear]) yearMap[taxYear] = { months: new Set(), father: 0, mother: 0, untagged: 0, total: 0, monthlyFather: {}, monthlyMother: {}, monthlyUntagged: {} };
+          yearMap[taxYear].months.add(taxMM);
+          yearMap[taxYear].total += amt;
+          if (earner === 'father') {
+            yearMap[taxYear].father += amt;
+            yearMap[taxYear].monthlyFather[taxMM] = (yearMap[taxYear].monthlyFather[taxMM] || 0) + amt;
+          } else if (earner === 'mother') {
+            yearMap[taxYear].mother += amt;
+            yearMap[taxYear].monthlyMother[taxMM] = (yearMap[taxYear].monthlyMother[taxMM] || 0) + amt;
+          } else {
+            yearMap[taxYear].untagged += amt;
+            yearMap[taxYear].monthlyUntagged[taxMM] = (yearMap[taxYear].monthlyUntagged[taxMM] || 0) + amt;
+          }
+        }
+
+        // Process regular transactions
+        transactions.forEach(t => {
+          if (t.type !== 'income' || !t.month) return;
+          const taxMonth = shiftMonthBack(t.month);
+          addToYearMap(taxMonth, t.amt || 0, t.earner || null);
+        });
+
+        // Process fixed incomes (expand into months)
+        fixedIncomes.forEach(f => {
+          if (!f.start || !f.end) return;
+          let cur = f.start;
+          while (cur <= f.end) {
+            const taxMonth = shiftMonthBack(cur);
+            addToYearMap(taxMonth, f.amount || 0, f.earner || null);
+
+            // Advance to next month
+            const [y, m] = cur.split('-').map(Number);
+            const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+            cur = nextMonth;
+          }
+        });
+
+        // Calculate averages and completeness
+        const years = {};
+        for (const [year, info] of Object.entries(yearMap)) {
+          const monthCount = info.months.size;
+          const isComplete = monthCount === 12;
+          const fatherMonthly = monthCount > 0 ? Math.round(info.father / monthCount) : 0;
+          const motherMonthly = monthCount > 0 ? Math.round(info.mother / monthCount) : 0;
+          const untaggedMonthly = monthCount > 0 ? Math.round(info.untagged / monthCount) : 0;
+
+          years[year] = {
+            monthCount,
+            isComplete,
+            fatherMonthly,
+            motherMonthly,
+            untaggedMonthly,
+            totalAnnual: info.total,
+            fatherAnnual: info.father,
+            motherAnnual: info.mother,
+            untaggedAnnual: info.untagged
+          };
+        }
+
+        const availableYears = Object.keys(years).sort().reverse();
+
+        window.__taxData = { loaded: true, years, availableYears };
+      }
+    } catch (e) {
+      console.error('Failed to load finance data:', e);
+    }
+
+    // Show app
+    loading.style.display = 'none';
+    root.style.display = 'block';
+
+    // Trigger React render
+    if (window.__renderApp) window.__renderApp();
+  });
+</script>
+
 <script type="text/babel">
-const { useState, useMemo } = React;
+const { useState, useMemo, useEffect, useCallback } = React;
 
 const CREDIT_POINT_VALUE_2026 = 2904;
 const CG_TAX_RATE = 0.25;
@@ -109,7 +340,7 @@ function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
     <div style={{ gridColumn: wide ? "1 / -1" : undefined }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <label style={{ fontSize: 12, color: "#a0a0b8", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0" }}>{value < 0 ? "—" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
     </div>
@@ -123,7 +354,7 @@ function Tog({ label, active, onClick }) {
       border: `1px solid ${active ? "#c4944a" : "rgba(255,255,255,0.1)"}`,
       background: active ? "rgba(196,148,74,0.15)" : "transparent",
       color: active ? "#c4944a" : "#7a7a9a", fontWeight: active ? 600 : 400
-    }}>{active ? "✓ " : ""}{label}</button>
+    }}>{active ? "\u2713 " : ""}{label}</button>
   );
 }
 
@@ -136,6 +367,10 @@ function R({ label, amount, color, bold }) {
 }
 
 function App() {
+  const taxData = window.__taxData || { loaded: false, years: {}, availableYears: [] };
+
+  const [selectedYear, setSelectedYear] = useState('');
+  const [autoApplied, setAutoApplied] = useState(false);
   const [fM, setFM] = useState(6000);
   const [mM, setMM] = useState(5000);
   const [children, setChildren] = useState([
@@ -148,6 +383,37 @@ function App() {
   const [jnt, setJnt] = useState(true);
   const [cg, setCg] = useState(80000);
   const [det, setDet] = useState(false);
+
+  // Auto-select best year on load
+  useEffect(() => {
+    if (taxData.loaded && taxData.availableYears.length > 0 && !selectedYear) {
+      // Prefer most recent complete year, otherwise most recent
+      const complete = taxData.availableYears.find(y => taxData.years[y]?.isComplete);
+      setSelectedYear(complete || taxData.availableYears[0]);
+    }
+  }, [taxData.loaded, taxData.availableYears]);
+
+  // Apply year data to sliders
+  const applyYearData = useCallback((year) => {
+    const info = taxData.years[year];
+    if (!info) return;
+    const fatherInc = info.fatherMonthly;
+    const motherInc = info.motherMonthly;
+
+    // Round to nearest 250 for slider steps
+    if (fatherInc > 0) setFM(Math.round(fatherInc / 250) * 250);
+    if (motherInc > 0) setMM(Math.round(motherInc / 250) * 250);
+    setAutoApplied(true);
+  }, [taxData.years]);
+
+  // Auto-apply on first year selection
+  useEffect(() => {
+    if (selectedYear && taxData.loaded && !autoApplied) {
+      applyYearData(selectedYear);
+    }
+  }, [selectedYear, taxData.loaded, autoApplied]);
+
+  const yearInfo = selectedYear ? taxData.years[selectedYear] : null;
 
   const addChild = () => {
     setChildren(prev => [...prev, { id: nextId, age: 0 }]);
@@ -200,6 +466,73 @@ function App() {
         <p style={{ fontSize: 12, color: "#7a7a9a", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
       </div>
 
+      {/* Data Integration Banner */}
+      {taxData.loaded && taxData.availableYears.length > 0 && (
+        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.25)", borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>📊</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#7ab8e0" }}>נתונים מהמערכת הפיננסית</span>
+            </div>
+            <div className="year-selector" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "4px 10px" }}>
+              <label style={{ fontSize: 11, color: "#a0a0b8" }}>שנה:</label>
+              <select value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setAutoApplied(false); }}
+                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
+                {taxData.availableYears.map(y => (
+                  <option key={y} value={y} style={{ background: "#1a1a2e" }}>
+                    {y} {taxData.years[y]?.isComplete ? "(12 חודשים)" : `(${taxData.years[y]?.monthCount} חודשים)`}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => applyYearData(selectedYear)} style={{
+                padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.15)", color: "#c4944a", fontFamily: "inherit"
+              }}>החל</button>
+            </div>
+          </div>
+
+          {yearInfo && (
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11 }}>
+              {yearInfo.fatherMonthly > 0 && (
+                <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.25)", padding: "3px 10px", borderRadius: 6, color: "#7ab8e0" }}>
+                  👨 אב: {fm(yearInfo.fatherMonthly)} ₪/חודש
+                </span>
+              )}
+              {yearInfo.motherMonthly > 0 && (
+                <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.25)", padding: "3px 10px", borderRadius: 6, color: "#d898c8" }}>
+                  👩 אם: {fm(yearInfo.motherMonthly)} ₪/חודש
+                </span>
+              )}
+              {yearInfo.untaggedMonthly > 0 && (
+                <span style={{ background: "rgba(196,148,74,0.1)", border: "1px solid rgba(196,148,74,0.25)", padding: "3px 10px", borderRadius: 6, color: "#c4944a" }}>
+                  ⚠️ לא משויך: {fm(yearInfo.untaggedMonthly)} ₪/חודש
+                </span>
+              )}
+              {!yearInfo.isComplete && (
+                <span style={{ background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.25)", padding: "3px 10px", borderRadius: 6, color: "#e07070" }}>
+                  חלקי — {yearInfo.monthCount}/12 חודשים (ממוצע מותאם)
+                </span>
+              )}
+            </div>
+          )}
+
+          {yearInfo && yearInfo.untaggedMonthly > 0 && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#c4944a", lineHeight: 1.5 }}>
+              💡 יש הכנסות שלא שויכו לאב/אם. <a href="finance.html" style={{ color: "#c4944a", textDecoration: "underline" }}>שייך אותן במערכת הפיננסית</a> לחישוב מדויק יותר.
+            </div>
+          )}
+          <div style={{ marginTop: 8, fontSize: 10, color: "#6a6a8a", lineHeight: 1.5 }}>
+            📅 היסט חודש: המשכורת במעקב (15-15) מוסטת חודש אחורה לשנת מס (למשל: "ינואר" במעקב = דצמבר לצורך מס)
+          </div>
+        </div>
+      )}
+
+      {taxData.loaded && taxData.availableYears.length === 0 && (
+        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(196,148,74,0.08)", border: "1px solid rgba(196,148,74,0.25)", borderRadius: 12, fontSize: 12, color: "#c4944a" }}>
+          <span style={{ fontSize: 16 }}>💡</span> אין נתוני הכנסה במערכת. <a href="finance.html" style={{ color: "#c4944a", textDecoration: "underline" }}>הוסף הכנסות</a> כדי למלא את הסליידרים אוטומטית.
+        </div>
+      )}
+
       <div style={{ margin: "16px 14px", padding: "14px 16px", background: "rgba(30,120,30,0.1)", border: "1px solid rgba(30,120,30,0.35)", borderRadius: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 20 }}>✅</span>
@@ -215,8 +548,8 @@ function App() {
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
           <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <Sl label="הכנסתך (חודשי ברוטו)" value={fM} onChange={setFM} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
-            <Sl label="הכנסת בת הזוג (חודשי)" value={mM} onChange={setMM} min={0} max={15000} step={250} suf="₪" />
+            <Sl label="הכנסת האב (חודשי ברוטו)" value={fM} onChange={v => { setFM(v); }} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
+            <Sl label="הכנסת האם (חודשי ברוטו)" value={mM} onChange={v => { setMM(v); }} min={0} max={15000} step={250} suf="₪" />
           </div>
 
           {/* CHILDREN */}
@@ -396,10 +729,10 @@ function App() {
                   <tr key={row[0]} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                     <td style={{ padding: "6px 4px", fontWeight: 600, textAlign: "center" }}>{row[0]}</td>
                     <td style={{ textAlign: "center", color: "#7ab8e0" }}>{row[1]}</td>
-                    <td style={{ textAlign: "center", color: row[2] ? "#5ab85a" : "#4a4a5a" }}>{row[2] ? `+${row[2]}` : "—"}</td>
+                    <td style={{ textAlign: "center", color: row[2] ? "#5ab85a" : "#4a4a5a" }}>{row[2] ? `+${row[2]}` : "\u2014"}</td>
                     <td style={{ textAlign: "center", color: "#7ab8e0", fontWeight: 700 }}>{row[3]}</td>
                     <td style={{ textAlign: "center", color: "#d898c8" }}>{row[4]}</td>
-                    <td style={{ textAlign: "center", color: row[5] ? "#5ab85a" : "#4a4a5a" }}>{row[5] ? `+${row[5]}` : "—"}</td>
+                    <td style={{ textAlign: "center", color: row[5] ? "#5ab85a" : "#4a4a5a" }}>{row[5] ? `+${row[5]}` : "\u2014"}</td>
                     <td style={{ textAlign: "center", color: "#d898c8", fontWeight: 700 }}>{row[6]}</td>
                   </tr>
                 ))}
@@ -437,7 +770,13 @@ function App() {
   );
 }
 
-ReactDOM.render(<App />, document.getElementById('root'));
+// Render function that can be called after auth
+window.__renderApp = () => {
+  ReactDOM.render(<App />, document.getElementById('root'));
+};
+
+// Initial render (will show defaults until data loads)
+window.__renderApp();
 </script>
 </body>
 </html>
