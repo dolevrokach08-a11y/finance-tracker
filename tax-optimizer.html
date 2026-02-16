@@ -692,9 +692,8 @@ function App() {
             <div style={{ padding: 14, borderRadius: 10, background: "rgba(77,171,247,0.06)", border: "1px solid rgba(77,171,247,0.25)" }}>
               <div style={{ fontSize: 12, color: "#7ab8e0", marginBottom: 6, fontWeight: 600 }}>📌 מימוש בפועל ({fm(cg)} ₪)</div>
               <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
-              <R label="מס רוו״ה" amount={`-${fm(r.fCGTax + r.mCGTax)} ₪`} color="#e07070" />
-              <R label="קיזוז מזיכויים" amount={`+${fm(r.fSaved + r.mSaved)} ₪`} color="#5ab85a" />
-              <R label="סה״כ נטו" amount={`${fm(r.hGrant + r.fSaved + r.mSaved - r.fCGTax - r.mCGTax)} ₪`} color="#7ab8e0" bold />
+              <R label="חיסכון מס" amount={`${fm(r.fSaved + r.mSaved)} ₪`} color="#5ab85a" />
+              <R label="סה״כ" amount={`${fm(r.hGrant + r.fSaved + r.mSaved)} ₪`} color="#7ab8e0" bold />
             </div>
             <div style={{ padding: 14, borderRadius: 10, background: "rgba(30,120,30,0.06)", border: "1px solid rgba(30,120,30,0.25)" }}>
               <div style={{ fontSize: 12, color: "#5ab85a", marginBottom: 6, fontWeight: 600 }}>✨ מימוש אופטימלי ({fm(r.hOpt)} ₪)</div>
@@ -704,9 +703,13 @@ function App() {
             </div>
           </div>
           <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(196,148,74,0.1)", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#a0a0b8" }}>רווח נוסף מהמימוש</div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: "#c4944a" }}>+{fm(r.hUnused)} ₪</div>
-            <div style={{ fontSize: 12, color: "#7a7a9a" }}>לשנה, בנוסף למענקים</div>
+            <div style={{ fontSize: 12, color: "#a0a0b8" }}>רווח נוסף ממימוש בפועל</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "#c4944a" }}>+{fm(r.fSaved + r.mSaved)} ₪</div>
+            <div style={{ fontSize: 12, color: "#7a7a9a" }}>
+              {r.fSaved + r.mSaved < r.hUnused
+                ? `ניתן לחסוך עוד ${fm(r.hUnused - r.fSaved - r.mSaved)} ₪ ע״י מימוש ${fm(r.hOpt - cg)} ₪ נוספים`
+                : "ניצול מלוא הזיכויים! 🎯"}
+            </div>
           </div>
         </div>
 
