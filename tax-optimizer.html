@@ -407,6 +407,8 @@ function App() {
   const [stl, setStl] = useState(saved?.stl ?? true);
   const [jnt, setJnt] = useState(saved?.jnt ?? true);
   const [cg, setCg] = useState(saved?.cg ?? 80000);
+  const [fRatio, setFRatio] = useState(saved?.fRatio ?? 1.0);
+  const [mRatio, setMRatio] = useState(saved?.mRatio ?? 1.0);
   const [det, setDet] = useState(false);
 
   // Auto-save settings on change (debounced)
@@ -415,10 +417,10 @@ function App() {
     if (!window.__saveTaxSettings) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      window.__saveTaxSettings({ fM, mM, children, nextId, stl, jnt, cg });
+      window.__saveTaxSettings({ fM, mM, children, nextId, stl, jnt, cg, fRatio, mRatio });
     }, 1500);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
-  }, [fM, mM, children, nextId, stl, jnt, cg]);
+  }, [fM, mM, children, nextId, stl, jnt, cg, fRatio, mRatio]);
 
   // Auto-select best year on load
   useEffect(() => {
@@ -429,18 +431,18 @@ function App() {
     }
   }, [taxData.loaded, taxData.availableYears]);
 
-  // Apply year data to sliders
+  // Apply year data to sliders (net from finance × ratio = estimated gross)
   const applyYearData = useCallback((year) => {
     const info = taxData.years[year];
     if (!info) return;
-    const fatherInc = info.fatherMonthly;
-    const motherInc = info.motherMonthly;
+    const fatherGross = Math.round(info.fatherMonthly * fRatio);
+    const motherGross = Math.round(info.motherMonthly * mRatio);
 
     // Round to nearest 250 for slider steps
-    if (fatherInc > 0) setFM(Math.round(fatherInc / 250) * 250);
-    if (motherInc > 0) setMM(Math.round(motherInc / 250) * 250);
+    if (fatherGross > 0) setFM(Math.round(fatherGross / 250) * 250);
+    if (motherGross > 0) setMM(Math.round(motherGross / 250) * 250);
     setAutoApplied(true);
-  }, [taxData.years]);
+  }, [taxData.years, fRatio, mRatio]);
 
   // Auto-apply on first year selection
   useEffect(() => {
@@ -531,12 +533,16 @@ function App() {
             <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11 }}>
               {yearInfo.fatherMonthly > 0 && (
                 <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.25)", padding: "3px 10px", borderRadius: 6, color: "#7ab8e0" }}>
-                  👨 אב: {fm(yearInfo.fatherMonthly)} ₪/חודש
+                  👨 אב: {fm(yearInfo.fatherMonthly)} נטו
+                  {fRatio > 1.0 && <span style={{ color: "#5ab85a" }}> → {fm(Math.round(yearInfo.fatherMonthly * fRatio))} ברוטו</span>}
+                  {fRatio === 1.0 && " ₪/חודש"}
                 </span>
               )}
               {yearInfo.motherMonthly > 0 && (
                 <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.25)", padding: "3px 10px", borderRadius: 6, color: "#d898c8" }}>
-                  👩 אם: {fm(yearInfo.motherMonthly)} ₪/חודש
+                  👩 אם: {fm(yearInfo.motherMonthly)} נטו
+                  {mRatio > 1.0 && <span style={{ color: "#5ab85a" }}> → {fm(Math.round(yearInfo.motherMonthly * mRatio))} ברוטו</span>}
+                  {mRatio === 1.0 && " ₪/חודש"}
                 </span>
               )}
               {yearInfo.untaggedMonthly > 0 && (
@@ -586,6 +592,30 @@ function App() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Sl label="הכנסת האב (חודשי ברוטו)" value={fM} onChange={v => { setFM(v); }} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
             <Sl label="הכנסת האם (חודשי ברוטו)" value={mM} onChange={v => { setMM(v); }} min={0} max={15000} step={250} suf="₪" />
+          </div>
+
+          {/* Gross/Net Ratio */}
+          <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(0,0,0,0.15)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#a0a0b8" }}>יחס ברוטו/נטו</span>
+              <InfoTip text={"הנתונים מהמעקב הפיננסי הם נטו (מה שנכנס לחשבון). יחס זה מכפיל את הנטו לברוטו משוער.\n\n• 1.00 = כבר ברוטו\n• 1.07 = ללא מס (רק ביטוח לאומי+בריאות)\n• 1.20 = מדרגת 10%\n• 1.26 = מדרגת 14%"} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, color: "#7ab8e0" }}>👨 אב</label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#e0dcd0" }}>×{fRatio.toFixed(2)}</span>
+                </div>
+                <input type="range" min={1.0} max={1.5} step={0.01} value={fRatio} onChange={e => setFRatio(+e.target.value)} />
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, color: "#d898c8" }}>👩 אם</label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "#e0dcd0" }}>×{mRatio.toFixed(2)}</span>
+                </div>
+                <input type="range" min={1.0} max={1.5} step={0.01} value={mRatio} onChange={e => setMRatio(+e.target.value)} />
+              </div>
+            </div>
           </div>
 
           {/* CHILDREN */}
