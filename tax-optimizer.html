@@ -602,8 +602,8 @@ function parseForm106(text) {
 
   const result = { year: null, annualGross: null, annualNet: null, monthlyGross: null, monthlyNet: null, months: 12 };
 
-  // Extract year: "שנת מס 2025", "לשנת 2025", "שנת 2025"
-  const yearMatch = text.match(/שנ[תה]\s*(?:מס\s*)?:?\s*(20\d{2})/) || text.match(/לשנ[תה]\s*:?\s*(20\d{2})/) || text.match(/(20\d{2})\s*שנ[תה]\s*מס/);
+  // Extract year: "שנת מס 2025", "לשנת המס 2024", "לשנת 2025", "שנת 2025"
+  const yearMatch = text.match(/שנ[תה]\s*(?:ה?מס\s*)?:?\s*(20\d{2})/) || text.match(/לשנ[תה]\s*(?:ה?מס\s*)?:?\s*(20\d{2})/) || text.match(/הכנסות\s*לשנ[תה]\s*(?:ה?מס\s*)?(20\d{2})/) || text.match(/(20\d{2})\s*שנ[תה]\s*(?:ה?מס)/);
   if (yearMatch) result.year = yearMatch[1];
 
   // If no year from label, try to find a standalone year
@@ -1193,8 +1193,12 @@ function App() {
               <div style={{ background: pendingPayslip._isForm106 ? "rgba(196,148,74,0.08)" : "rgba(77,171,247,0.08)", border: `1px solid ${pendingPayslip._isForm106 ? "rgba(196,148,74,0.25)" : "rgba(77,171,247,0.2)"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
                 {pendingPayslip._isForm106 ? (
                   <>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#c4944a", marginBottom: 8 }}>
-                      טופס 106 זוהה — סיכום שנתי {pendingPayslip.year}
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#c4944a", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>טופס 106 זוהה — סיכום שנתי</span>
+                      <input type="number" min="2020" max="2030" value={pendingPayslip.year || ''}
+                        onChange={e => setPendingPayslip(p => ({...p, year: e.target.value || null}))}
+                        style={{ width: 60, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(196,148,74,0.4)", color: "#c4944a", borderRadius: 4, padding: "2px 4px", fontSize: 12, fontWeight: 700, fontFamily: "inherit", textAlign: "center" }}
+                      />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
                       <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
