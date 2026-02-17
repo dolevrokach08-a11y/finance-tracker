@@ -464,13 +464,9 @@ function R({ label, amount, color, bold }) {
 
 // PDF parsing helper — amount pattern that handles ₪ sign and whitespace
 const AMT = '₪?\\s*([0-9,]+\\.?\\d*)';
-const AMT_RE = (prefix, suffix) => {
-  const parts = [];
-  if (prefix) parts.push(prefix + '[:\\s]*' + AMT);
-  if (suffix) parts.push(AMT + '\\s*' + suffix);
-  return parts.map(p => new RegExp(p));
-};
 const QUO = '["\u05F4״\']?'; // Hebrew geresh/gershayim variants
+// Flexible gap: allows 0-3 extra words between label and amount (handles "ביטוח לאומי עובד 250")
+const GAP = '[^\\n]{0,25}?';
 
 function parsePayslipPDF(text) {
   const result = { month: null, year: null, gross: null, net: null, deductions: {}, totalDeductions: null };
@@ -513,15 +509,24 @@ function parsePayslipPDF(text) {
     return null;
   };
 
+  // tryMatchDed — same but for deductions (lower range: 1-100,000)
+  const tryMatchDed = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 0 && v < 100000) return v; }
+    }
+    return null;
+  };
+
   const SHK = `סה${QUO}כ`;
 
   result.gross = tryMatch([
     // Label → Amount (Hebrew reading order)
-    new RegExp(`${SHK}\\s*תשלומים[:\\s]*${AMT}`),
-    new RegExp(`${SHK}\\s*ברוטו[:\\s]*${AMT}`),
-    new RegExp(`שכר\\s*ברוטו[:\\s]*${AMT}`),
-    new RegExp(`ברוטו[:\\s]*${AMT}`),
-    new RegExp(`תשלומים[:\\s]*${AMT}`),
+    new RegExp(`${SHK}\\s*תשלומים${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*ברוטו${GAP}${AMT}`),
+    new RegExp(`שכר\\s*ברוטו${GAP}${AMT}`),
+    new RegExp(`ברוטו${GAP}${AMT}`),
+    new RegExp(`תשלומים${GAP}${AMT}`),
     // Amount → Label (RTL PDF text extraction order)
     new RegExp(`${AMT}\\s*${SHK}\\s*תשלומים`),
     new RegExp(`${AMT}\\s*${SHK}\\s*ברוטו`),
@@ -531,47 +536,69 @@ function parsePayslipPDF(text) {
 
   result.net = tryMatch([
     // Label → Amount
-    new RegExp(`נטו\\s*לתשלום[:\\s]*${AMT}`),
-    new RegExp(`${SHK}\\s*נטו[:\\s]*${AMT}`),
-    new RegExp(`${SHK}\\s*לתשלום[:\\s]*${AMT}`),
-    new RegExp(`לתשלום[:\\s]*${AMT}`),
-    new RegExp(`נטו[:\\s]*${AMT}`),
+    new RegExp(`נטו\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*נטו${GAP}${AMT}`),
+    new RegExp(`שכר\\s*נטו${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`העברה\\s*לבנק${GAP}${AMT}`),
+    new RegExp(`סכום\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`נטו\\s*להעברה${GAP}${AMT}`),
+    new RegExp(`לתשלום${GAP}${AMT}`),
+    new RegExp(`נטו${GAP}${AMT}`),
     // Amount → Label
     new RegExp(`${AMT}\\s*נטו\\s*לתשלום`),
     new RegExp(`${AMT}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT}\\s*שכר\\s*נטו`),
     new RegExp(`${AMT}\\s*${SHK}\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*העברה\\s*לבנק`),
+    new RegExp(`${AMT}\\s*סכום\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*נטו\\s*להעברה`),
     new RegExp(`${AMT}\\s*נטו`),
   ]);
 
+  // Deduction definitions — GAP allows extra words between label and amount
+  // (e.g. "ביטוח לאומי עובד 250", "מס הכנסה מצטבר 1,200")
+  const A = `₪?\\s*([0-9,]+\\.?\\d*)`; // inline AMT for deductions
+  const G = `[^\\n]{0,20}?`; // short gap for deductions
   const dedDefs = [
     { key:'incomeTax', label:'מס הכנסה', patterns:[
-      /מס\s*הכנסה[:\s]*₪?\s*([0-9,]+\.?\d*)/,/₪?\s*([0-9,]+\.?\d*)\s*מס\s*הכנסה/,
-      /ניכוי\s*מס[:\s]*₪?\s*([0-9,]+\.?\d*)/
+      new RegExp(`מס\\s*הכנסה${G}${A}`), new RegExp(`${A}\\s*מס\\s*הכנסה`),
+      new RegExp(`ניכוי\\s*מס${G}${A}`), new RegExp(`${A}\\s*ניכוי\\s*מס`),
     ]},
     { key:'nationalInsurance', label:'ביטוח לאומי', patterns:[
-      /ביטוח\s*לאומי[:\s]*₪?\s*([0-9,]+\.?\d*)/,/₪?\s*([0-9,]+\.?\d*)\s*ביטוח\s*לאומי/,
-      /בט["\u05F4]?ל[:\s]*₪?\s*([0-9,]+\.?\d*)/
+      // Full name with flexible gap (handles "ביטוח לאומי עובד", "דמי ביטוח לאומי", etc.)
+      new RegExp(`ביטוח\\s*לאומי${G}${A}`), new RegExp(`${A}\\s*ביטוח\\s*לאומי`),
+      new RegExp(`דמי\\s*ביטוח\\s*לאומי${G}${A}`),
+      // Abbreviations: בט"ל, ב.לאומי, ב"ל
+      new RegExp(`בט${QUO}ל${G}${A}`), new RegExp(`${A}\\s*בט${QUO}ל`),
+      new RegExp(`ב\\.\\s*לאומי${G}${A}`),
+      new RegExp(`ב${QUO}ל[:\\s]*${A}`),
     ]},
     { key:'healthTax', label:'מס בריאות', patterns:[
-      /מס\s*בריאות[:\s]*₪?\s*([0-9,]+\.?\d*)/,/בריאות[:\s]*₪?\s*([0-9,]+\.?\d*)/,
-      /₪?\s*([0-9,]+\.?\d*)\s*מס\s*בריאות/
+      new RegExp(`מס\\s*בריאות${G}${A}`), new RegExp(`${A}\\s*מס\\s*בריאות`),
+      new RegExp(`דמי\\s*בריאות${G}${A}`),
+      new RegExp(`בריאות${G}${A}`), new RegExp(`${A}\\s*בריאות`),
     ]},
     { key:'pension', label:'פנסיה', patterns:[
-      /פנסי[הת][:\s]*₪?\s*([0-9,]+\.?\d*)/,/מנורה[:\s]*₪?\s*([0-9,]+\.?\d*)/,
-      /מבטחים[:\s]*₪?\s*([0-9,]+\.?\d*)/,/גמל[:\s]*₪?\s*([0-9,]+\.?\d*)/,
-      /הפרשה\s*לפנסיה[:\s]*₪?\s*([0-9,]+\.?\d*)/
+      new RegExp(`פנסי[הת]${G}${A}`), new RegExp(`${A}\\s*פנסי[הת]`),
+      new RegExp(`הפרשה\\s*לפנסיה${G}${A}`),
+      /מנורה[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /מבטחים[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /גמל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /הראל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /מגדל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /כלל\s*ביטוח[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /אלטשולר[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
     ]},
     { key:'hishtalmut', label:'קרן השתלמות', patterns:[
-      /קר[נן]\s*השתלמות[:\s]*₪?\s*([0-9,]+\.?\d*)/,
-      new RegExp(`קרה${QUO}ש[:\\s]*₪?\\s*([0-9,]+\\.?\\d*)`),
-      /₪?\s*([0-9,]+\.?\d*)\s*קר[נן]\s*השתלמות/
+      new RegExp(`קר[נן]\\s*השתלמות${G}${A}`), new RegExp(`${A}\\s*קר[נן]\\s*השתלמות`),
+      new RegExp(`קרה${QUO}ש${G}${A}`), new RegExp(`${A}\\s*קרה${QUO}ש`),
+      new RegExp(`השתלמות${G}${A}`),
     ]}
   ];
   for (const d of dedDefs) {
-    for (const p of d.patterns) {
-      const m = text.match(p);
-      if (m) { const v = parseFloat(m[1].replace(/,/g,'')); if (v > 0 && v < 100000) { result.deductions[d.key] = { label: d.label, amount: v }; break; } }
-    }
+    const v = tryMatchDed(d.patterns);
+    if (v) result.deductions[d.key] = { label: d.label, amount: v };
   }
 
   if (result.gross && result.net) result.totalDeductions = Math.round((result.gross - result.net) * 100) / 100;
