@@ -463,9 +463,11 @@ function R({ label, amount, color, bold }) {
 }
 
 // PDF parsing helper — amount pattern that handles ₪ sign and whitespace
-const AMT = '₪?\\s*([0-9,]+\\.?\\d*)';
+// Negative lookahead (?![.\d]*\s*%) prevents matching percentages like "4.00%"
+// e.g. "ביטוח לאומי 4.00% 68.00" → skips "4.00" (percentage), captures "68.00"
+const AMT = '₪?\\s*([0-9,]+(?:\\.\\d+)?)(?![.\\d]*\\s*%)';
 const QUO = '["\u05F4״\']?'; // Hebrew geresh/gershayim variants
-// Flexible gap: allows 0-3 extra words between label and amount (handles "ביטוח לאומי עובד 250")
+// Flexible gap: allows extra words between label and amount (handles "ביטוח לאומי עובד 250")
 const GAP = '[^\\n]{0,25}?';
 
 function parsePayslipPDF(text) {
@@ -509,11 +511,19 @@ function parsePayslipPDF(text) {
     return null;
   };
 
-  // tryMatchDed — same but for deductions (lower range: 1-100,000)
+  // tryMatchDed — for deductions (lower range: 1-100,000)
+  // Extra safety: skip values followed by % (percentage rates, not amounts)
   const tryMatchDed = (patterns) => {
     for (const p of patterns) {
       const m = text.match(p);
-      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 0 && v < 100000) return v; }
+      if (!m) continue;
+      const v = parseFloat(m[1].replace(/,/g, ''));
+      if (v <= 0 || v >= 100000) continue;
+      // Belt-and-suspenders: verify this isn't a percentage (AMT lookahead should catch it, but just in case)
+      const afterPos = m.index + m[0].length;
+      const after = text.substring(afterPos, afterPos + 5);
+      if (/^[.\d]*\s*%/.test(after)) continue;
+      return v;
     }
     return null;
   };
