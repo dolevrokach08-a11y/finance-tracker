@@ -156,10 +156,17 @@ a { color: #c4944a; }
       const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
       if (!data.payslips) data.payslips = [];
 
-      // Remove existing for same month+earner
-      data.payslips = data.payslips.filter(p =>
-        !(p.month === payslip.month && p.earner === payslip.earner)
-      );
+      // For form106: only replace entries with same month+earner+fileName (allows multiple employers)
+      // For regular payslips: replace entries with same month+earner (excluding form106 entries)
+      if (payslip.source === 'form106') {
+        data.payslips = data.payslips.filter(p =>
+          !(p.month === payslip.month && p.earner === payslip.earner && p.fileName === payslip.fileName)
+        );
+      } else {
+        data.payslips = data.payslips.filter(p =>
+          !(p.month === payslip.month && p.earner === payslip.earner && p.source !== 'form106')
+        );
+      }
       data.payslips.push(payslip);
 
       await setDoc(window.__financeDocRef, { ...data, lastModified: new Date().toISOString() });
@@ -903,9 +910,16 @@ function App() {
       setPayslips([...window.__payslipData.payslips]);
       setPendingPayslip(null);
       setPayslipStatus(`טופס 106 נשמר — ${savedCount} חודשים`);
-      // Auto-update slider
-      if (monthlyGross) {
-        const rounded = Math.round(monthlyGross / 250) * 250;
+      // Auto-update slider: calculate total average across ALL payslips for this earner+year
+      const allSlips = (window.__payslipData.payslips || []).filter(p =>
+        p.earner === earner && p.month && p.month.startsWith(year + '-') && p.gross
+      );
+      if (allSlips.length > 0) {
+        const byMonth = {};
+        for (const p of allSlips) byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+        const monthTotals = Object.values(byMonth);
+        const avgGross = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
+        const rounded = Math.round(avgGross / 250) * 250;
         if (earner === 'father') setFM(rounded);
         else if (earner === 'mother') setMM(rounded);
       }
