@@ -596,8 +596,8 @@ function parsePayslipPDF(text) {
 
 // Parse Israeli Form 106 (טופס 106) — annual tax summary from employer
 function parseForm106(text) {
-  // Detect if this is a 106 form
-  const is106 = /טופס\s*106|106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי/.test(text);
+  // Detect if this is a 106 form (handles 106, 0106, various Hebrew titles)
+  const is106 = /טופס\s*0?106|0?106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי|אישור\s*(?:על\s*)?(?:ניכוי|הכנסה|לעובד)|דו.?ח?\s*שנתי|ריכוז\s*נתוני\s*שכר|סעיף\s*106|ניכויים\s*מ(?:משכורת|שכר\s*עבודה)/.test(text);
   if (!is106) return null;
 
   const result = { year: null, annualGross: null, annualNet: null, monthlyGross: null, monthlyNet: null, months: 12 };
@@ -626,29 +626,45 @@ function parseForm106(text) {
   };
 
   // Gross patterns for 106
+  const SKH = `סך\\s*(?:הכל|הכול)`;  // "סך הכל" / "סך הכול" alternative to סה"כ
   result.annualGross = tryMatch106([
     new RegExp(`${SHK}\\s*הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
     new RegExp(`${SHK}\\s*שכר\\s*ברוטו${GAP106}${AMT106}`),
     new RegExp(`${SHK}\\s*תשלומים${GAP106}${AMT106}`),
-    new RegExp(`הכנסה\\s*(?:חייבת|ברוטו)${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*תשלומים${GAP106}${AMT106}`),
+    new RegExp(`הכנסה\\s*(?:חייבת|ברוטו|ממשכורת)${GAP106}${AMT106}`),
     new RegExp(`${SHK}\\s*ברוטו${GAP106}${AMT106}`),
     new RegExp(`שכר\\s*ברוטו\\s*שנתי${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*ברוטו${GAP106}${AMT106}`),
     // RTL order
     new RegExp(`${AMT106}\\s*${SHK}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*${SKH}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*הכנס[תה]\\s*עבודה`),
     new RegExp(`${AMT106}\\s*${SHK}\\s*שכר\\s*ברוטו`),
     new RegExp(`${AMT106}\\s*${SHK}\\s*תשלומים`),
-    new RegExp(`${AMT106}\\s*הכנסה\\s*(?:חייבת|ברוטו)`),
+    new RegExp(`${AMT106}\\s*הכנסה\\s*(?:חייבת|ברוטו|ממשכורת)`),
+    new RegExp(`${AMT106}\\s*שכר\\s*עבודה`),
   ]);
 
   // Net patterns for 106
   result.annualNet = tryMatch106([
     new RegExp(`${SHK}\\s*נטו${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*נטו${GAP106}${AMT106}`),
     new RegExp(`נטו\\s*לתשלום${GAP106}${AMT106}`),
     new RegExp(`${SHK}\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*לתשלום${GAP106}${AMT106}`),
     new RegExp(`שכר\\s*נטו\\s*שנתי${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*נטו${GAP106}${AMT106}`),
     // RTL order
     new RegExp(`${AMT106}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT106}\\s*${SKH}\\s*נטו`),
     new RegExp(`${AMT106}\\s*נטו\\s*לתשלום`),
+    new RegExp(`${AMT106}\\s*שכר\\s*נטו`),
   ]);
 
   // Number of months worked (if specified): "מספר חודשי עבודה: 10"
