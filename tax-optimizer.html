@@ -826,7 +826,10 @@ function App() {
       }
 
       // Try Form 106 detection first (annual tax summary)
+      console.log('--- Form 106 detection debug ---');
+      console.log('LTR first 500 chars:', extracted.ltrText.substring(0, 500));
       const form106 = parseForm106(extracted.ltrText) || parseForm106(extracted.rtlText);
+      console.log('Form 106 result:', form106);
       if (form106 && form106.year) {
         form106.earner = payslipEarner;
         form106.fileName = file.name;
