@@ -885,6 +885,7 @@
                     </div>
                 </div>
 
+
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                     <div class="glass p-6">
                         <h3 class="text-xl font-semibold mb-4 text-green-700">הוסף הכנסה</h3>
@@ -1387,6 +1388,7 @@
             fixedIncomes: [],
             fixedExpenses: [],
             donations: [],
+            payslips: [],
             incomeCategories: ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'],
             expenseCategories: ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'],
             categoryRules: [],
@@ -1620,6 +1622,7 @@
                     // Ensure all required fields exist
                     if (!data.categoryRules) data.categoryRules = [];
                     if (!data.budgets) data.budgets = {};
+                    if (!data.payslips) data.payslips = [];
 
                     console.log('✅ Data loaded from Firebase', { cloudLastModified });
 
@@ -1650,7 +1653,10 @@
                     if (!data.budgets) {
                         data.budgets = {};
                     }
-                    
+                    if (!data.payslips) {
+                        data.payslips = [];
+                    }
+
                     // Mark that we loaded from localStorage (no cloud reference)
                     localLoadTime = new Date().toISOString();
                     // Don't set cloudLastModified - we don't know what's in the cloud
@@ -1980,7 +1986,7 @@
             reader.readAsArrayBuffer(file);
             event.target.value = '';
         }
-        
+
         function showTitheExemptDialog(month) {
             const incomes = data.transactions.filter(t => t.month === month && t.type === 'income' && !t.titheExempt);
             
