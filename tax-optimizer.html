@@ -594,6 +594,79 @@ function parsePayslipPDF(text) {
   return result;
 }
 
+// Parse Israeli Form 106 (טופס 106) — annual tax summary from employer
+function parseForm106(text) {
+  // Detect if this is a 106 form
+  const is106 = /טופס\s*106|106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי/.test(text);
+  if (!is106) return null;
+
+  const result = { year: null, annualGross: null, annualNet: null, monthlyGross: null, monthlyNet: null, months: 12 };
+
+  // Extract year: "שנת מס 2025", "לשנת 2025", "שנת 2025"
+  const yearMatch = text.match(/שנ[תה]\s*(?:מס\s*)?:?\s*(20\d{2})/) || text.match(/לשנ[תה]\s*:?\s*(20\d{2})/) || text.match(/(20\d{2})\s*שנ[תה]\s*מס/);
+  if (yearMatch) result.year = yearMatch[1];
+
+  // If no year from label, try to find a standalone year
+  if (!result.year) {
+    const fallbackYear = text.match(/\b(202[0-9])\b/);
+    if (fallbackYear) result.year = fallbackYear[1];
+  }
+
+  const SHK = `סה${QUO}כ`;
+  // Annual amounts are typically 30,000–2,000,000
+  const AMT106 = '₪?\\s*([0-9,]+(?:\\.\\d+)?)';
+  const GAP106 = '[^\\n]{0,30}?';
+
+  const tryMatch106 = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 20000 && v < 2000000) return v; }
+    }
+    return null;
+  };
+
+  // Gross patterns for 106
+  result.annualGross = tryMatch106([
+    new RegExp(`${SHK}\\s*הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*שכר\\s*ברוטו${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*תשלומים${GAP106}${AMT106}`),
+    new RegExp(`הכנסה\\s*(?:חייבת|ברוטו)${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*ברוטו${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*ברוטו\\s*שנתי${GAP106}${AMT106}`),
+    // RTL order
+    new RegExp(`${AMT106}\\s*${SHK}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*${SHK}\\s*שכר\\s*ברוטו`),
+    new RegExp(`${AMT106}\\s*${SHK}\\s*תשלומים`),
+    new RegExp(`${AMT106}\\s*הכנסה\\s*(?:חייבת|ברוטו)`),
+  ]);
+
+  // Net patterns for 106
+  result.annualNet = tryMatch106([
+    new RegExp(`${SHK}\\s*נטו${GAP106}${AMT106}`),
+    new RegExp(`נטו\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*נטו\\s*שנתי${GAP106}${AMT106}`),
+    // RTL order
+    new RegExp(`${AMT106}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT106}\\s*נטו\\s*לתשלום`),
+  ]);
+
+  // Number of months worked (if specified): "מספר חודשי עבודה: 10"
+  const monthsMatch = text.match(/(?:מספר\s*)?חודש[יה]\s*(?:עבודה)?[:\s]*(\d{1,2})/) || text.match(/(\d{1,2})\s*חודש[יה]\s*עבודה/);
+  if (monthsMatch) {
+    const mo = parseInt(monthsMatch[1]);
+    if (mo >= 1 && mo <= 12) result.months = mo;
+  }
+
+  if (!result.annualGross && !result.annualNet) return null;
+
+  // Calculate monthly averages
+  if (result.annualGross) result.monthlyGross = Math.round(result.annualGross / result.months);
+  if (result.annualNet) result.monthlyNet = Math.round(result.annualNet / result.months);
+
+  return result;
+}
+
 async function extractPDFText(arrayBuffer) {
   if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -736,6 +809,18 @@ function App() {
         return;
       }
 
+      // Try Form 106 detection first (annual tax summary)
+      const form106 = parseForm106(extracted.ltrText) || parseForm106(extracted.rtlText);
+      if (form106 && form106.year) {
+        form106.earner = payslipEarner;
+        form106.fileName = file.name;
+        form106._isForm106 = true;
+        setPendingPayslip(form106);
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
       // Try LTR text first, then RTL
       let parsed = parsePayslipPDF(extracted.ltrText);
       if (!parsed.net && !parsed.gross) {
@@ -760,6 +845,52 @@ function App() {
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [payslipEarner]);
+
+  const confirmForm106Upload = useCallback(async () => {
+    if (!pendingPayslip || !pendingPayslip._isForm106) return;
+    const earner = pendingPayslip.earner || payslipEarner;
+    if (!earner) { setPayslipStatus('יש לבחור בן זוג'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+    const year = pendingPayslip.year;
+    const months = pendingPayslip.months || 12;
+    const monthlyGross = pendingPayslip.monthlyGross;
+    const monthlyNet = pendingPayslip.monthlyNet;
+    if (!monthlyGross && !monthlyNet) { setPayslipStatus('לא זוהו נתוני הכנסה בטופס'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+
+    setPayslipStatus('שומר נתוני 106...');
+    let savedCount = 0;
+    for (let m = 1; m <= months; m++) {
+      const monthKey = `${year}-${String(m).padStart(2, '0')}`;
+      const payslip = {
+        id: Date.now() + m,
+        month: monthKey,
+        gross: monthlyGross,
+        net: monthlyNet,
+        totalDeductions: monthlyGross && monthlyNet ? Math.round((monthlyGross - monthlyNet) * 100) / 100 : 0,
+        deductions: {},
+        earner,
+        fileName: pendingPayslip.fileName,
+        source: 'form106',
+        time: new Date().toISOString()
+      };
+      const ok = await window.__savePayslip(payslip);
+      if (ok) savedCount++;
+    }
+    if (savedCount > 0) {
+      setPayslips([...window.__payslipData.payslips]);
+      setPendingPayslip(null);
+      setPayslipStatus(`טופס 106 נשמר — ${savedCount} חודשים`);
+      // Auto-update slider
+      if (monthlyGross) {
+        const rounded = Math.round(monthlyGross / 250) * 250;
+        if (earner === 'father') setFM(rounded);
+        else if (earner === 'mother') setMM(rounded);
+      }
+      setTimeout(() => setPayslipStatus(''), 3000);
+    } else {
+      setPayslipStatus('שגיאה בשמירה');
+      setTimeout(() => setPayslipStatus(''), 3000);
+    }
+  }, [pendingPayslip, payslipEarner]);
 
   const confirmPayslipUpload = useCallback(async () => {
     if (!pendingPayslip) return;
@@ -812,15 +943,28 @@ function App() {
   }, []);
 
   // Compute average gross from payslips per earner for the selected year
+  // Groups by month first (sums multiple employers per month), then averages across months
   const payslipAverages = useMemo(() => {
     const yearPayslips = payslips.filter(p => p.month && p.month.startsWith(selectedYear + '-'));
-    const fatherSlips = yearPayslips.filter(p => p.earner === 'father' && p.gross);
-    const motherSlips = yearPayslips.filter(p => p.earner === 'mother' && p.gross);
+
+    const calcAvg = (earner) => {
+      const slips = yearPayslips.filter(p => p.earner === earner && p.gross);
+      if (slips.length === 0) return { avg: null, count: slips.length, months: 0 };
+      // Group by month: sum gross from multiple employers in the same month
+      const byMonth = {};
+      for (const p of slips) {
+        byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+      }
+      const monthTotals = Object.values(byMonth);
+      const avg = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
+      return { avg, count: slips.length, months: monthTotals.length };
+    };
+
+    const f = calcAvg('father'), m = calcAvg('mother');
     return {
-      fatherAvg: fatherSlips.length > 0 ? Math.round(fatherSlips.reduce((s,p) => s + p.gross, 0) / fatherSlips.length) : null,
-      motherAvg: motherSlips.length > 0 ? Math.round(motherSlips.reduce((s,p) => s + p.gross, 0) / motherSlips.length) : null,
-      fatherCount: fatherSlips.length,
-      motherCount: motherSlips.length
+      fatherAvg: f.avg, motherAvg: m.avg,
+      fatherCount: f.count, motherCount: m.count,
+      fatherMonths: f.months, motherMonths: m.months
     };
   }, [payslips, selectedYear]);
 
@@ -1022,8 +1166,46 @@ function App() {
 
             {/* Preview — auto-parsed or manual entry */}
             {pendingPayslip && (
-              <div style={{ background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.2)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
-                {pendingPayslip._manualEntry ? (
+              <div style={{ background: pendingPayslip._isForm106 ? "rgba(196,148,74,0.08)" : "rgba(77,171,247,0.08)", border: `1px solid ${pendingPayslip._isForm106 ? "rgba(196,148,74,0.25)" : "rgba(77,171,247,0.2)"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                {pendingPayslip._isForm106 ? (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#c4944a", marginBottom: 8 }}>
+                      טופס 106 זוהה — סיכום שנתי {pendingPayslip.year}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
+                      <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
+                        <div style={{ color: "#7a7a9a", marginBottom: 4 }}>נתונים שנתיים</div>
+                        {pendingPayslip.annualGross && <div><span style={{ color: "#7a7a9a" }}>ברוטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.annualNet && <div><span style={{ color: "#7a7a9a" }}>נטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualNet.toLocaleString()}</strong></div>}
+                        <div style={{ color: "#7a7a9a", marginTop: 2 }}>חודשי עבודה: {pendingPayslip.months}</div>
+                      </div>
+                      <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
+                        <div style={{ color: "#7a7a9a", marginBottom: 4 }}>ממוצע חודשי (חישוב)</div>
+                        {pendingPayslip.monthlyGross && <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#c4944a" }}>₪{pendingPayslip.monthlyGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.monthlyNet && <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#c4944a" }}>₪{pendingPayslip.monthlyNet.toLocaleString()}</strong></div>}
+                      </div>
+                    </div>
+                    {!pendingPayslip.earner && !payslipEarner && (
+                      <div style={{ color: "#e07070", fontSize: 10, marginTop: 6 }}>יש לבחור בן זוג (אב/אם) למעלה לפני האישור</div>
+                    )}
+                    <div style={{ fontSize: 10, color: "#a0a0b8", marginTop: 6 }}>
+                      ייווצרו {pendingPayslip.months} רשומות חודשיות עבור שנת {pendingPayslip.year}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button onClick={confirmForm106Upload}
+                        disabled={!pendingPayslip.earner && !payslipEarner}
+                        style={{
+                          padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.earner && !payslipEarner) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                          border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.15)", color: "#c4944a",
+                          opacity: (!pendingPayslip.earner && !payslipEarner) ? 0.4 : 1
+                      }}>אשר טופס 106</button>
+                      <button onClick={() => setPendingPayslip(null)} style={{
+                        padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
+                        border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#7a7a9a"
+                      }}>בטל</button>
+                    </div>
+                  </>
+                ) : pendingPayslip._manualEntry ? (
                   <>
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>
                       {pendingPayslip._scanned ? 'התלוש נראה כתמונה סרוקה — יש להזין ידנית:'
@@ -1080,19 +1262,21 @@ function App() {
                     )}
                   </>
                 )}
-                <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button onClick={confirmPayslipUpload}
-                    disabled={!pendingPayslip.gross && !pendingPayslip.net}
-                    style={{
-                      padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.gross && !pendingPayslip.net) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
-                      border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a",
-                      opacity: (!pendingPayslip.gross && !pendingPayslip.net) ? 0.4 : 1
-                  }}>אשר ושמור</button>
-                  <button onClick={() => setPendingPayslip(null)} style={{
-                    padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
-                    border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#7a7a9a"
-                  }}>בטל</button>
-                </div>
+                {!pendingPayslip._isForm106 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button onClick={confirmPayslipUpload}
+                      disabled={!pendingPayslip.gross && !pendingPayslip.net}
+                      style={{
+                        padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.gross && !pendingPayslip.net) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                        border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a",
+                        opacity: (!pendingPayslip.gross && !pendingPayslip.net) ? 0.4 : 1
+                    }}>אשר ושמור</button>
+                    <button onClick={() => setPendingPayslip(null)} style={{
+                      padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#7a7a9a"
+                    }}>בטל</button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1101,7 +1285,7 @@ function App() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 11, marginBottom: 8 }}>
                 {payslipAverages.fatherAvg && (
                   <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.2)", padding: "3px 8px", borderRadius: 6, color: "#7ab8e0" }}>
-                    👨 ברוטו ממוצע: ₪{payslipAverages.fatherAvg.toLocaleString()} ({payslipAverages.fatherCount} תלושים)
+                    👨 ברוטו ממוצע: ₪{payslipAverages.fatherAvg.toLocaleString()} ({payslipAverages.fatherMonths} חודשים{payslipAverages.fatherCount > payslipAverages.fatherMonths ? `, ${payslipAverages.fatherCount} תלושים` : ''})
                     <button onClick={() => setFM(Math.round(payslipAverages.fatherAvg / 250) * 250)} style={{
                       marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
@@ -1110,7 +1294,7 @@ function App() {
                 )}
                 {payslipAverages.motherAvg && (
                   <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.2)", padding: "3px 8px", borderRadius: 6, color: "#d898c8" }}>
-                    👩 ברוטו ממוצע: ₪{payslipAverages.motherAvg.toLocaleString()} ({payslipAverages.motherCount} תלושים)
+                    👩 ברוטו ממוצע: ₪{payslipAverages.motherAvg.toLocaleString()} ({payslipAverages.motherMonths} חודשים{payslipAverages.motherCount > payslipAverages.motherMonths ? `, ${payslipAverages.motherCount} תלושים` : ''})
                     <button onClick={() => setMM(Math.round(payslipAverages.motherAvg / 250) * 250)} style={{
                       marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
