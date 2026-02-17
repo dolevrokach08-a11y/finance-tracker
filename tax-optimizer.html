@@ -876,8 +876,18 @@ function App() {
             {pendingPayslip && (
               <div style={{ background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.2)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>נתונים שחולצו:</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11 }}>
-                  <div><span style={{ color: "#7a7a9a" }}>חודש: </span><strong>{pendingPayslip.month}/{pendingPayslip.year || '?'}</strong></div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11, alignItems: "center" }}>
+                  <div>
+                    <span style={{ color: "#7a7a9a" }}>חודש: </span>
+                    <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                      onChange={e => {
+                        const [y, m] = (e.target.value || '').split('-');
+                        setPendingPayslip(prev => ({ ...prev, month: m || null, year: y || null }));
+                      }}
+                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
+                    />
+                    {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
+                  </div>
                   <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
                   <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
                   <div><span style={{ color: "#7a7a9a" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
