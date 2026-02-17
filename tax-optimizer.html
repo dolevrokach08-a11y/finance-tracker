@@ -442,7 +442,7 @@ function R({ label, amount, color, bold }) {
 // Negative lookahead (?![.\d]*\s*%) prevents matching percentages like "4.00%"
 // e.g. "ביטוח לאומי 4.00% 68.00" → skips "4.00" (percentage), captures "68.00"
 const AMT = '₪?\\s*([0-9,]+(?:\\.\\d+)?)(?![.\\d]*\\s*%)';
-const QUO = '["\u05F4״\']?'; // Hebrew geresh/gershayim variants
+const QUO = '["\u05F4״\']{0,2}'; // Hebrew geresh/gershayim variants (handles '' double-apostrophe too)
 // Flexible gap: allows extra words between label and amount (handles "ביטוח לאומי עובד 250")
 const GAP = '[^\\n]{0,25}?';
 
@@ -596,8 +596,8 @@ function parsePayslipPDF(text) {
 
 // Parse Israeli Form 106 (טופס 106) — annual tax summary from employer
 function parseForm106(text) {
-  // Detect if this is a 106 form (handles 106, 0106, various Hebrew titles)
-  const is106 = /טופס\s*0?106|0?106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי|אישור\s*(?:על\s*)?(?:ניכוי|הכנסה|לעובד)|דו.?ח?\s*שנתי|ריכוז\s*נתוני\s*שכר|סעיף\s*106|ניכויים\s*מ(?:משכורת|שכר\s*עבודה)/.test(text);
+  // Detect if this is a 106 form (handles 106, 0106, Tax Authority portal, various Hebrew titles)
+  const is106 = /טופס\s*0?106|0?106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי|אישור\s*(?:על\s*)?(?:ניכוי|הכנסה|לעובד)|דו.?ח?\s*שנתי|ריכוז\s*נתוני\s*שכר|סעיף\s*106|ניכויים\s*מ(?:משכורת|שכר\s*עבודה)|מידע\s*על\s*הכנסות|הכנסות\s*לשנת\s*המס|הופק\s*מ(?:ה)?אזור\s*אישי/.test(text);
   if (!is106) return null;
 
   const result = { year: null, annualGross: null, annualNet: null, monthlyGross: null, monthlyNet: null, months: 12 };
@@ -620,7 +620,7 @@ function parseForm106(text) {
   const tryMatch106 = (patterns) => {
     for (const p of patterns) {
       const m = text.match(p);
-      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 20000 && v < 2000000) return v; }
+      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 100 && v < 2000000) return v; }
     }
     return null;
   };
@@ -641,6 +641,10 @@ function parseForm106(text) {
     new RegExp(`${SKH}\\s*שכר\\s*עבודה${GAP106}${AMT106}`),
     new RegExp(`שכר\\s*עבודה${GAP106}${AMT106}`),
     new RegExp(`${SKH}\\s*ברוטו${GAP106}${AMT106}`),
+    // Tax Authority portal format: "משכורת ותשלומים 1,874", "סה''כ (158/172) 1,874"
+    new RegExp(`משכורת\\s*ותשלומים${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*\\(158\\/172\\)${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*\\(158${GAP106}${AMT106}`),
     // RTL order
     new RegExp(`${AMT106}\\s*${SHK}\\s*הכנס[תה]\\s*עבודה`),
     new RegExp(`${AMT106}\\s*${SKH}\\s*הכנס[תה]\\s*עבודה`),
@@ -649,6 +653,7 @@ function parseForm106(text) {
     new RegExp(`${AMT106}\\s*${SHK}\\s*תשלומים`),
     new RegExp(`${AMT106}\\s*הכנסה\\s*(?:חייבת|ברוטו|ממשכורת)`),
     new RegExp(`${AMT106}\\s*שכר\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*משכורת\\s*ותשלומים`),
   ]);
 
   // Net patterns for 106
@@ -667,8 +672,11 @@ function parseForm106(text) {
     new RegExp(`${AMT106}\\s*שכר\\s*נטו`),
   ]);
 
-  // Number of months worked (if specified): "מספר חודשי עבודה: 10"
-  const monthsMatch = text.match(/(?:מספר\s*)?חודש[יה]\s*(?:עבודה)?[:\s]*(\d{1,2})/) || text.match(/(\d{1,2})\s*חודש[יה]\s*עבודה/);
+  // Number of months worked (if specified): "מספר חודשי עבודה: 10", "חדשי עבודה בשנת המס"
+  // Also count V marks from Tax Authority portal format: "V V V V 4"
+  const monthsMatch = text.match(/(?:מספר\s*)?חו?דש[יה]\s*(?:עבודה)?[:\s]*(\d{1,2})/)
+    || text.match(/(\d{1,2})\s*חו?דש[יה]\s*עבודה/)
+    || text.match(/חו?דש[יה]\s*עבודה[^]*?(?:V\s*)+(\d{1,2})\b/);
   if (monthsMatch) {
     const mo = parseInt(monthsMatch[1]);
     if (mo >= 1 && mo <= 12) result.months = mo;
@@ -826,10 +834,7 @@ function App() {
       }
 
       // Try Form 106 detection first (annual tax summary)
-      console.log('--- Form 106 detection debug ---');
-      console.log('LTR first 500 chars:', extracted.ltrText.substring(0, 500));
       const form106 = parseForm106(extracted.ltrText) || parseForm106(extracted.rtlText);
-      console.log('Form 106 result:', form106);
       if (form106 && form106.year) {
         form106.earner = payslipEarner;
         form106.fileName = file.name;
