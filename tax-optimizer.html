@@ -237,6 +237,7 @@ a { color: #c4944a; }
         const data = docSnap.data();
         window.__financeData = data;
         window.__payslipData = { payslips: data.payslips || [], loaded: true };
+        document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
         const transactions = data.transactions || [];
         const fixedIncomes = data.fixedIncomes || [];
 
@@ -461,19 +462,39 @@ function R({ label, amount, color, bold }) {
   );
 }
 
-// PDF parsing helper
+// PDF parsing helper — amount pattern that handles ₪ sign and whitespace
+const AMT = '₪?\\s*([0-9,]+\\.?\\d*)';
+const AMT_RE = (prefix, suffix) => {
+  const parts = [];
+  if (prefix) parts.push(prefix + '[:\\s]*' + AMT);
+  if (suffix) parts.push(AMT + '\\s*' + suffix);
+  return parts.map(p => new RegExp(p));
+};
+const QUO = '["\u05F4״\']?'; // Hebrew geresh/gershayim variants
+
 function parsePayslipPDF(text) {
   const result = { month: null, year: null, gross: null, net: null, deductions: {}, totalDeductions: null };
   const lines = text.split('\n');
   const hebrewMonths = { 'ינואר':'01','פברואר':'02','מרץ':'03','מרס':'03','אפריל':'04','מאי':'05','יוני':'06','יולי':'07','אוגוסט':'08','ספטמבר':'09','אוקטובר':'10','נובמבר':'11','דצמבר':'12' };
 
   for (const line of lines) {
-    const mmyyyy = line.match(/(\d{1,2})[\/\-.](\d{4})/);
-    if (mmyyyy) {
-      const m = parseInt(mmyyyy[1]), y = parseInt(mmyyyy[2]);
-      if (m >= 1 && m <= 12 && y >= 2020 && y <= 2030 && !result.month) {
+    // Try YYYY/MM and MM/YYYY formats
+    const mmyyyy = line.match(/(\d{1,2})[\/\-.](\d{4})/) || line.match(/(\d{4})[\/\-.](\d{1,2})/);
+    if (mmyyyy && !result.month) {
+      let m, y;
+      if (parseInt(mmyyyy[1]) > 31) { y = parseInt(mmyyyy[1]); m = parseInt(mmyyyy[2]); }
+      else { m = parseInt(mmyyyy[1]); y = parseInt(mmyyyy[2]); }
+      if (m >= 1 && m <= 12 && y >= 2020 && y <= 2030) {
         result.month = String(m).padStart(2, '0');
         result.year = String(y);
+      }
+    }
+    // Try "חודש 01 שנה 2025" or "שנת 2025" patterns
+    const periodMatch = line.match(/חודש\s*:?\s*(\d{1,2})\s.*?שנ[הת]\s*:?\s*(\d{4})/);
+    if (periodMatch && !result.month) {
+      const m = parseInt(periodMatch[1]), y = parseInt(periodMatch[2]);
+      if (m >= 1 && m <= 12 && y >= 2020 && y <= 2030) {
+        result.month = String(m).padStart(2, '0'); result.year = String(y);
       }
     }
     for (const [name, num] of Object.entries(hebrewMonths)) {
@@ -492,28 +513,59 @@ function parsePayslipPDF(text) {
     return null;
   };
 
+  const SHK = `סה${QUO}כ`;
+
   result.gross = tryMatch([
-    /סה["\u05F4]?כ\s*תשלומים[:\s]*([0-9,]+\.?\d*)/,
-    /סה["\u05F4]?כ\s*ברוטו[:\s]*([0-9,]+\.?\d*)/,
-    /ברוטו[:\s]*([0-9,]+\.?\d*)/,
-    /([0-9,]+\.?\d*)\s*סה["\u05F4]?כ\s*תשלומים/,
-    /([0-9,]+\.?\d*)\s*סה["\u05F4]?כ\s*ברוטו/
+    // Label → Amount (Hebrew reading order)
+    new RegExp(`${SHK}\\s*תשלומים[:\\s]*${AMT}`),
+    new RegExp(`${SHK}\\s*ברוטו[:\\s]*${AMT}`),
+    new RegExp(`שכר\\s*ברוטו[:\\s]*${AMT}`),
+    new RegExp(`ברוטו[:\\s]*${AMT}`),
+    new RegExp(`תשלומים[:\\s]*${AMT}`),
+    // Amount → Label (RTL PDF text extraction order)
+    new RegExp(`${AMT}\\s*${SHK}\\s*תשלומים`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*ברוטו`),
+    new RegExp(`${AMT}\\s*שכר\\s*ברוטו`),
+    new RegExp(`${AMT}\\s*ברוטו`),
   ]);
 
   result.net = tryMatch([
-    /נטו\s*לתשלום[:\s]*([0-9,]+\.?\d*)/,
-    /סה["\u05F4]?כ\s*נטו[:\s]*([0-9,]+\.?\d*)/,
-    /נטו[:\s]*([0-9,]+\.?\d*)/,
-    /([0-9,]+\.?\d*)\s*נטו\s*לתשלום/,
-    /([0-9,]+\.?\d*)\s*סה["\u05F4]?כ\s*נטו/
+    // Label → Amount
+    new RegExp(`נטו\\s*לתשלום[:\\s]*${AMT}`),
+    new RegExp(`${SHK}\\s*נטו[:\\s]*${AMT}`),
+    new RegExp(`${SHK}\\s*לתשלום[:\\s]*${AMT}`),
+    new RegExp(`לתשלום[:\\s]*${AMT}`),
+    new RegExp(`נטו[:\\s]*${AMT}`),
+    // Amount → Label
+    new RegExp(`${AMT}\\s*נטו\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*נטו`),
   ]);
 
   const dedDefs = [
-    { key:'incomeTax', label:'מס הכנסה', patterns:[/מס\s*הכנסה[:\s]*([0-9,]+\.?\d*)/,/([0-9,]+\.?\d*)\s*מס\s*הכנסה/] },
-    { key:'nationalInsurance', label:'ביטוח לאומי', patterns:[/ביטוח\s*לאומי[:\s]*([0-9,]+\.?\d*)/,/([0-9,]+\.?\d*)\s*ביטוח\s*לאומי/] },
-    { key:'healthTax', label:'מס בריאות', patterns:[/מס\s*בריאות[:\s]*([0-9,]+\.?\d*)/,/בריאות[:\s]*([0-9,]+\.?\d*)/,/([0-9,]+\.?\d*)\s*מס\s*בריאות/] },
-    { key:'pension', label:'פנסיה', patterns:[/פנסי[הת][:\s]*([0-9,]+\.?\d*)/,/מנורה[:\s]*([0-9,]+\.?\d*)/,/מבטחים[:\s]*([0-9,]+\.?\d*)/,/גמל[:\s]*([0-9,]+\.?\d*)/] },
-    { key:'hishtalmut', label:'קרן השתלמות', patterns:[/קר[נן]\s*השתלמות[:\s]*([0-9,]+\.?\d*)/,/קרה["\u05F4]?ש[:\s]*([0-9,]+\.?\d*)/] }
+    { key:'incomeTax', label:'מס הכנסה', patterns:[
+      /מס\s*הכנסה[:\s]*₪?\s*([0-9,]+\.?\d*)/,/₪?\s*([0-9,]+\.?\d*)\s*מס\s*הכנסה/,
+      /ניכוי\s*מס[:\s]*₪?\s*([0-9,]+\.?\d*)/
+    ]},
+    { key:'nationalInsurance', label:'ביטוח לאומי', patterns:[
+      /ביטוח\s*לאומי[:\s]*₪?\s*([0-9,]+\.?\d*)/,/₪?\s*([0-9,]+\.?\d*)\s*ביטוח\s*לאומי/,
+      /בט["\u05F4]?ל[:\s]*₪?\s*([0-9,]+\.?\d*)/
+    ]},
+    { key:'healthTax', label:'מס בריאות', patterns:[
+      /מס\s*בריאות[:\s]*₪?\s*([0-9,]+\.?\d*)/,/בריאות[:\s]*₪?\s*([0-9,]+\.?\d*)/,
+      /₪?\s*([0-9,]+\.?\d*)\s*מס\s*בריאות/
+    ]},
+    { key:'pension', label:'פנסיה', patterns:[
+      /פנסי[הת][:\s]*₪?\s*([0-9,]+\.?\d*)/,/מנורה[:\s]*₪?\s*([0-9,]+\.?\d*)/,
+      /מבטחים[:\s]*₪?\s*([0-9,]+\.?\d*)/,/גמל[:\s]*₪?\s*([0-9,]+\.?\d*)/,
+      /הפרשה\s*לפנסיה[:\s]*₪?\s*([0-9,]+\.?\d*)/
+    ]},
+    { key:'hishtalmut', label:'קרן השתלמות', patterns:[
+      /קר[נן]\s*השתלמות[:\s]*₪?\s*([0-9,]+\.?\d*)/,
+      new RegExp(`קרה${QUO}ש[:\\s]*₪?\\s*([0-9,]+\\.?\\d*)`),
+      /₪?\s*([0-9,]+\.?\d*)\s*קר[נן]\s*השתלמות/
+    ]}
   ];
   for (const d of dedDefs) {
     for (const p of d.patterns) {
@@ -530,9 +582,10 @@ function parsePayslipPDF(text) {
 }
 
 async function extractPDFText(arrayBuffer) {
-  if (typeof pdfjsLib === 'undefined') throw new Error('PDF library not loaded');
+  if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  let ltrText = '';
+  let rtlText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
@@ -543,10 +596,13 @@ async function extractPDFText(arrayBuffer) {
       lines[y].push({ text: item.str, x: item.transform[4] });
     });
     Object.keys(lines).map(Number).sort((a,b)=>b-a).forEach(y => {
-      fullText += lines[y].sort((a,b)=>a.x-b.x).map(i=>i.text).join(' ') + '\n';
+      const sorted = lines[y].sort((a,b)=>a.x-b.x);
+      ltrText += sorted.map(i=>i.text).join(' ') + '\n';
+      rtlText += sorted.slice().reverse().map(i=>i.text).join(' ') + '\n';
     });
   }
-  return fullText;
+  // Return both orderings — try LTR first, if parsing fails caller can try RTL
+  return { ltrText, rtlText, hasText: ltrText.replace(/\s/g, '').length > 20 };
 }
 
 function App() {
@@ -573,6 +629,17 @@ function App() {
   const [fRatio, setFRatio] = useState(saved?.fRatio ?? 1.0);
   const [mRatio, setMRatio] = useState(saved?.mRatio ?? 1.0);
   const [det, setDet] = useState(false);
+
+  // Sync payslips from Firebase when data loads after component mount
+  useEffect(() => {
+    const handler = () => {
+      const loaded = window.__payslipData?.payslips || [];
+      if (loaded.length > 0) setPayslips([...loaded]);
+    };
+    if (window.__payslipData?.loaded) handler();
+    document.addEventListener('payslipDataLoaded', handler);
+    return () => document.removeEventListener('payslipDataLoaded', handler);
+  }, []);
 
   // Auto-save settings on change (debounced)
   const saveTimerRef = React.useRef(null);
@@ -622,15 +689,51 @@ function App() {
   const handlePayslipFile = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|heic)$/i.test(file.name);
+
+    if (!isPDF && !isImage) {
+      setPayslipStatus('יש להעלות קובץ PDF או תמונה (JPG/PNG)');
+      setTimeout(() => setPayslipStatus(''), 4000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (isImage) {
+      // Show manual entry form for images since we can't OCR client-side
+      setPendingPayslip({ _manualEntry: true, fileName: file.name });
+      setPayslipStatus('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setPayslipStatus('קורא תלוש...');
     try {
       const ab = await file.arrayBuffer();
-      const text = await extractPDFText(ab);
-      console.log('PDF text:', text);
-      const parsed = parsePayslipPDF(text);
+      const extracted = await extractPDFText(ab);
+      console.log('PDF text (LTR):', extracted.ltrText);
+      console.log('PDF text (RTL):', extracted.rtlText);
+
+      if (!extracted.hasText) {
+        // PDF is likely a scanned image — offer manual entry
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _scanned: true });
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      // Try LTR text first, then RTL
+      let parsed = parsePayslipPDF(extracted.ltrText);
       if (!parsed.net && !parsed.gross) {
-        setPayslipStatus('לא הצלחתי לזהות נתוני שכר בתלוש');
-        setTimeout(() => setPayslipStatus(''), 3000);
+        parsed = parsePayslipPDF(extracted.rtlText);
+      }
+
+      if (!parsed.net && !parsed.gross) {
+        // Couldn't auto-parse — offer manual entry
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _parseHint: true });
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
       parsed.earner = payslipEarner;
@@ -639,27 +742,33 @@ function App() {
       setPayslipStatus('');
     } catch (err) {
       console.error('PDF error:', err);
-      setPayslipStatus('שגיאה: ' + err.message);
-      setTimeout(() => setPayslipStatus(''), 3000);
+      setPayslipStatus('שגיאה בקריאת הקובץ: ' + err.message);
+      setTimeout(() => setPayslipStatus(''), 4000);
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [payslipEarner]);
 
   const confirmPayslipUpload = useCallback(async () => {
     if (!pendingPayslip) return;
+    if (!pendingPayslip.gross && !pendingPayslip.net) { setPayslipStatus('יש להזין ברוטו או נטו'); return; }
     const monthKey = pendingPayslip.month && pendingPayslip.year
       ? `${pendingPayslip.year}-${pendingPayslip.month}`
       : null;
-    if (!monthKey) { setPayslipStatus('לא זוהה חודש'); return; }
+    if (!monthKey) { setPayslipStatus('יש לבחור חודש'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+
+    // Compute totalDeductions for manual entries
+    const gross = pendingPayslip.gross || 0;
+    const net = pendingPayslip.net || 0;
+    const totalDed = gross && net ? Math.round((gross - net) * 100) / 100 : (pendingPayslip.totalDeductions || 0);
 
     const payslip = {
       id: Date.now(),
       month: monthKey,
       gross: pendingPayslip.gross,
       net: pendingPayslip.net,
-      totalDeductions: pendingPayslip.totalDeductions || 0,
-      deductions: pendingPayslip.deductions,
-      earner: pendingPayslip.earner || '',
+      totalDeductions: totalDed,
+      deductions: pendingPayslip.deductions || {},
+      earner: pendingPayslip.earner || payslipEarner || '',
       fileName: pendingPayslip.fileName,
       time: new Date().toISOString()
     };
@@ -848,8 +957,8 @@ function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 14 }}>📄</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: "#c0a0d8" }}>העלאת תלוש משכורת (PDF)</span>
-                <InfoTip text={"העלה תלוש משכורת בפורמט PDF.\nהמערכת תחלץ אוטומטית: ברוטו, נטו, ניכויים וחודש.\nהברוטו יעדכן את הסליידר אוטומטית."} />
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#c0a0d8" }}>העלאת תלוש משכורת</span>
+                <InfoTip text={"העלה תלוש משכורת (PDF או תמונה).\nהמערכת תנסה לחלץ אוטומטית: ברוטו, נטו, ניכויים וחודש.\nאם לא מצליחה — ניתן להזין ידנית.\nהברוטו יעדכן את הסליידר אוטומטית."} />
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select value={payslipEarner} onChange={e => setPayslipEarner(e.target.value)}
@@ -862,9 +971,13 @@ function App() {
                   padding: "5px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
                   border: "1px solid rgba(140,80,200,0.4)", background: "rgba(140,80,200,0.2)", color: "#c0a0d8"
                 }}>
-                  העלה PDF
-                  <input ref={fileInputRef} type="file" accept=".pdf" onChange={handlePayslipFile} style={{ display: "none" }} />
+                  העלה קובץ
+                  <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" onChange={handlePayslipFile} style={{ display: "none" }} />
                 </label>
+                <button onClick={() => setPendingPayslip({ _manualEntry: true, fileName: 'הזנה ידנית', deductions: {} })} style={{
+                  padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#a0a0b8"
+                }}>הזנה ידנית</button>
               </div>
             </div>
 
@@ -872,35 +985,73 @@ function App() {
               <div style={{ fontSize: 11, color: "#c0a0d8", marginBottom: 8 }}>{payslipStatus}</div>
             )}
 
-            {/* Preview */}
+            {/* Preview — auto-parsed or manual entry */}
             {pendingPayslip && (
               <div style={{ background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.2)", borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>נתונים שחולצו:</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11, alignItems: "center" }}>
-                  <div>
-                    <span style={{ color: "#7a7a9a" }}>חודש: </span>
-                    <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
-                      onChange={e => {
-                        const [y, m] = (e.target.value || '').split('-');
-                        setPendingPayslip(prev => ({ ...prev, month: m || null, year: y || null }));
-                      }}
-                      style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
-                    />
-                    {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
-                  </div>
-                  <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
-                  <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
-                  <div><span style={{ color: "#7a7a9a" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
-                </div>
-                {Object.keys(pendingPayslip.deductions).length > 0 && (
-                  <div style={{ fontSize: 10, color: "#7a7a9a", marginTop: 4 }}>
-                    {Object.values(pendingPayslip.deductions).map(d => `${d.label}: ₪${d.amount.toLocaleString()}`).join(' | ')}
-                  </div>
+                {pendingPayslip._manualEntry ? (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>
+                      {pendingPayslip._scanned ? 'התלוש נראה כתמונה סרוקה — יש להזין ידנית:'
+                        : pendingPayslip._parseHint ? 'לא הצלחתי לזהות אוטומטית — הזן ידנית:'
+                        : 'הזנה ידנית:'}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
+                      <div>
+                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>חודש</label>
+                        <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                          onChange={e => { const [y,m]=(e.target.value||'').split('-'); setPendingPayslip(p=>({...p,month:m||null,year:y||null})); }}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
+                        <input type="number" placeholder="15,000" value={pendingPayslip.gross||''}
+                          onChange={e => setPendingPayslip(p=>({...p,gross:e.target.value?parseFloat(e.target.value):null}))}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>נטו (₪)</label>
+                        <input type="number" placeholder="11,000" value={pendingPayslip.net||''}
+                          onChange={e => setPendingPayslip(p=>({...p,net:e.target.value?parseFloat(e.target.value):null}))}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>נתונים שחולצו:</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11, alignItems: "center" }}>
+                      <div>
+                        <span style={{ color: "#7a7a9a" }}>חודש: </span>
+                        <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                          onChange={e => {
+                            const [y, m] = (e.target.value || '').split('-');
+                            setPendingPayslip(prev => ({ ...prev, month: m || null, year: y || null }));
+                          }}
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
+                        />
+                        {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
+                      </div>
+                      <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
+                      <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
+                      <div><span style={{ color: "#7a7a9a" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
+                    </div>
+                    {Object.keys(pendingPayslip.deductions || {}).length > 0 && (
+                      <div style={{ fontSize: 10, color: "#7a7a9a", marginTop: 4 }}>
+                        {Object.values(pendingPayslip.deductions).map(d => `${d.label}: ₪${d.amount.toLocaleString()}`).join(' | ')}
+                      </div>
+                    )}
+                  </>
                 )}
                 <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                  <button onClick={confirmPayslipUpload} style={{
-                    padding: "5px 16px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                    border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a"
+                  <button onClick={confirmPayslipUpload}
+                    disabled={!pendingPayslip.gross && !pendingPayslip.net}
+                    style={{
+                      padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.gross && !pendingPayslip.net) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                      border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a",
+                      opacity: (!pendingPayslip.gross && !pendingPayslip.net) ? 0.4 : 1
                   }}>אשר ושמור</button>
                   <button onClick={() => setPendingPayslip(null)} style={{
                     padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
