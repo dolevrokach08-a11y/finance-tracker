@@ -162,24 +162,6 @@ a { color: #c4944a; }
       );
       data.payslips.push(payslip);
 
-      // Also add/update income transaction (net)
-      if (payslip.net) {
-        data.transactions = (data.transactions || []).filter(t =>
-          !(t.month === payslip.month && t.source === 'payslip' && t.earner === payslip.earner)
-        );
-        data.transactions.push({
-          id: Date.now() + 1,
-          type: 'income',
-          desc: `משכורת (תלוש)${payslip.earner === 'father' ? ' - אב' : payslip.earner === 'mother' ? ' - אם' : ''}`,
-          amt: payslip.net,
-          cat: 'משכורת',
-          month: payslip.month,
-          time: new Date().toISOString(),
-          earner: payslip.earner,
-          source: 'payslip'
-        });
-      }
-
       await setDoc(window.__financeDocRef, { ...data, lastModified: new Date().toISOString() });
       window.__financeData = data;
       window.__payslipData = { payslips: data.payslips, loaded: true };
@@ -195,12 +177,6 @@ a { color: #c4944a; }
     if (!window.__financeDocRef || !window.__financeData) return false;
     try {
       const data = window.__financeData;
-      const payslip = (data.payslips || []).find(p => p.id === payslipId);
-      if (payslip) {
-        data.transactions = (data.transactions || []).filter(t =>
-          !(t.month === payslip.month && t.source === 'payslip' && t.earner === payslip.earner)
-        );
-      }
       data.payslips = (data.payslips || []).filter(p => p.id !== payslipId);
       await setDoc(window.__financeDocRef, { ...data, lastModified: new Date().toISOString() });
       window.__financeData = data;
