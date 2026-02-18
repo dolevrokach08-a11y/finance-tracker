@@ -3806,24 +3806,18 @@
             });
             data.fixedExpenses.forEach(f=>{if(getMonthsInRange(f.start,f.end).includes(month)) exp+=f.amount;});
             
-            // מעשר מוגבל לרווח בפועל - לא ניכנס למינוס בשביל תרומה
-            // שינוי זה חל רק מ-2025-11 ואילך (לא למפרע)
+            // מעשר מוגבל לרווח בפועל - לא ניכנס למינוס בשביל מעשר
             const grossProfit = inc - exp;  // יתרה לפני מעשר
             let tithe;
-            
-            if (month >= '2025-11') {
-                // לוגיקה חדשה: מעשר מוגבל לפי רווח
-                if (grossProfit <= 0) {
-                    // אין רווח - אין מעשר
-                    tithe = 0;
-                } else {
-                    const tenPercent = incTaxable * 0.1;
-                    // אם המעשר גדול מהרווח, ניקח רק את הרווח
-                    tithe = (tenPercent > grossProfit) ? grossProfit : tenPercent;
-                }
+
+            // לוגיקה אחידה לכל החודשים: מעשר מוגבל לפי רווח בפועל
+            if (grossProfit <= 0) {
+                // אין רווח - אין מעשר
+                tithe = 0;
             } else {
-                // לוגיקה ישנה: מעשר מלא
-                tithe = incTaxable * 0.1;
+                const tenPercent = incTaxable * 0.1;
+                // אם המעשר גדול מהרווח, ניקח רק את הרווח (נטו = 0)
+                tithe = (tenPercent > grossProfit) ? grossProfit : tenPercent;
             }
             const available = inc - exp - tithe;
             return {inc,exp,bal:inc-exp,tithe,available};
