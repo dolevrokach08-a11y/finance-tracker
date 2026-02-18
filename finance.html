@@ -817,7 +817,11 @@
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                     <div>
                         <label class="block text-sm font-medium mb-2">חודש נוכחי</label>
-                        <select id="overview-month" onchange="updateOverview()" class="w-full p-3 border rounded-lg"></select>
+                        <div class="flex gap-2">
+                            <select id="overview-year" onchange="syncOverviewMonth()" class="p-3 border rounded-lg flex-1"></select>
+                            <select id="overview-month-num" onchange="syncOverviewMonth()" class="p-3 border rounded-lg flex-1"></select>
+                        </div>
+                        <input type="hidden" id="overview-month">
                     </div>
                     <div class="summary-card green" style="background: var(--bg-surface); border: 1px solid var(--profit); color: var(--text-primary); padding: 20px; border-radius: 12px; box-shadow: var(--shadow-lg); transition: transform 0.3s;">
                         <div style="font-size: 0.85rem; opacity: 0.9; margin-bottom: 8px;">הכנסות</div>
@@ -858,7 +862,9 @@
                 <div class="glass p-4 mb-6">
                     <div class="flex flex-wrap items-center gap-2">
                         <label class="text-sm font-medium">חודש:</label>
-                        <select id="add-month" onchange="loadMonthTransactions()" class="p-2 border rounded-lg"></select>
+                        <select id="add-year" onchange="syncAddMonth()" class="p-2 border rounded-lg"></select>
+                        <select id="add-month-num" onchange="syncAddMonth()" class="p-2 border rounded-lg"></select>
+                        <input type="hidden" id="add-month">
                         <span class="text-xs text-gray-500">(רשום לפי החודש שבו הכסף בפועל נכנס/יוצא)</span>
                     </div>
                 </div>
@@ -877,7 +883,9 @@
                     </div>
                     
                     <div class="flex gap-3 items-center">
-                        <select id="import-month" class="p-2 border rounded-lg text-sm"></select>
+                        <select id="import-year" onchange="syncImportMonth()" class="p-2 border rounded-lg text-sm"></select>
+                        <select id="import-month-num" onchange="syncImportMonth()" class="p-2 border rounded-lg text-sm"></select>
+                        <input type="hidden" id="import-month">
                         <label class="btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
                             📄 בחר קובץ אקסל
                             <input type="file" accept=".xlsx,.xls" onchange="handleImportFile(event)" class="hidden">
@@ -1364,11 +1372,12 @@
             clearTimeout(window.__loadingTimeout);
             loadFromLocalStorage();
 
+            populateYearMonthSelectors();
             const months = getMonths();
             const cur = getMonthKey();
             const opts = months.map(m => `<option value="${m.val}" ${m.val===cur?'selected':''}>${m.txt}</option>`).join('');
 
-            ['overview-month','add-month','import-month','fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
+            ['fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.innerHTML = opts;
             });
@@ -1434,6 +1443,63 @@
         function getMonthKey() {
             const d = new Date();
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        }
+
+        function getDataYears() {
+            const years = new Set([new Date().getFullYear()]);
+            data.transactions.forEach(t => { if(t.month) years.add(parseInt(t.month.split('-')[0])); });
+            data.fixedIncomes.forEach(f => { years.add(parseInt(f.start.split('-')[0])); years.add(parseInt(f.end.split('-')[0])); });
+            data.fixedExpenses.forEach(f => { years.add(parseInt(f.start.split('-')[0])); years.add(parseInt(f.end.split('-')[0])); });
+            return Array.from(years).sort((a,b) => b-a);
+        }
+
+        function populateYearMonthSelectors() {
+            const years = getDataYears();
+            const today = new Date();
+            const curYear = today.getFullYear();
+            const curMonth = String(today.getMonth()+1).padStart(2,'0');
+
+            const hebrewMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני',
+                                  'יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+
+            const yearOpts = years.map(y =>
+                `<option value="${y}" ${y===curYear?'selected':''}>${y}</option>`).join('');
+            const monthOpts = hebrewMonths.map((name,i) => {
+                const m = String(i+1).padStart(2,'0');
+                return `<option value="${m}" ${m===curMonth?'selected':''}>${name}</option>`;
+            }).join('');
+
+            ['overview-year','add-year','import-year'].forEach(id => {
+                const el = document.getElementById(id); if(el) el.innerHTML = yearOpts;
+            });
+            ['overview-month-num','add-month-num','import-month-num'].forEach(id => {
+                const el = document.getElementById(id); if(el) el.innerHTML = monthOpts;
+            });
+
+            const cur = `${curYear}-${curMonth}`;
+            ['overview-month','add-month','import-month'].forEach(id => {
+                const el = document.getElementById(id); if(el) el.value = cur;
+            });
+        }
+
+        function syncOverviewMonth() {
+            const y = document.getElementById('overview-year').value;
+            const m = document.getElementById('overview-month-num').value;
+            document.getElementById('overview-month').value = `${y}-${m}`;
+            updateOverview();
+        }
+
+        function syncAddMonth() {
+            const y = document.getElementById('add-year').value;
+            const m = document.getElementById('add-month-num').value;
+            document.getElementById('add-month').value = `${y}-${m}`;
+            loadMonthTransactions();
+        }
+
+        function syncImportMonth() {
+            const y = document.getElementById('import-year').value;
+            const m = document.getElementById('import-month-num').value;
+            document.getElementById('import-month').value = `${y}-${m}`;
         }
 
         function getMonths() {
@@ -1949,6 +2015,7 @@
                     
                     if (totalImported > 0) {
                         saveToLocalStorage();
+                        populateYearMonthSelectors();
                         loadMonthTransactions();
                         updateOverview();
                         updateTithe();
@@ -2565,11 +2632,12 @@
         async function init() {
             await loadFromFirebase();
 
+            populateYearMonthSelectors();
             const months = getMonths();
             const cur = getMonthKey();
             const opts = months.map(m=>`<option value="${m.val}" ${m.val===cur?'selected':''}>${m.txt}</option>`).join('');
 
-            ['overview-month','add-month','import-month','fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
+            ['fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
                 const el = document.getElementById(id);
                 if(el) el.innerHTML = opts;
             });
@@ -3739,6 +3807,7 @@
                     renderFixedItems();
                     renderCategoryRules();
                     updateReportPeriodSelector();
+                    populateYearMonthSelectors();
                     loadMonthTransactions();
                     updateOverview();
                     updateTithe();
