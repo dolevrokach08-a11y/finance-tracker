@@ -818,8 +818,8 @@
                     <div>
                         <label class="block text-sm font-medium mb-2">חודש נוכחי</label>
                         <div class="flex gap-2">
-                            <select id="overview-year" onchange="syncOverviewMonth()" class="p-3 border rounded-lg flex-1"></select>
-                            <select id="overview-month-num" onchange="syncOverviewMonth()" class="p-3 border rounded-lg flex-1"></select>
+                            <select id="overview-year" class="p-3 border rounded-lg flex-1"></select>
+                            <select id="overview-month-num" class="p-3 border rounded-lg flex-1"></select>
                         </div>
                         <input type="hidden" id="overview-month">
                     </div>
@@ -862,8 +862,8 @@
                 <div class="glass p-4 mb-6">
                     <div class="flex flex-wrap items-center gap-2">
                         <label class="text-sm font-medium">חודש:</label>
-                        <select id="add-year" onchange="syncAddMonth()" class="p-2 border rounded-lg"></select>
-                        <select id="add-month-num" onchange="syncAddMonth()" class="p-2 border rounded-lg"></select>
+                        <select id="add-year" class="p-2 border rounded-lg"></select>
+                        <select id="add-month-num" class="p-2 border rounded-lg"></select>
                         <input type="hidden" id="add-month">
                         <span class="text-xs text-gray-500">(רשום לפי החודש שבו הכסף בפועל נכנס/יוצא)</span>
                     </div>
@@ -1480,17 +1480,18 @@
             ['overview-month','add-month','import-month'].forEach(id => {
                 const el = document.getElementById(id); if(el) el.value = cur;
             });
-        }
 
-        function syncOverviewMonth() {
-            updateOverview();
-        }
+            // Attach change listeners via JS (more reliable than inline onchange on async-populated selects)
+            const oy = document.getElementById('overview-year');
+            const om = document.getElementById('overview-month-num');
+            if (oy) { oy.removeEventListener('change', updateOverview); oy.addEventListener('change', updateOverview); }
+            if (om) { om.removeEventListener('change', updateOverview); om.addEventListener('change', updateOverview); }
 
-        function syncAddMonth() {
-            loadMonthTransactions();
+            const ay = document.getElementById('add-year');
+            const am = document.getElementById('add-month-num');
+            if (ay) { ay.removeEventListener('change', loadMonthTransactions); ay.addEventListener('change', loadMonthTransactions); }
+            if (am) { am.removeEventListener('change', loadMonthTransactions); am.addEventListener('change', loadMonthTransactions); }
         }
-
-        function syncImportMonth() { /* month is read live from selects in the import handler */ }
 
         function getOverviewMonth() {
             const y = document.getElementById('overview-year');
