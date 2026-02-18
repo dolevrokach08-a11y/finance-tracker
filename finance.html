@@ -1483,23 +1483,31 @@
         }
 
         function syncOverviewMonth() {
-            const y = document.getElementById('overview-year').value;
-            const m = document.getElementById('overview-month-num').value;
-            document.getElementById('overview-month').value = `${y}-${m}`;
             updateOverview();
         }
 
         function syncAddMonth() {
-            const y = document.getElementById('add-year').value;
-            const m = document.getElementById('add-month-num').value;
-            document.getElementById('add-month').value = `${y}-${m}`;
             loadMonthTransactions();
         }
 
-        function syncImportMonth() {
-            const y = document.getElementById('import-year').value;
-            const m = document.getElementById('import-month-num').value;
-            document.getElementById('import-month').value = `${y}-${m}`;
+        function syncImportMonth() { /* month is read live from selects in the import handler */ }
+
+        function getOverviewMonth() {
+            const y = document.getElementById('overview-year');
+            const m = document.getElementById('overview-month-num');
+            return (y && m) ? `${y.value}-${m.value}` : getMonthKey();
+        }
+
+        function getAddMonth() {
+            const y = document.getElementById('add-year');
+            const m = document.getElementById('add-month-num');
+            return (y && m) ? `${y.value}-${m.value}` : getMonthKey();
+        }
+
+        function getImportMonth() {
+            const y = document.getElementById('import-year');
+            const m = document.getElementById('import-month-num');
+            return (y && m) ? `${y.value}-${m.value}` : getMonthKey();
         }
 
         function getMonths() {
@@ -1764,7 +1772,7 @@
                 return;
             }
             
-            const selectedMonth = document.getElementById('import-month').value;
+            const selectedMonth = getImportMonth();
             if (!selectedMonth) {
                 notify('❌ בחר חודש לייבוא');
                 return;
@@ -1899,7 +1907,7 @@
                 return;
             }
             
-            const selectedMonth = document.getElementById('import-month').value;
+            const selectedMonth = getImportMonth();
             if (!selectedMonth) {
                 notify('❌ בחר חודש לייבוא');
                 return;
@@ -2737,7 +2745,7 @@
             const desc = document.getElementById('inc-desc').value.trim();
             const amt = parseFloat(document.getElementById('inc-amt').value);
             const cat = document.getElementById('inc-cat').value;
-            const month = document.getElementById('add-month').value;
+            const month = getAddMonth();
             const exempt = document.getElementById('inc-exempt').checked;
             const earner = document.getElementById('inc-earner').value || null;
 
@@ -2768,7 +2776,7 @@
             const desc = document.getElementById('exp-desc').value.trim();
             const amt = parseFloat(document.getElementById('exp-amt').value);
             const cat = document.getElementById('exp-cat').value;
-            const month = document.getElementById('add-month').value;
+            const month = getAddMonth();
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
             data.transactions.push({id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()});
             notify('נוסף');
@@ -2787,7 +2795,7 @@
         }
 
         function loadMonthTransactions() {
-            const month = document.getElementById('add-month').value;
+            const month = getAddMonth();
             const trans = data.transactions.filter(t=>t.month===month).sort((a,b)=>new Date(b.time)-new Date(a.time));
             const fixInc = data.fixedIncomes.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'income',fixed:true}));
             const fixExp = data.fixedExpenses.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'expense',fixed:true}));
@@ -3173,7 +3181,7 @@
 
         // Overview
         function updateOverview() {
-            const month = document.getElementById('overview-month').value;
+            const month = getOverviewMonth();
             const sum = getMonthSummary(month);
             
             document.getElementById('sum-income').textContent = `₪${sum.inc.toLocaleString()}`;
