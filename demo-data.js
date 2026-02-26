@@ -310,7 +310,7 @@ function generateDemoPortfolioData() {
     // 1159235: 200 × 105.20 = 21,040 ILS
     // Bond 5131784: 250 × 112.50 = 28,125 ILS
     // Bond 5122510: 100 × 108.30 = 10,830 ILS
-    // Total spent: ~104,615 ILS → remaining cash ~30,385 ILS → cash shown: ~5,200+500*3.65
+    // Total spent: ~104,615 ILS → remaining cash ~30,385 ILS → cash: 28,560 ILS + 500 USD
     const purchases = [
         {
             id: baseId + 200,
@@ -451,7 +451,7 @@ function generateDemoPortfolioData() {
         snapshots,
         cashFlows,
         rates: { USD: usdRate, EUR: 4.10, USDILS: usdRate },
-        cash: { ILS: 5200, USD: 500, EUR: 0 },
+        cash: { ILS: 28560, USD: 500, EUR: 0 },
         deposits,
         withdrawals: [],
         purchases,
