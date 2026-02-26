@@ -1310,60 +1310,80 @@
     <div id="notif" class="notification"></div>
 
     <script type="module">
+        // Demo mode imports
+        let _isDemoMode = false;
+        try {
+            const demoModule = await import('./demo-data.js');
+            _isDemoMode = demoModule.isDemoMode();
+            if (_isDemoMode) {
+                window.__demoFinanceData = demoModule.generateDemoFinanceData;
+                window.__demoUser = demoModule.getDemoUser();
+            }
+        } catch(e) { console.warn('Demo module not loaded:', e); }
+
         // Firebase Import with error handling
         let auth, db, onAuthStateChanged, doc, setDoc, getDoc;
         let firebaseLoaded = false;
 
-        try {
-            const fb = await import('./firebase-config.js');
-            auth = fb.auth;
-            db = fb.db;
-            onAuthStateChanged = fb.onAuthStateChanged;
-            doc = fb.doc;
-            setDoc = fb.setDoc;
-            getDoc = fb.getDoc;
-            firebaseLoaded = true;
-        } catch (e) {
-            console.error('Firebase module failed to load:', e);
-            // Show retry button on loading screen
-            const retryEl = document.getElementById('loadingRetry');
-            const textEl = document.getElementById('loadingText');
-            const spinnerEl = document.getElementById('loadingSpinner');
-            if (retryEl) retryEl.style.display = 'block';
-            if (textEl) textEl.textContent = 'שגיאה בטעינת המערכת';
-            if (spinnerEl) spinnerEl.style.display = 'none';
+        if (!_isDemoMode) {
+            try {
+                const fb = await import('./firebase-config.js');
+                auth = fb.auth;
+                db = fb.db;
+                onAuthStateChanged = fb.onAuthStateChanged;
+                doc = fb.doc;
+                setDoc = fb.setDoc;
+                getDoc = fb.getDoc;
+                firebaseLoaded = true;
+            } catch (e) {
+                console.error('Firebase module failed to load:', e);
+                // Show retry button on loading screen
+                const retryEl = document.getElementById('loadingRetry');
+                const textEl = document.getElementById('loadingText');
+                const spinnerEl = document.getElementById('loadingSpinner');
+                if (retryEl) retryEl.style.display = 'block';
+                if (textEl) textEl.textContent = 'שגיאה בטעינת המערכת';
+                if (spinnerEl) spinnerEl.style.display = 'none';
+            }
         }
 
         // Check authentication
         let currentUser = null;
         let authChecked = false;
 
-        // Auth timeout - if auth doesn't respond in 15 seconds, show retry
-        let authTimeoutId = null;
-        if (firebaseLoaded) {
-            authTimeoutId = setTimeout(() => {
-                if (!authChecked) {
-                    console.warn('Auth check timed out after 15s');
-                    // Try to proceed with localStorage data
-                    authChecked = true;
-                    initOffline();
-                }
-            }, 15000);
-
-            onAuthStateChanged(auth, (user) => {
-                clearTimeout(authTimeoutId);
-                if (user) {
-                    currentUser = user;
-                    console.log('User authenticated:', user.email);
+        // Demo mode - skip auth and load demo data
+        if (_isDemoMode) {
+            currentUser = window.__demoUser;
+            authChecked = true;
+            // Will call initDemo() after data variable is declared below
+        } else {
+            // Auth timeout - if auth doesn't respond in 15 seconds, show retry
+            let authTimeoutId = null;
+            if (firebaseLoaded) {
+                authTimeoutId = setTimeout(() => {
                     if (!authChecked) {
+                        console.warn('Auth check timed out after 15s');
+                        // Try to proceed with localStorage data
                         authChecked = true;
-                        init();
+                        initOffline();
                     }
-                } else {
-                    console.log('No user, redirecting to login...');
-                    window.location.href = 'login.html';
-                }
-            });
+                }, 15000);
+
+                onAuthStateChanged(auth, (user) => {
+                    clearTimeout(authTimeoutId);
+                    if (user) {
+                        currentUser = user;
+                        console.log('User authenticated:', user.email);
+                        if (!authChecked) {
+                            authChecked = true;
+                            init();
+                        }
+                    } else {
+                        console.log('No user, redirecting to login...');
+                        window.location.href = 'login.html';
+                    }
+                });
+            }
         }
 
         // Fallback init when auth times out - load from localStorage
@@ -1590,6 +1610,10 @@
         
         // ========== Firebase Save/Load Functionality ==========
         async function saveToFirebase(forceOverwrite = false) {
+            if (_isDemoMode) {
+                notify('מצב הדגמה - השינויים לא נשמרים');
+                return;
+            }
             if (!currentUser) {
                 console.warn('No user logged in, cannot save');
                 return;
@@ -2657,6 +2681,34 @@
             notify('מערכת מוכנה');
 
             // Clear global loading timeout and hide loading screen
+            clearTimeout(window.__loadingTimeout);
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        // Demo mode initialization
+        if (_isDemoMode) {
+            data = window.__demoFinanceData();
+
+            // Add demo banner at top of main content
+            const mainContent = document.getElementById('mainContent');
+            const banner = document.createElement('div');
+            banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin: 0 16px 16px; text-align: center;';
+            banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
+            mainContent.insertBefore(banner, mainContent.firstChild);
+
+            populateYearMonthSelectors();
+            const months = getMonths();
+            const cur = getMonthKey();
+            const opts = months.map(m => `<option value="${m.val}" ${m.val===cur?'selected':''}>${m.txt}</option>`).join('');
+            ['fix-inc-start','fix-inc-end','fix-exp-start','fix-exp-end','analysis-month'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = opts;
+            });
+            updateReportPeriodSelector();
+            renderCategorySelects();
+            updateOverview();
+            notify('מצב הדגמה - נתונים פיקטיביים');
             clearTimeout(window.__loadingTimeout);
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';

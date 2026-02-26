@@ -2726,31 +2726,54 @@
 <div id="notification" class="notification"></div>
 
     <script type="module">
+        // Demo mode check
+        let _isDemoMode = false;
+        try {
+            const demoModule = await import('./demo-data.js');
+            _isDemoMode = demoModule.isDemoMode();
+            if (_isDemoMode) {
+                window.__demoPortfolioData = demoModule.generateDemoPortfolioData;
+                window.__demoUser = demoModule.getDemoUser();
+            }
+        } catch(e) { console.warn('Demo module not loaded:', e); }
+
         // Firebase Import
-        import { auth, db, onAuthStateChanged, doc, setDoc, getDoc, collection, getDocs, deleteDoc } from './firebase-config.js';
+        let auth, db, onAuthStateChanged, doc, setDoc, getDoc, collection, getDocs, deleteDoc;
+        if (!_isDemoMode) {
+            const fb = await import('./firebase-config.js');
+            auth = fb.auth; db = fb.db; onAuthStateChanged = fb.onAuthStateChanged;
+            doc = fb.doc; setDoc = fb.setDoc; getDoc = fb.getDoc;
+            collection = fb.collection; getDocs = fb.getDocs; deleteDoc = fb.deleteDoc;
+        }
 
         // Auth check
         let currentUser = null;
         let authChecked = false;
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                console.log('✅ User authenticated:', user.email);
-                if (!authChecked) {
-                    authChecked = true;
-                    init();
-                }
-            } else {
-                if (authChecked) {
-                    window.location.href = '/index.html';
+        if (_isDemoMode) {
+            currentUser = window.__demoUser;
+            authChecked = true;
+            // init() will be called after portfolio variable is declared
+        } else {
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUser = user;
+                    console.log('✅ User authenticated:', user.email);
+                    if (!authChecked) {
+                        authChecked = true;
+                        init();
+                    }
                 } else {
-                    setTimeout(() => {
-                        if (!currentUser) window.location.href = '/index.html';
-                    }, 2000);
+                    if (authChecked) {
+                        window.location.href = '/index.html';
+                    } else {
+                        setTimeout(() => {
+                            if (!currentUser) window.location.href = '/index.html';
+                        }, 2000);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         // =========================================== 
         // DATA STRUCTURE - ENHANCED
@@ -6168,6 +6191,10 @@ function calculateTWRv3() {
         // ===========================================
         
         async function saveData() {
+            if (_isDemoMode) {
+                notify('מצב הדגמה - השינויים לא נשמרים', 'warning');
+                return;
+            }
             if (!currentUser) {
                 console.log('⏳ Waiting for authentication...');
                 return;
@@ -12224,7 +12251,39 @@ ${msg}`, 'warning');
         
         console.log('✅ All functions exposed to window');
 
-    
+        // Demo mode initialization
+        if (_isDemoMode) {
+            portfolio = window.__demoPortfolioData();
+            window.portfolio = portfolio;
+
+            // Add demo banner
+            const mainContent = document.getElementById('mainContent');
+            if (mainContent) {
+                const banner = document.createElement('div');
+                banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin: 10px 16px; text-align: center;';
+                banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
+                mainContent.insertBefore(banner, mainContent.firstChild);
+            }
+
+            updateOverview();
+            updateGroupSelect();
+            renderHoldingsList();
+            renderCashFlow();
+            renderTransactions();
+            document.getElementById('rate-usd').value = portfolio.rates.USD ? portfolio.rates.USD.toFixed(4) : '3.6500';
+            document.getElementById('rate-eur').value = portfolio.rates.EUR ? portfolio.rates.EUR.toFixed(4) : '4.1000';
+
+            const loadingScreen = document.getElementById('loadingScreen');
+            const mainContentEl = document.getElementById('mainContent');
+            if (loadingScreen) {
+                loadingScreen.style.display = 'none';
+                if (mainContentEl) mainContentEl.style.display = 'block';
+                if (typeof lucide !== 'undefined') lucide.createIcons();
+                setTimeout(() => { try { createAdvancedCharts(); } catch(e) {} }, 300);
+            }
+            notify('מצב הדגמה - נתונים פיקטיביים', 'info');
+        }
+
         // Initialize theme from localStorage on load
         window.addEventListener('DOMContentLoaded', () => {
             initTheme();

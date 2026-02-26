@@ -291,6 +291,7 @@
 
     <script type="module">
         import { auth, signOut, onAuthStateChanged } from './firebase-config.js';
+        import { isDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
 
         const loadingScreen = document.getElementById('loadingScreen');
         const mainContainer = document.getElementById('mainContainer');
@@ -298,30 +299,44 @@
         const userName = document.getElementById('userName');
         const logoutBtn = document.getElementById('logoutBtn');
 
-        // Check if user is signed in
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                // User is signed in
-                console.log('User is signed in:', user.email);
-                
-                // Update UI
-                userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300f5d4"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
-                userName.textContent = user.displayName || user.email;
-                
-                // Show main content
-                loadingScreen.style.display = 'none';
-                mainContainer.style.display = 'block';
-                
-            } else {
-                // User is not signed in, redirect to login
-                console.log('User is not signed in, redirecting to login...');
-                window.location.href = 'login.html';
-            }
-        });
+        function showUI(user) {
+            userAvatar.src = user.photoURL || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2300f5d4"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+            userName.textContent = user.displayName || user.email;
+            loadingScreen.style.display = 'none';
+            mainContainer.style.display = 'block';
+        }
+
+        // Check demo mode first
+        if (isDemoMode()) {
+            const demoUser = getDemoUser();
+            showUI(demoUser);
+
+            // Add demo banner
+            const banner = document.createElement('div');
+            banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 16px; text-align: center;';
+            banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
+            mainContainer.insertBefore(banner, mainContainer.querySelector('h1'));
+        } else {
+            // Check if user is signed in
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    console.log('User is signed in:', user.email);
+                    showUI(user);
+                } else {
+                    console.log('User is not signed in, redirecting to login...');
+                    window.location.href = 'login.html';
+                }
+            });
+        }
 
         // Logout button
         logoutBtn.addEventListener('click', async () => {
             try {
+                if (isDemoMode()) {
+                    exitDemoMode();
+                    window.location.href = 'login.html';
+                    return;
+                }
                 await signOut(auth);
                 console.log('User signed out');
                 window.location.href = 'login.html';

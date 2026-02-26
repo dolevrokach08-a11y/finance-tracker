@@ -129,7 +129,23 @@ a { color: #c4944a; }
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
-  import { auth, db, onAuthStateChanged, doc, getDoc, setDoc } from './firebase-config.js';
+  // Demo mode check
+  let _isDemoMode = false;
+  let _demoFinanceData = null;
+  try {
+    const demoModule = await import('./demo-data.js');
+    _isDemoMode = demoModule.isDemoMode();
+    if (_isDemoMode) {
+      _demoFinanceData = demoModule.generateDemoFinanceData();
+    }
+  } catch(e) { console.warn('Demo module not loaded:', e); }
+
+  let auth, db, onAuthStateChanged, doc, getDoc, setDoc;
+  if (!_isDemoMode) {
+    const fb = await import('./firebase-config.js');
+    auth = fb.auth; db = fb.db; onAuthStateChanged = fb.onAuthStateChanged;
+    doc = fb.doc; getDoc = fb.getDoc; setDoc = fb.setDoc;
+  }
 
   window.__taxData = { loaded: false, years: {}, availableYears: [] };
   window.__taxSettings = null;
@@ -139,6 +155,7 @@ a { color: #c4944a; }
 
   // Save settings to Firebase
   window.__saveTaxSettings = async (settings) => {
+    if (_isDemoMode) return;
     const user = auth.currentUser;
     if (!user) return;
     try {
@@ -151,6 +168,7 @@ a { color: #c4944a; }
 
   // Save payslip to Firebase (into finance/data document)
   window.__savePayslip = async (payslip) => {
+    if (_isDemoMode) return false;
     if (!window.__financeDocRef) return false;
     try {
       const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
@@ -181,6 +199,7 @@ a { color: #c4944a; }
 
   // Delete payslip from Firebase
   window.__deletePayslip = async (payslipId) => {
+    if (_isDemoMode) return false;
     if (!window.__financeDocRef || !window.__financeData) return false;
     try {
       const data = window.__financeData;
@@ -195,137 +214,147 @@ a { color: #c4944a; }
     }
   };
 
-  onAuthStateChanged(auth, async (user) => {
-    const loading = document.getElementById('auth-loading');
+  // Process income data for tax analysis
+  function processIncomeData(transactions, fixedIncomes) {
+    const yearMap = {};
+
+    function shiftMonthBack(trackerMonth) {
+      const [y, m] = trackerMonth.split('-').map(Number);
+      if (m === 1) return `${y - 1}-12`;
+      return `${y}-${String(m - 1).padStart(2, '0')}`;
+    }
+
+    function addToYearMap(taxMonth, amt, earner) {
+      const taxYear = taxMonth.substring(0, 4);
+      const taxMM = taxMonth.substring(5, 7);
+      if (!yearMap[taxYear]) yearMap[taxYear] = { months: new Set(), father: 0, mother: 0, untagged: 0, total: 0, monthlyFather: {}, monthlyMother: {}, monthlyUntagged: {} };
+      yearMap[taxYear].months.add(taxMM);
+      yearMap[taxYear].total += amt;
+      if (earner === 'father') {
+        yearMap[taxYear].father += amt;
+        yearMap[taxYear].monthlyFather[taxMM] = (yearMap[taxYear].monthlyFather[taxMM] || 0) + amt;
+      } else if (earner === 'mother') {
+        yearMap[taxYear].mother += amt;
+        yearMap[taxYear].monthlyMother[taxMM] = (yearMap[taxYear].monthlyMother[taxMM] || 0) + amt;
+      } else {
+        yearMap[taxYear].untagged += amt;
+        yearMap[taxYear].monthlyUntagged[taxMM] = (yearMap[taxYear].monthlyUntagged[taxMM] || 0) + amt;
+      }
+    }
+
+    transactions.forEach(t => {
+      if (t.type !== 'income' || !t.month) return;
+      const taxMonth = shiftMonthBack(t.month);
+      addToYearMap(taxMonth, t.amount || t.amt || 0, t.earner || null);
+    });
+
+    fixedIncomes.forEach(f => {
+      if (!f.start || !f.end) return;
+      let cur = f.start;
+      while (cur <= f.end) {
+        const taxMonth = shiftMonthBack(cur);
+        addToYearMap(taxMonth, f.amount || 0, f.earner || null);
+        const [y, m] = cur.split('-').map(Number);
+        const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+        cur = nextMonth;
+      }
+    });
+
+    const years = {};
+    for (const [year, info] of Object.entries(yearMap)) {
+      const monthCount = info.months.size;
+      const isComplete = monthCount === 12;
+      const fatherMonthly = monthCount > 0 ? Math.round(info.father / monthCount) : 0;
+      const motherMonthly = monthCount > 0 ? Math.round(info.mother / monthCount) : 0;
+      const untaggedMonthly = monthCount > 0 ? Math.round(info.untagged / monthCount) : 0;
+
+      years[year] = {
+        monthCount, isComplete, fatherMonthly, motherMonthly, untaggedMonthly,
+        totalAnnual: info.total, fatherAnnual: info.father, motherAnnual: info.mother, untaggedAnnual: info.untagged
+      };
+    }
+
+    return { years, availableYears: Object.keys(years).sort().reverse() };
+  }
+
+  if (_isDemoMode) {
+    // Demo mode - use fictitious data
+    const demoUser = (await import('./demo-data.js')).getDemoUser();
+    document.getElementById('nav-user').innerHTML = `<span>${demoUser.displayName}</span>`;
+
+    const transactions = _demoFinanceData.transactions || [];
+    const fixedIncomes = _demoFinanceData.fixedIncomes || [];
+    const result = processIncomeData(transactions, fixedIncomes);
+    window.__taxData = { loaded: true, years: result.years, availableYears: result.availableYears };
+
+    // Add demo banner
     const root = document.getElementById('root');
+    const banner = document.createElement('div');
+    banner.className = 'data-banner warning';
+    banner.style.cssText = 'margin: 12px 14px;';
+    banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
+    root.parentNode.insertBefore(banner, root);
 
-    if (!user) {
-      window.location.href = 'login.html';
-      return;
-    }
-
-    // Show user in nav
-    document.getElementById('nav-user').innerHTML = `
-      ${user.photoURL ? `<img src="${user.photoURL}" alt="">` : ''}
-      <span>${user.displayName || user.email}</span>
-    `;
-
-    // Load finance data from Firebase
-    try {
-      const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
-      window.__financeDocRef = userDocRef;
-      const docSnap = await getDoc(userDocRef);
-
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        window.__financeData = data;
-        window.__payslipData = { payslips: data.payslips || [], loaded: true };
-        document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
-        const transactions = data.transactions || [];
-        const fixedIncomes = data.fixedIncomes || [];
-
-        // Analyze income by year and earner
-        // IMPORTANT: Month offset - the tracker runs 15th-to-15th,
-        // so salary entering on the 10th is logged in the tracker's "current" month
-        // but belongs to the PREVIOUS month for tax purposes.
-        // e.g. tracker "January 2025" = tax "December 2024"
-        const yearMap = {};
-
-        function shiftMonthBack(trackerMonth) {
-          // trackerMonth is "YYYY-MM", shift back 1 month for tax purposes
-          const [y, m] = trackerMonth.split('-').map(Number);
-          if (m === 1) return `${y - 1}-12`;
-          return `${y}-${String(m - 1).padStart(2, '0')}`;
-        }
-
-        function addToYearMap(taxMonth, amt, earner) {
-          const taxYear = taxMonth.substring(0, 4);
-          const taxMM = taxMonth.substring(5, 7);
-          if (!yearMap[taxYear]) yearMap[taxYear] = { months: new Set(), father: 0, mother: 0, untagged: 0, total: 0, monthlyFather: {}, monthlyMother: {}, monthlyUntagged: {} };
-          yearMap[taxYear].months.add(taxMM);
-          yearMap[taxYear].total += amt;
-          if (earner === 'father') {
-            yearMap[taxYear].father += amt;
-            yearMap[taxYear].monthlyFather[taxMM] = (yearMap[taxYear].monthlyFather[taxMM] || 0) + amt;
-          } else if (earner === 'mother') {
-            yearMap[taxYear].mother += amt;
-            yearMap[taxYear].monthlyMother[taxMM] = (yearMap[taxYear].monthlyMother[taxMM] || 0) + amt;
-          } else {
-            yearMap[taxYear].untagged += amt;
-            yearMap[taxYear].monthlyUntagged[taxMM] = (yearMap[taxYear].monthlyUntagged[taxMM] || 0) + amt;
-          }
-        }
-
-        // Process regular transactions
-        transactions.forEach(t => {
-          if (t.type !== 'income' || !t.month) return;
-          const taxMonth = shiftMonthBack(t.month);
-          addToYearMap(taxMonth, t.amt || 0, t.earner || null);
-        });
-
-        // Process fixed incomes (expand into months)
-        fixedIncomes.forEach(f => {
-          if (!f.start || !f.end) return;
-          let cur = f.start;
-          while (cur <= f.end) {
-            const taxMonth = shiftMonthBack(cur);
-            addToYearMap(taxMonth, f.amount || 0, f.earner || null);
-
-            // Advance to next month
-            const [y, m] = cur.split('-').map(Number);
-            const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-            cur = nextMonth;
-          }
-        });
-
-        // Calculate averages and completeness
-        const years = {};
-        for (const [year, info] of Object.entries(yearMap)) {
-          const monthCount = info.months.size;
-          const isComplete = monthCount === 12;
-          const fatherMonthly = monthCount > 0 ? Math.round(info.father / monthCount) : 0;
-          const motherMonthly = monthCount > 0 ? Math.round(info.mother / monthCount) : 0;
-          const untaggedMonthly = monthCount > 0 ? Math.round(info.untagged / monthCount) : 0;
-
-          years[year] = {
-            monthCount,
-            isComplete,
-            fatherMonthly,
-            motherMonthly,
-            untaggedMonthly,
-            totalAnnual: info.total,
-            fatherAnnual: info.father,
-            motherAnnual: info.mother,
-            untaggedAnnual: info.untagged
-          };
-        }
-
-        const availableYears = Object.keys(years).sort().reverse();
-
-        window.__taxData = { loaded: true, years, availableYears };
-      }
-    } catch (e) {
-      console.error('Failed to load finance data:', e);
-    }
-
-    // Load saved tax optimizer settings
-    try {
-      const settingsRef = doc(db, 'users', user.uid, 'finance', 'taxSettings');
-      const settingsSnap = await getDoc(settingsRef);
-      if (settingsSnap.exists()) {
-        window.__taxSettings = settingsSnap.data();
-      }
-    } catch (e) {
-      console.error('Failed to load tax settings:', e);
-    }
-
-    // Show app
+    const loading = document.getElementById('auth-loading');
     loading.style.display = 'none';
     root.style.display = 'block';
-
-    // Trigger React render
     if (window.__renderApp) window.__renderApp();
-  });
+  } else {
+    onAuthStateChanged(auth, async (user) => {
+      const loading = document.getElementById('auth-loading');
+      const root = document.getElementById('root');
+
+      if (!user) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      // Show user in nav
+      document.getElementById('nav-user').innerHTML = `
+        ${user.photoURL ? `<img src="${user.photoURL}" alt="">` : ''}
+        <span>${user.displayName || user.email}</span>
+      `;
+
+      // Load finance data from Firebase
+      try {
+        const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
+        window.__financeDocRef = userDocRef;
+        const docSnap = await getDoc(userDocRef);
+
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          window.__financeData = data;
+          window.__payslipData = { payslips: data.payslips || [], loaded: true };
+          document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
+          const transactions = data.transactions || [];
+          const fixedIncomes = data.fixedIncomes || [];
+
+          const result = processIncomeData(transactions, fixedIncomes);
+          window.__taxData = { loaded: true, years: result.years, availableYears: result.availableYears };
+        }
+      } catch (e) {
+        console.error('Failed to load finance data:', e);
+      }
+
+      // Load saved tax optimizer settings
+      try {
+        const settingsRef = doc(db, 'users', user.uid, 'finance', 'taxSettings');
+        const settingsSnap = await getDoc(settingsRef);
+        if (settingsSnap.exists()) {
+          window.__taxSettings = settingsSnap.data();
+        }
+      } catch (e) {
+        console.error('Failed to load tax settings:', e);
+      }
+
+      // Show app
+      loading.style.display = 'none';
+      root.style.display = 'block';
+
+      // Trigger React render
+      if (window.__renderApp) window.__renderApp();
+    });
+  }
 </script>
 
 <script type="text/babel">
