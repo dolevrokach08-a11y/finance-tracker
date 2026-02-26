@@ -166,9 +166,10 @@ function generateDemoPortfolioData() {
 
     const holdings = [
         {
+            id: Date.now() + 1,
             symbol: 'VT',
             name: 'Vanguard Total World Stock ETF',
-            units: 45,
+            shares: 45,
             costBasis: 98.50,
             currentPrice: 108.20,
             currency: 'USD',
@@ -176,9 +177,10 @@ function generateDemoPortfolioData() {
             purchaseDate: `${currentYear - 1}-03-15`
         },
         {
+            id: Date.now() + 2,
             symbol: 'CSPX',
             name: 'iShares Core S&P 500 UCITS',
-            units: 20,
+            shares: 20,
             costBasis: 450.00,
             currentPrice: 520.30,
             currency: 'USD',
@@ -186,9 +188,10 @@ function generateDemoPortfolioData() {
             purchaseDate: `${currentYear - 1}-06-10`
         },
         {
+            id: Date.now() + 3,
             symbol: 'AVDV',
             name: 'Avantis Intl Small Cap Value',
-            units: 60,
+            shares: 60,
             costBasis: 62.30,
             currentPrice: 67.80,
             currency: 'USD',
@@ -196,9 +199,10 @@ function generateDemoPortfolioData() {
             purchaseDate: `${currentYear}-01-20`
         },
         {
+            id: Date.now() + 4,
             symbol: 'AVES',
             name: 'Avantis EM Value ETF',
-            units: 35,
+            shares: 35,
             costBasis: 55.10,
             currentPrice: 58.40,
             currency: 'USD',
@@ -206,9 +210,10 @@ function generateDemoPortfolioData() {
             purchaseDate: `${currentYear}-02-05`
         },
         {
+            id: Date.now() + 5,
             symbol: '1159235',
             name: 'קסם KTF תל-בונד שקלי 0-3',
-            units: 500,
+            shares: 500,
             costBasis: 105.20,
             currentPrice: 106.80,
             currency: 'ILS',
