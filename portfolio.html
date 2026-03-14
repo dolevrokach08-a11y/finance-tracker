@@ -2812,8 +2812,9 @@
         // ===========================================
         const CORS_PROXIES = [
             'https://api.allorigins.win/raw?url=',
-            'https://corsproxy.io/?',
-            'https://api.codetabs.com/v1/proxy?quest='
+            'https://corsproxy.io/?url=',
+            'https://api.codetabs.com/v1/proxy?quest=',
+            'https://thingproxy.freeboard.io/fetch/'
         ];
 
         // ===========================================
@@ -2821,9 +2822,9 @@
         // ===========================================
 
         // 🔄 Fetch with AbortController timeout
-        function fetchWithTimeout(url, options = {}, timeoutMs = 10000) {
+        function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+            const timeoutId = setTimeout(() => controller.abort('Timeout after ' + timeoutMs + 'ms'), timeoutMs);
             return fetch(url, { ...options, signal: controller.signal })
                 .finally(() => clearTimeout(timeoutId));
         }
@@ -4948,15 +4949,16 @@ function calculateTWRv3() {
         async function fetchYahooChart(symbol) {
             // Using CORS proxy to bypass CORS restrictions
             const proxies = CORS_PROXIES;
-            
-            for (const proxy of proxies) {
+
+            for (let i = 0; i < proxies.length; i++) {
                 try {
+                    if (i > 0) await new Promise(r => setTimeout(r, 300));
                     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`;
-                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
+                    const data = await safeFetchJSON(proxies[i] + encodeURIComponent(url));
                     const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
                     if (price && price > 0) return price;
                 } catch (e) {
-                    console.log(`Proxy ${proxy} failed:`, e.message);
+                    console.log(`Proxy ${proxies[i]} failed:`, e.message);
                 }
             }
         }
@@ -4984,10 +4986,11 @@ function calculateTWRv3() {
                 let priceHistory = null;
                 let timestamps = null;
 
-                for (const proxy of proxies) {
+                for (let pi = 0; pi < proxies.length; pi++) {
                     try {
+                        if (pi > 0) await new Promise(r => setTimeout(r, 500));
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
+                        const data = await safeFetchJSON(proxies[pi] + encodeURIComponent(url), {}, 20000);
                         const result = data.chart?.result?.[0];
 
                         if (!result) continue;
@@ -5000,7 +5003,7 @@ function calculateTWRv3() {
                             break;
                         }
                     } catch (e) {
-                        console.log(`Failed to fetch ${symbol} history from ${proxy}:`, e.message);
+                        console.log(`Failed to fetch ${symbol} history from ${proxies[pi]}:`, e.message);
                     }
                 }
                 
@@ -5108,10 +5111,11 @@ function calculateTWRv3() {
                 } else {
                     const proxies = CORS_PROXIES;
 
-                    for (const proxy of proxies) {
+                    for (let pi = 0; pi < proxies.length; pi++) {
                         try {
+                            if (pi > 0) await new Promise(r => setTimeout(r, 500));
                             const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                            const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
+                            const data = await safeFetchJSON(proxies[pi] + encodeURIComponent(url), {}, 20000);
                             const result = data.chart?.result?.[0];
 
                             if (!result) continue;
@@ -5312,10 +5316,11 @@ function calculateTWRv3() {
 
                 const proxies = CORS_PROXIES;
 
-                for (const proxy of proxies) {
+                for (let pi = 0; pi < proxies.length; pi++) {
                     try {
+                        if (pi > 0) await new Promise(r => setTimeout(r, 500));
                         const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
-                        const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 10000);
+                        const data = await safeFetchJSON(proxies[pi] + encodeURIComponent(url), {}, 20000);
                         const quotes = data.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
 
                         if (!quotes || quotes.length < 2) continue;
@@ -5336,7 +5341,7 @@ function calculateTWRv3() {
                         return returnPct;
 
                     } catch (e) {
-                        console.log(`Failed to fetch ${symbol} from ${proxy}:`, e.message);
+                        console.log(`Failed to fetch ${symbol} from ${proxies[pi]}:`, e.message);
                     }
                 }
 
@@ -5384,15 +5389,16 @@ function calculateTWRv3() {
         
         async function fetchYahooQuote(symbol) {
             const proxies = CORS_PROXIES;
-            
-            for (const proxy of proxies) {
+
+            for (let i = 0; i < proxies.length; i++) {
                 try {
+                    if (i > 0) await new Promise(r => setTimeout(r, 300));
                     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
-                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
+                    const data = await safeFetchJSON(proxies[i] + encodeURIComponent(url));
                     const price = data.quoteResponse?.result?.[0]?.regularMarketPrice;
                     if (price && price > 0) return price;
                 } catch (e) {
-                    console.log(`Proxy ${proxy} failed:`, e.message);
+                    console.log(`Proxy ${proxies[i]} failed:`, e.message);
                 }
             }
             throw new Error('All proxies failed');
@@ -5400,15 +5406,16 @@ function calculateTWRv3() {
         
         async function fetchYahooV10(symbol) {
             const proxies = CORS_PROXIES;
-            
-            for (const proxy of proxies) {
+
+            for (let i = 0; i < proxies.length; i++) {
                 try {
+                    if (i > 0) await new Promise(r => setTimeout(r, 300));
                     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${symbol}?modules=price`;
-                    const data = await safeFetchJSON(proxy + encodeURIComponent(url));
+                    const data = await safeFetchJSON(proxies[i] + encodeURIComponent(url));
                     const price = data.quoteSummary?.result?.[0]?.price?.regularMarketPrice?.raw;
                     if (price && price > 0) return price;
                 } catch (e) {
-                    console.log(`Proxy ${proxy} failed:`, e.message);
+                    console.log(`Proxy ${proxies[i]} failed:`, e.message);
                 }
             }
             throw new Error('All proxies failed');
@@ -5503,8 +5510,8 @@ function calculateTWRv3() {
             const errors = [];
             const manualUpdateNeeded = [];
             
-            // 🚀 שאיבה ב-batches של 3 במקביל (במקום סדרתי)
-            const BATCH_SIZE = 3;
+            // 🚀 שאיבה ב-batches של 2 במקביל (כדי לא להעמיס על הפרוקסים)
+            const BATCH_SIZE = 2;
             const holdingsToFetch = [];
 
             for (let i = 0; i < portfolio.holdings.length; i++) {
@@ -5569,9 +5576,9 @@ function calculateTWRv3() {
                     }
                 }
 
-                // המתנה בין batches
+                // המתנה בין batches (כדי לא להעמיס על הפרוקסים)
                 if (batchStart + BATCH_SIZE < holdingsToFetch.length) {
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
             
@@ -11931,41 +11938,42 @@ ${msg}`, 'warning');
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
 
                     } else {
-                        // ✅ שלב 2: Fallback - נסה פרוקסים עם retry
+                        // ✅ שלב 2: Fallback - נסה פרוקסים עם retry (בזה אחר זה כדי לא להעמיס על הפרוקסים)
                         console.log('⚠️ No Firebase data, trying proxies with retry...');
 
-                        const proxyResults = await Promise.allSettled(
-                            indexConfig.map(idx =>
-                                fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 1500)
-                            )
-                        );
-
-                        indexConfig.forEach((idx, i) => {
-                            if (proxyResults[i].status === 'fulfilled' && proxyResults[i].value !== null) {
-                                indexResults[idx.key] = proxyResults[i].value;
-                                useTWR = true;
-                                console.log(`✅ ${idx.key} TWR: ${proxyResults[i].value.toFixed(2)}%`);
-                            } else {
-                                console.log(`❌ ${idx.key} TWR failed`);
+                        for (const idx of indexConfig) {
+                            try {
+                                const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000);
+                                if (result !== null) {
+                                    indexResults[idx.key] = result;
+                                    useTWR = true;
+                                    console.log(`✅ ${idx.key} TWR: ${result.toFixed(2)}%`);
+                                } else {
+                                    console.log(`❌ ${idx.key} TWR failed`);
+                                }
+                            } catch (e) {
+                                console.log(`❌ ${idx.key} TWR failed:`, e.message);
                             }
-                        });
+                            // Small delay between indices to avoid rate limiting
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
 
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
                     }
                 } else {
-                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון עם retry
+                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון עם retry (בזה אחר זה)
                     console.log('🌐 No snapshots, using simple return calculation with retry');
-                    const simpleResults = await Promise.allSettled(
-                        indexConfig.map(idx =>
-                            fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 1500)
-                        )
-                    );
-
-                    indexConfig.forEach((idx, i) => {
-                        if (simpleResults[i].status === 'fulfilled' && simpleResults[i].value !== null) {
-                            indexResults[idx.key] = simpleResults[i].value;
+                    for (const idx of indexConfig) {
+                        try {
+                            const result = await fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 2000);
+                            if (result !== null) {
+                                indexResults[idx.key] = result;
+                            }
+                        } catch (e) {
+                            console.log(`❌ ${idx.key} simple return failed:`, e.message);
                         }
-                    });
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
 
                     dataSource = `מ-${firstDate.toLocaleDateString('he-IL')}`;
                 }
