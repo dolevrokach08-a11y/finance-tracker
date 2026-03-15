@@ -130,126 +130,158 @@
         /* ==================== LAYOUT ==================== */
         .app-container {
             display: flex;
+            flex-direction: column;
             min-height: 100vh;
         }
-        
-        /* Sidebar Navigation */
+
+        /* Top Navigation Bar (was sidebar) */
         .sidebar {
-            width: 220px;
+            width: 100%;
             background: var(--bg-surface);
-            border-left: 1px solid var(--border);
-            padding: 20px 12px;
-            position: fixed;
-            right: 0;
+            border-bottom: 1px solid var(--border);
+            padding: 0;
+            position: sticky;
             top: 0;
-            height: 100vh;
+            height: auto;
             display: flex;
             flex-direction: column;
             z-index: 100;
         }
-        
+
+        /* Page header inside nav */
         .sidebar-logo {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 32px;
-            padding: 0 8px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 12px;
+            padding: 16px 32px;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0;
         }
 
         .sidebar-logo span {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 8px;
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
             background: var(--accent-dim);
+            font-size: 1.2rem;
         }
-        
+
         .sidebar-nav {
             display: flex;
-            flex-direction: column;
-            gap: 2px;
-            flex: 1;
-            overflow-y: auto;
+            flex-direction: row;
+            gap: 0;
+            flex: unset;
+            overflow-x: auto;
+            padding: 0 32px;
+            border-top: 1px solid var(--border);
         }
-        
+
         .nav-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
-            border-radius: var(--radius-sm);
-            color: var(--text-secondary);
+            gap: 8px;
+            padding: 14px 20px;
+            border-radius: 0;
+            color: var(--text-muted);
             text-decoration: none;
             transition: all 0.15s ease;
             cursor: pointer;
             border: none;
+            border-bottom: 2px solid transparent;
             background: transparent;
             font-size: 0.9rem;
             font-family: inherit;
-            width: 100%;
-            text-align: right;
+            width: auto;
+            text-align: center;
+            white-space: nowrap;
         }
-        
+
         .nav-item:hover {
-            background: var(--bg-hover);
+            background: transparent;
             color: var(--text-primary);
         }
-        
+
         .nav-item.active {
-            background: var(--accent-dim);
+            background: transparent;
             color: var(--accent);
             font-weight: 600;
+            border-bottom-color: var(--accent);
         }
-        
+
         .nav-item i, .nav-item svg {
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             opacity: 0.7;
         }
-        
+
         .nav-item.active i, .nav-item.active svg {
             opacity: 1;
         }
-        
+
         .sidebar-footer {
-            margin-top: auto;
-            padding-top: 16px;
-            border-top: 1px solid var(--border);
+            display: none;
         }
-        
+
         .theme-btn {
+            display: none;
+        }
+
+        /* Top header row */
+        .top-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 32px;
+        }
+
+        .top-header-actions {
             display: flex;
             align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
-            border-radius: var(--radius-sm);
+            gap: 8px;
+        }
+
+        .header-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 14px;
+            border-radius: 8px;
             color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 500;
             background: transparent;
-            border: none;
+            border: 1px solid var(--border);
             cursor: pointer;
-            width: 100%;
-            font-size: 0.9rem;
             font-family: inherit;
-            text-align: right;
             transition: all 0.15s ease;
         }
-        
-        .theme-btn:hover {
-            background: var(--bg-hover);
+
+        .header-link:hover {
             color: var(--text-primary);
+            border-color: var(--border-accent);
+            background: var(--bg-elevated);
         }
-        
+
+        .header-link i, .header-link svg {
+            width: 14px;
+            height: 14px;
+        }
+
         /* Main Content */
         .main-content {
             flex: 1;
-            margin-right: 220px;
+            margin-right: 0;
             padding: 24px 32px;
-            min-height: 100vh;
+            min-height: calc(100vh - 120px);
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
         }
         
         /* ==================== LOADING SCREEN ==================== */
@@ -295,16 +327,29 @@
         }
         
         /* ==================== CARDS ==================== */
-        .glass, .card {
+        .glass {
+            background: transparent;
+            border-radius: 0;
+            padding: 0;
+            margin-bottom: 0;
+            border: none;
+            transition: none;
+        }
+
+        .glass:hover {
+            border-color: transparent;
+        }
+
+        .card {
             background: var(--bg-surface);
             border-radius: var(--radius);
             padding: 24px;
             margin-bottom: 20px;
             border: 1px solid var(--border);
-            transition: all 0.25s ease;
+            transition: all 0.2s ease;
         }
 
-        .glass:hover, .card:hover {
+        .card:hover {
             border-color: var(--border-accent);
         }
         
@@ -464,8 +509,8 @@
         }
         
         .sub-tab-btn.active {
-            background: var(--accent-dim);
-            color: var(--accent);
+            background: var(--accent);
+            color: var(--bg-base);
             font-weight: 600;
         }
         
@@ -648,26 +693,20 @@
         /* ==================== SUMMARY CARDS ==================== */
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
             margin-bottom: 24px;
         }
         
         .summary-card {
             background: var(--bg-surface);
             color: var(--text-primary);
-            padding: 20px 24px;
+            padding: 18px 20px;
             border-radius: var(--radius);
             border: 1px solid var(--border);
-            transition: all 0.25s ease;
+            transition: all 0.2s ease;
             position: relative;
             overflow: hidden;
-            animation: slideUp 0.4s ease both;
-        }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
         }
 
         .summary-card::before {
@@ -676,31 +715,22 @@
 
         .summary-card:hover {
             border-color: var(--border-accent);
-            transform: translateY(-1px);
         }
 
-        .summary-card.green {
-            border-color: var(--accent);
-            background: linear-gradient(135deg, var(--bg-surface) 0%, hsla(142, 60%, 50%, 0.06) 100%);
-        }
-
-        .summary-card.green:hover {
-            box-shadow: 0 0 20px hsla(142, 60%, 50%, 0.15);
-        }
-
-        .summary-card.purple {
-            border-color: hsl(280, 60%, 60%);
-            background: linear-gradient(135deg, var(--bg-surface) 0%, hsla(280, 60%, 60%, 0.06) 100%);
-        }
-
-        .summary-card.blue {
-            border-color: var(--info);
-            background: linear-gradient(135deg, var(--bg-surface) 0%, hsla(210, 80%, 55%, 0.06) 100%);
-        }
-
+        .summary-card.green,
+        .summary-card.purple,
+        .summary-card.blue,
         .summary-card.orange {
-            border-color: var(--warning);
-            background: linear-gradient(135deg, var(--bg-surface) 0%, hsla(38, 92%, 55%, 0.06) 100%);
+            border-color: var(--border);
+            background: var(--bg-surface);
+        }
+
+        .summary-card.green:hover,
+        .summary-card.purple:hover,
+        .summary-card.blue:hover,
+        .summary-card.orange:hover {
+            border-color: var(--border-accent);
+            box-shadow: none;
         }
         
         .summary-card h3 {
@@ -738,17 +768,17 @@
         }
         
         .chart-container {
-            background: var(--glass-bg);
+            background: var(--bg-surface);
             padding: 24px;
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-lg);
+            border-radius: var(--radius);
+            box-shadow: none;
             height: 400px;
-            border: 1px solid var(--border-color);
-            transition: all 0.25s ease;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
         }
-        
+
         .chart-container:hover {
-            box-shadow: 0 14px 44px var(--shadow-color);
+            border-color: var(--border-accent);
         }
         
         .chart-container.large {
@@ -1658,58 +1688,63 @@
         
         /* ==================== RESPONSIVE ==================== */
         @media (max-width: 1024px) {
-            .sidebar {
-                width: 180px;
-            }
             .main-content {
-                margin-right: 180px;
+                padding: 20px;
+            }
+            .sidebar-nav {
+                padding: 0 16px;
+            }
+            .sidebar-logo {
+                padding: 12px 16px;
             }
         }
-        
+
         @media (max-width: 768px) {
             .sidebar {
                 position: fixed;
                 bottom: 0;
-                right: 0;
-                left: 0;
                 top: auto;
-                width: 100%;
-                height: auto;
-                flex-direction: row;
-                padding: 8px 12px;
-                border-left: none;
+                border-bottom: none;
                 border-top: 1px solid var(--border);
-                overflow-x: auto;
+                flex-direction: row;
             }
-            
+
             .sidebar-logo { display: none; }
-            
+            .top-header { display: none; }
+
             .sidebar-nav {
                 flex-direction: row;
-                gap: 4px;
+                gap: 0;
                 overflow-x: auto;
+                padding: 0;
+                border-top: none;
+                width: 100%;
+                justify-content: space-around;
             }
-            
+
             .nav-item {
-                padding: 8px 12px;
+                padding: 10px 12px;
                 flex-direction: column;
                 gap: 2px;
                 font-size: 0.7rem;
-                white-space: nowrap;
+                border-bottom: none;
+                border-top: 2px solid transparent;
             }
-            
-            .sidebar-footer { display: none; }
-            
+
+            .nav-item.active {
+                border-bottom: none;
+                border-top-color: var(--accent);
+            }
+
             .main-content {
-                margin-right: 0;
                 padding: 16px;
                 padding-bottom: 80px;
             }
-            
+
             .charts-grid {
                 grid-template-columns: 1fr;
             }
-            
+
             .summary-grid {
                 grid-template-columns: 1fr;
             }
@@ -1805,13 +1840,6 @@
             transition: all 0.2s ease;
         }
 
-        /* Sub-tabs pill style to match Lovable */
-        .sub-tab-btn.active {
-            background: var(--accent);
-            color: var(--bg-base);
-            font-weight: 600;
-        }
-
         /* Better focus ring */
         :focus-visible {
             outline: 2px solid var(--accent);
@@ -1857,13 +1885,28 @@
     <!-- App Container -->
     <div id="mainContent" style="display: none;" class="app-container">
         
-        <!-- Sidebar Navigation -->
+        <!-- Top Navigation Bar -->
         <nav class="sidebar">
-            <div class="sidebar-logo">
-                <span style="font-size: 1.3rem;">📈</span>
-                Portfolio
+            <div class="top-header">
+                <div class="sidebar-logo">
+                    <span>📈</span>
+                    תיק השקעות
+                </div>
+                <div class="top-header-actions">
+                    <a href="finance.html" class="header-link">
+                        <i data-lucide="wallet"></i>
+                        מעקב כספי
+                    </a>
+                    <a href="tax-optimizer.html" class="header-link">
+                        🧮 אופטימיזציית מס
+                    </a>
+                    <button class="header-link" onclick="toggleTheme()" id="themeToggleBtn">
+                        <span id="theme-icon">☀️</span>
+                        <span>מצב בהיר</span>
+                    </button>
+                </div>
             </div>
-            
+
             <div class="sidebar-nav">
                 <button class="nav-item active" onclick="showTab('overview')">
                     <i data-lucide="layout-dashboard"></i>
@@ -1890,20 +1933,12 @@
                     <span>הגדרות</span>
                 </button>
             </div>
-            
+
             <div class="sidebar-footer">
                 <button class="theme-btn" onclick="toggleTheme()">
-                    <span id="theme-icon">☀️</span>
+                    <span>☀️</span>
                     <span>מצב בהיר</span>
                 </button>
-                <a href="finance.html" class="nav-item" style="margin-top: 8px; text-decoration: none;">
-                    <i data-lucide="wallet"></i>
-                    <span>מעקב כספי</span>
-                </a>
-                <a href="tax-optimizer.html" class="nav-item" style="margin-top: 4px; text-decoration: none;">
-                    <span style="font-size: 18px;">🧮</span>
-                    <span>אופטימיזציית מס</span>
-                </a>
             </div>
         </nav>
 
