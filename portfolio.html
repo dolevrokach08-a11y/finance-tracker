@@ -694,14 +694,14 @@
         .summary-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
+            gap: 16px;
             margin-bottom: 24px;
         }
-        
+
         .summary-card {
             background: var(--bg-surface);
             color: var(--text-primary);
-            padding: 18px 20px;
+            padding: 20px 24px;
             border-radius: var(--radius);
             border: 1px solid var(--border);
             transition: all 0.2s ease;
@@ -715,6 +715,8 @@
 
         .summary-card:hover {
             border-color: var(--border-accent);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
 
         .summary-card.green,
@@ -730,12 +732,12 @@
         .summary-card.blue:hover,
         .summary-card.orange:hover {
             border-color: var(--border-accent);
-            box-shadow: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
         }
-        
+
         .summary-card h3 {
             font-size: 0.8rem;
-            color: var(--text-secondary);
+            color: var(--text-muted);
             margin-bottom: 10px;
             text-transform: none;
             letter-spacing: 0.2px;
@@ -745,8 +747,24 @@
             gap: 8px;
         }
 
+        .summary-card .card-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 12px;
+        }
+        .summary-card .card-icon.green { background: hsla(142, 60%, 50%, 0.12); color: var(--profit); }
+        .summary-card .card-icon.purple { background: hsla(270, 60%, 55%, 0.12); color: #a855f7; }
+        .summary-card .card-icon.blue { background: hsla(210, 80%, 55%, 0.12); color: var(--info); }
+        .summary-card .card-icon.orange { background: hsla(38, 92%, 55%, 0.12); color: var(--warning); }
+        .summary-card .card-icon.cyan { background: hsla(190, 80%, 50%, 0.12); color: #06b6d4; }
+        .summary-card .card-icon.red { background: hsla(0, 72%, 55%, 0.12); color: var(--loss); }
+
         .summary-card .value {
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             font-weight: 700;
             margin-bottom: 4px;
             font-family: 'JetBrains Mono', monospace;
@@ -756,8 +774,138 @@
 
         .summary-card .sub {
             font-size: 0.8rem;
-            color: var(--text-secondary);
+            color: var(--text-muted);
         }
+
+        /* Lovable-style group badge */
+        .group-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+        .group-badge.green { background: hsla(142, 60%, 50%, 0.12); color: hsl(142, 55%, 38%); }
+        .group-badge.blue { background: hsla(210, 80%, 55%, 0.12); color: hsl(210, 70%, 45%); }
+        .group-badge.purple { background: hsla(270, 60%, 55%, 0.12); color: hsl(270, 55%, 50%); }
+        .group-badge.orange { background: hsla(38, 92%, 55%, 0.12); color: hsl(38, 70%, 40%); }
+        .group-badge.red { background: hsla(0, 72%, 55%, 0.12); color: hsl(0, 60%, 48%); }
+        .group-badge.cyan { background: hsla(190, 80%, 50%, 0.12); color: hsl(190, 70%, 35%); }
+        .group-badge.pink { background: hsla(330, 70%, 55%, 0.12); color: hsl(330, 60%, 45%); }
+        .group-badge.gray { background: hsla(220, 10%, 50%, 0.12); color: hsl(220, 10%, 45%); }
+
+        [data-theme="dark"] .group-badge.green { color: hsl(142, 60%, 55%); }
+        [data-theme="dark"] .group-badge.blue { color: hsl(210, 80%, 60%); }
+        [data-theme="dark"] .group-badge.purple { color: hsl(270, 60%, 65%); }
+        [data-theme="dark"] .group-badge.orange { color: hsl(38, 80%, 60%); }
+        [data-theme="dark"] .group-badge.red { color: hsl(0, 72%, 60%); }
+        [data-theme="dark"] .group-badge.cyan { color: hsl(190, 80%, 55%); }
+        [data-theme="dark"] .group-badge.pink { color: hsl(330, 70%, 60%); }
+        [data-theme="dark"] .group-badge.gray { color: hsl(220, 10%, 60%); }
+
+        /* Lovable-style transaction cards */
+        .tx-card {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px 20px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 8px;
+            transition: all 0.15s ease;
+        }
+        .tx-card:hover { border-color: var(--border-accent); }
+        .tx-card .tx-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .tx-card .tx-icon.buy { background: hsla(142, 60%, 50%, 0.12); }
+        .tx-card .tx-icon.sell { background: hsla(0, 72%, 55%, 0.12); }
+        .tx-card .tx-icon.deposit { background: hsla(210, 80%, 55%, 0.12); }
+        .tx-card .tx-icon.withdrawal { background: hsla(38, 92%, 55%, 0.12); }
+        .tx-card .tx-details { flex: 1; }
+        .tx-card .tx-details .tx-title { font-weight: 600; color: var(--text-primary); font-size: 0.9rem; }
+        .tx-card .tx-details .tx-sub { color: var(--text-muted); font-size: 0.8rem; margin-top: 2px; }
+        .tx-card .tx-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .tx-card .tx-badge.buy { background: hsla(142, 60%, 50%, 0.12); color: var(--profit); }
+        .tx-card .tx-badge.sell { background: hsla(0, 72%, 55%, 0.12); color: var(--loss); }
+        .tx-card .tx-badge.deposit { background: hsla(210, 80%, 55%, 0.12); color: var(--info); }
+        .tx-card .tx-badge.withdrawal { background: hsla(38, 92%, 55%, 0.12); color: var(--warning); }
+        .tx-card .tx-amount { font-weight: 700; font-family: 'JetBrains Mono', monospace; color: var(--text-primary); font-size: 0.95rem; text-align: left; min-width: 100px; }
+
+        /* Lovable-style KPI card */
+        .kpi-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px 20px;
+            text-align: center;
+            transition: all 0.2s ease;
+        }
+        .kpi-card:hover { border-color: var(--border-accent); transform: translateY(-1px); }
+        .kpi-card .kpi-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 1.3rem;
+        }
+        .kpi-card .kpi-label { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; margin-bottom: 8px; letter-spacing: 0.5px; }
+        .kpi-card .kpi-value { font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+        .kpi-card .kpi-desc { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; }
+
+        /* Clean section card */
+        .section-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 16px;
+        }
+        .section-card .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Clean action buttons for holdings table */
+        .action-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-size: 0.8rem;
+        }
+        .action-btn:hover { background: var(--bg-hover); border-color: var(--border-accent); color: var(--text-primary); }
+        .action-btn.danger:hover { color: var(--loss); border-color: hsla(0, 72%, 55%, 0.3); }
         
         /* ==================== CHARTS CONTAINER ==================== */
         .charts-grid {
@@ -1968,129 +2116,135 @@
                 <!-- ===== TAB: OVERVIEW ===== -->
                 <div id="tab-overview" class="tab-content active">
                     <div class="page-header">
-                        <h1>💼 סיכום תיק ההשקעות</h1>
-                        <p>מבט על הביצועים והתשואות שלך</p>
+                        <h1 style="font-size: 1.4rem; font-weight: 700;">סיכום תיק ההשקעות</h1>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">מבט על הביצועים והתשואות שלך</p>
                     </div>
 
-                    <!-- Main TWR Hero Card -->
+                    <!-- Main Summary Cards - Lovable Style -->
                     <div class="summary-grid">
-                        <div class="summary-card purple">
-                            <h3><i data-lucide="trending-up"></i> תשואה כוללת (TWR)</h3>
+                        <div class="summary-card">
+                            <div class="card-icon purple"><i data-lucide="trending-up" style="width:20px;height:20px;"></i></div>
+                            <h3>תשואה כוללת (TWR)</h3>
                             <div class="value" id="main-twr-display">--</div>
                             <div class="sub" id="twr-breakdown">בטעינה...</div>
-                            <div class="sub" id="twr-period-info" style="margin-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px;">
-                                📅 מתחילת התיק
+                            <div class="sub" id="twr-period-info" style="margin-top: 8px; opacity: 0.7;">
+                                מתחילת התיק
                             </div>
                         </div>
 
-                        <div class="summary-card green">
-                            <h3><i data-lucide="dollar-sign"></i> רווח/הפסד מוחלט</h3>
+                        <div class="summary-card">
+                            <div class="card-icon green"><i data-lucide="dollar-sign" style="width:20px;height:20px;"></i></div>
+                            <h3>רווח/הפסד מוחלט</h3>
                             <div class="value" id="main-profit-display">₪0</div>
                             <div class="sub" id="overview-total-deposits">הושקע: ₪0</div>
                         </div>
 
-                        <div class="summary-card blue">
-                            <h3><i data-lucide="wallet"></i> שווי כולל</h3>
-                            <div class="value" id="total-value">₪0</div>
+                        <div class="summary-card">
+                            <div class="card-icon blue"><i data-lucide="wallet" style="width:20px;height:20px;"></i></div>
+                            <h3>שווי כולל</h3>
+                            <div class="value" id="total-value" style="color: var(--profit);">₪0</div>
                             <div class="sub">נכסים + מזומן</div>
                         </div>
                     </div>
 
-                    <!-- Asset Cards Grid -->
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <!-- Asset Cards Grid - Lovable Style -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 20px;">
                         <!-- Stocks Card -->
-                        <div class="glass" style="background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); border: 2px solid #0ea5e9; padding: 20px;">
-                            <h3 style="color: #0c4a6e; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                                <i data-lucide="trending-up" style="width: 24px; height: 24px;"></i> מניות
-                            </h3>
-                            <div style="background: var(--bg-surface); padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">שווי נוכחי</div>
-                                <div style="font-size: 2rem; font-weight: bold; color: #0ea5e9;" id="stocks-value">₪0</div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);" id="stocks-value-original">$0 + €0</div>
+                        <div class="section-card">
+                            <div class="section-title">
+                                <div class="card-icon cyan" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="trending-up" style="width:18px;height:18px;"></i></div>
+                                מניות
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="stocks-value">₪0</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);" id="stocks-value-original">$0 + €0</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
                                 <div>
-                                    <div style="color: var(--text-secondary);">החזקות</div>
-                                    <div style="font-weight: 600; color: #0c4a6e;" id="stocks-count">0</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">החזקות</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="stocks-count">0</div>
                                 </div>
                                 <div>
-                                    <div style="color: var(--text-secondary);">הושקע</div>
-                                    <div style="font-weight: 600; color: #0c4a6e;" id="stocks-capital">₪0</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">הושקע</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="stocks-capital">₪0</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Bonds Card -->
-                        <div class="glass" style="background: var(--bg-elevated); border: 1px solid var(--border); padding: 20px;">
-                            <h3 style="color: #78350f; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                                <i data-lucide="file-text" style="width: 24px; height: 24px;"></i> אג"ח
-                            </h3>
-                            <div style="background: var(--bg-surface); padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">שווי נוכחי</div>
-                                <div style="font-size: 2rem; font-weight: bold; color: var(--warning);" id="bonds-value">₪0</div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);" id="bonds-count">0 קרנות</div>
+                        <div class="section-card">
+                            <div class="section-title">
+                                <div class="card-icon orange" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="file-text" style="width:18px;height:18px;"></i></div>
+                                אג"ח
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
+                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning); font-family: 'JetBrains Mono', monospace;" id="bonds-value">₪0</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);" id="bonds-count">0 קרנות</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
                                 <div>
-                                    <div style="color: var(--text-secondary);">קרנות</div>
-                                    <div style="font-weight: 600; color: #78350f;" id="bonds-count-num">0</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">קרנות</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="bonds-count-num">0</div>
                                 </div>
                                 <div>
-                                    <div style="color: var(--text-secondary);">הושקע</div>
-                                    <div style="font-weight: 600; color: #78350f;" id="bonds-cost">₪0</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">הושקע</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="bonds-cost">₪0</div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Total Card -->
-                        <div class="glass" style="background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%); border: 2px solid #8b5cf6; padding: 20px;">
-                            <h3 style="color: #4c1d95; margin-bottom: 15px; display: flex; align-items: center; gap: 8px;">
-                                <i data-lucide="wallet" style="width: 24px; height: 24px;"></i> כולל
-                            </h3>
-                            <div style="background: var(--bg-surface); padding: 15px; border-radius: 8px; margin-bottom: 10px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">שווי כולל</div>
-                                <div style="font-size: 2rem; font-weight: bold; color: #8b5cf6;" id="total-value-2">₪0</div>
-                                <div style="font-size: 0.8rem; color: var(--text-secondary);">נכסים + מזומן</div>
+                        <div class="section-card">
+                            <div class="section-title">
+                                <div class="card-icon purple" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="wallet" style="width:18px;height:18px;"></i></div>
+                                כולל
                             </div>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem;">
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי כולל</div>
+                                <div style="font-size: 1.8rem; font-weight: 700; color: #a855f7; font-family: 'JetBrains Mono', monospace;" id="total-value-2">₪0</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);">נכסים + מזומן</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
                                 <div>
-                                    <div style="color: var(--text-secondary);">מזומן זמין</div>
-                                    <div style="font-weight: 600; color: #4c1d95;" id="available-cash-overview">₪0</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">מזומן זמין</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="available-cash-overview">₪0</div>
                                 </div>
                                 <div>
-                                    <div style="color: var(--text-secondary);">עדכון</div>
-                                    <div style="font-weight: 600; color: #4c1d95; font-size: 0.75rem;" id="last-update-time">--:--</div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">עדכון</div>
+                                    <div style="font-weight: 600; color: var(--text-primary); font-size: 0.8rem;" id="last-update-time">--:--</div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Cash Flow Summary -->
-                    <div class="glass" style="margin-bottom: 20px; padding: 20px;">
-                        <h3 style="margin-bottom: 15px; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
-                            <i data-lucide="arrow-right-left"></i> תזרים מזומנים
-                        </h3>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px;">
-                            <div style="padding: 15px; background: #f0f9ff; border-radius: 8px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">השקעתי בתיק</div>
-                                <div style="font-size: 1.5rem; font-weight: bold; color: var(--profit);" id="total-deposits">₪0</div>
+                    <!-- Cash Flow Summary - Lovable Style -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <i data-lucide="arrow-right-left" style="width:18px;height:18px;color:var(--text-muted);"></i> תזרים מזומנים
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">השקעתי בתיק</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--profit); font-family: 'JetBrains Mono', monospace;" id="total-deposits">₪0</div>
                             </div>
-                            <div style="padding: 15px; background: #fef2f2; border-radius: 8px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">משכתי מהתיק</div>
-                                <div style="font-size: 1.5rem; font-weight: bold; color: var(--loss);" id="total-withdrawals">₪0</div>
+                            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">משכתי מהתיק</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--loss); font-family: 'JetBrains Mono', monospace;" id="total-withdrawals">₪0</div>
                             </div>
-                            <div style="padding: 15px; background: #f0fdf4; border-radius: 8px;">
-                                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 5px;">מזומן פנוי</div>
-                                <div style="font-size: 1.5rem; font-weight: bold; color: #0ea5e9;" id="available-cash-summary">₪0</div>
+                            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">מזומן פנוי</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="available-cash-summary">₪0</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Allocation Comparison -->
-                    <div class="glass" style="padding: 20px;">
-                        <h3 style="margin-bottom: 15px; color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
-                            <i data-lucide="target"></i> התאמה ליעד
-                        </h3>
+                    <!-- Allocation Comparison - Lovable Style -->
+                    <div class="section-card">
+                        <div class="section-title">
+                            <i data-lucide="target" style="width:18px;height:18px;color:var(--text-muted);"></i> התאמה ליעד
+                        </div>
                         <div id="allocation-comparison"></div>
                     </div>
 
@@ -2113,11 +2267,11 @@
 
                 <!-- ===== TAB: CHARTS (NEW!) ===== -->
                 <div id="tab-charts" class="tab-content">
-                    <h2 style="text-align: center; color: var(--text-primary); margin-bottom: 25px;">
-                        📊 גרפים מתקדמים
+                    <h2 style="text-align: center; color: var(--text-primary); margin-bottom: 8px; font-size: 1.3rem; font-weight: 700;">
+                        גרפים מתקדמים
                     </h2>
-                    
-                    <p style="text-align: center; color: var(--text-secondary); margin-bottom: 30px; font-size: 1.1rem;">
+
+                    <p style="text-align: center; color: var(--text-muted); margin-bottom: 24px; font-size: 0.9rem;">
                         מעקב ויזואלי אחר ביצועי התיק שלך לאורך זמן
                     </p>
 
@@ -2164,85 +2318,60 @@
                 </div>
 
 <div id="tab-analysis" class="tab-content">
-                <h2 style="text-align: center; color: var(--text-primary); margin-bottom: 15px;">
-                    🔬 ניתוח מתקדם של התיק
+                <h2 style="text-align: center; color: var(--text-primary); margin-bottom: 15px; font-size: 1.3rem; font-weight: 700;">
+                    ניתוח מתקדם של התיק
                 </h2>
                 
-                <!-- Info Box -->
-                <div style="text-align: center; margin-bottom: 25px; padding: 15px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border-right: 4px solid #3b82f6;">
-                    <div style="font-size: 0.9rem; color: var(--text-primary); line-height: 1.6;">
-                        💡 <strong>TWR vs MWR:</strong> 
-                        TWR (בטאב סיכום) מודד ביצועי השוק בלי השפעת תזמון ההפקדות. 
+                <!-- Info Box - Lovable Style -->
+                <div style="margin-bottom: 24px; padding: 16px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border); border-right: 3px solid var(--info);">
+                    <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
+                        <strong>TWR vs MWR:</strong>
+                        TWR (בטאב סיכום) מודד ביצועי השוק בלי השפעת תזמון ההפקדות.
                         <strong>MWR</strong> (כאן למטה) מחשב תשואה שמתחשבת בתזמון - אם הפקדת כסף במועד טוב/רע.
                     </div>
                 </div>
 
-                <!-- KPI Cards Section -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px;">
-                    
+                <!-- KPI Cards Section - Lovable Style -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px;">
+
                     <!-- Sharpe Ratio Card -->
-                    <div class="glass" style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 2px solid #3b82f6; padding: 20px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 2rem; margin-bottom: 10px;">📈</div>
-                            <div style="font-size: 0.85rem; color: #1e40af; font-weight: 600; margin-bottom: 10px;">Sharpe Ratio</div>
-                            <div id="sharpe-ratio" style="font-size: 2.5rem; font-weight: bold; color: #2563eb; margin-bottom: 10px;">-</div>
-                            <div style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
-                                תשואה מול סיכון<br>
-                                <span style="color: #16a34a;">↑ יותר טוב</span>
-                            </div>
-                        </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(210, 80%, 55%, 0.12);"><i data-lucide="trending-up" style="width:22px;height:22px;color:#3b82f6;"></i></div>
+                        <div class="kpi-label">Sharpe Ratio</div>
+                        <div class="kpi-value" id="sharpe-ratio" style="color: #3b82f6;">-</div>
+                        <div class="kpi-desc">תשואה מול סיכון · <span style="color: var(--profit);">↑ יותר טוב</span></div>
                     </div>
 
                     <!-- Max Drawdown Card -->
-                    <div class="glass" style="background: var(--bg-elevated); border: 1px solid var(--border); padding: 20px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 2rem; margin-bottom: 10px;">📉</div>
-                            <div style="font-size: 0.85rem; color: #991b1b; font-weight: 600; margin-bottom: 10px;">Max Drawdown</div>
-                            <div id="max-drawdown" style="font-size: 2.5rem; font-weight: bold; color: #dc2626; margin-bottom: 10px;">-</div>
-                            <div style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
-                                ירידה מקסימלית<br>
-                                <span style="color: #16a34a;">↑ קרוב ל-0% יותר טוב</span>
-                            </div>
-                        </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(0, 72%, 55%, 0.12);"><i data-lucide="trending-down" style="width:22px;height:22px;color:#dc2626;"></i></div>
+                        <div class="kpi-label">Max Drawdown</div>
+                        <div class="kpi-value" id="max-drawdown" style="color: #dc2626;">-</div>
+                        <div class="kpi-desc">ירידה מקסימלית · <span style="color: var(--profit);">קרוב ל-0% יותר טוב</span></div>
                     </div>
 
                     <!-- Volatility Card -->
-                    <div class="glass" style="background: var(--bg-elevated); border: 1px solid var(--border); padding: 20px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 2rem; margin-bottom: 10px;">📊</div>
-                            <div style="font-size: 0.85rem; color: #92400e; font-weight: 600; margin-bottom: 10px;">Volatility</div>
-                            <div id="volatility" style="font-size: 2.5rem; font-weight: bold; color: #d97706; margin-bottom: 10px;">-</div>
-                            <div style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
-                                סטיית תקן שנתית<br>
-                                <span style="color: #16a34a;">↓ פחות תנודות</span>
-                            </div>
-                        </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(38, 92%, 55%, 0.12);"><i data-lucide="activity" style="width:22px;height:22px;color:#d97706;"></i></div>
+                        <div class="kpi-label">Volatility</div>
+                        <div class="kpi-value" id="volatility" style="color: #d97706;">-</div>
+                        <div class="kpi-desc">סטיית תקן שנתית · <span style="color: var(--profit);">↓ פחות תנודות</span></div>
                     </div>
 
                     <!-- Win Rate Card -->
-                    <div class="glass" style="background: var(--bg-elevated); border: 1px solid var(--border); padding: 20px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 2rem; margin-bottom: 10px;">🎯</div>
-                            <div style="font-size: 0.85rem; color: #065f46; font-weight: 600; margin-bottom: 10px;">Win Rate</div>
-                            <div id="win-rate" style="font-size: 2.5rem; font-weight: bold; color: #059669; margin-bottom: 10px;">-</div>
-                            <div style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
-                                אחוז מניות ברווח<br>
-                                <span style="color: #16a34a;">↑ יותר טוב</span>
-                            </div>
-                        </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(142, 60%, 50%, 0.12);"><i data-lucide="target" style="width:22px;height:22px;color:#059669;"></i></div>
+                        <div class="kpi-label">Win Rate</div>
+                        <div class="kpi-value" id="win-rate" style="color: #059669;">-</div>
+                        <div class="kpi-desc">אחוז מניות ברווח · <span style="color: var(--profit);">↑ יותר טוב</span></div>
                     </div>
 
                     <!-- MWR Card -->
-                    <div class="glass" style="background: linear-gradient(135deg, #e9d5ff 0%, #d8b4fe 100%); border: 2px solid #a855f7; padding: 20px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 2rem; margin-bottom: 10px;">💰</div>
-                            <div style="font-size: 0.85rem; color: #6b21a8; font-weight: 600; margin-bottom: 10px;">MWR (IRR)</div>
-                            <div id="mwr-value" style="font-size: 2.5rem; font-weight: bold; color: #9333ea; margin-bottom: 10px;">-</div>
-                            <div style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
-                                תשואה משוקללת כסף<br>
-                                <span style="color: #16a34a;">כולל timing</span>
-                            </div>
-                        </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(270, 60%, 55%, 0.12);"><i data-lucide="coins" style="width:22px;height:22px;color:#9333ea;"></i></div>
+                        <div class="kpi-label">MWR (IRR)</div>
+                        <div class="kpi-value" id="mwr-value" style="color: #9333ea;">-</div>
+                        <div class="kpi-desc">תשואה משוקללת כסף · <span style="color: var(--profit);">כולל timing</span></div>
                     </div>
 
                 </div>
@@ -2316,9 +2445,9 @@
                     </div>
                 </div>
 
-                <div class="glass" style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);">
-                    <h4 style="margin-bottom: 10px; color: #1e40af;">ℹ️ איך זה עובד?</h4>
-                    <ul style="color: #1e3a8a; line-height: 1.8;">
+                <div class="section-card">
+                    <div class="section-title" style="font-size: 0.9rem;">איך זה עובד?</div>
+                    <ul style="color: var(--text-secondary); line-height: 1.8; font-size: 0.9rem;">
                         <li>המערכת מחשבת את הפער של כל קבוצה מהיעד שלה</li>
                         <li>הקבוצות עם הפער הגדול ביותר מקבלות יותר כסף</li>
                         <li>בתוך כל קבוצה, ההשקעה מתחלקת באופן שווה בין המניות</li>
@@ -2334,25 +2463,25 @@
                     <button onclick="refreshPrices()" class="btn btn-primary">🔄 רענן מחירים</button>
                 </div>
 
-                <div style="background: #eff6ff; border: 2px solid #3b82f6; border-radius: 12px; padding: 15px; margin-bottom: 20px;">
-                    <div style="display: flex; align-items: start; gap: 10px;">
-                        <span style="font-size: 1.5rem;">🇮🇱</span>
+                <div class="section-card" style="border-right: 3px solid var(--info); margin-bottom: 20px;">
+                    <div style="display: flex; align-items: start; gap: 12px;">
+                        <div class="card-icon blue" style="width:32px;height:32px;margin-bottom:0;flex-shrink:0;">IL</div>
                         <div>
-                            <strong style="color: #1e40af;">ניירות ערך ישראליים:</strong>
-                            <p style="margin: 5px 0 0 0; color: #1e3a8a; font-size: 0.9rem;">
+                            <strong style="color: var(--text-primary);">ניירות ערך ישראליים:</strong>
+                            <p style="margin: 5px 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
                                 למספרי ניירות ערך ישראליים (7 ספרות, לדוגמא: 1209220), <strong>הזן את המספר</strong>. המערכת תנסה לשאוב מחירים מהבורסה.
                             </p>
-                            <div style="margin: 8px 0 0 0; padding: 10px; background: #fef3c7; border-radius: 6px;">
-                                <p style="margin: 0; color: #92400e; font-size: 0.85rem;">
-                                    ⚠️ <strong>חשוב:</strong> שאיבת מחירים אוטומטית מהבורסה הישראלית לא תמיד עובדת (בגלל מגבלות טכניות).
+                            <div style="margin: 8px 0 0 0; padding: 10px; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.85rem;">
+                                    <strong>חשוב:</strong> שאיבת מחירים אוטומטית מהבורסה הישראלית לא תמיד עובדת (בגלל מגבלות טכניות).
                                 </p>
                             </div>
-                            <p style="margin: 8px 0 0 0; color: #1e3a8a; font-size: 0.85rem;">
-                                💡 <strong>המלצה:</strong> 
+                            <p style="margin: 8px 0 0 0; color: var(--text-secondary); font-size: 0.85rem;">
+                                <strong>המלצה:</strong>
                             </p>
-                            <ol style="margin: 5px 0 0 20px; color: #1e3a8a; font-size: 0.85rem; line-height: 1.6;">
+                            <ol style="margin: 5px 0 0 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6;">
                                 <li>הגדר <strong>"טיקר חלופי"</strong> (אם יש - לדוגמא: VWRL.L לתעודת סל)</li>
-                                <li>או השתמש בכפתור <strong>"💰 מחיר"</strong> לעדכן ידנית</li>
+                                <li>או השתמש בכפתור <strong>"מחיר"</strong> לעדכן ידנית</li>
                                 <li>עדכן מחירים ידנית מ<a href="https://www.tase.co.il" target="_blank" style="color: var(--accent);">אתר הבורסה</a></li>
                             </ol>
                         </div>
@@ -7734,8 +7863,9 @@ ${msg}`, 'warning');
             html += '</tbody></table>';
             
             const totalBondsCapital = portfolio.bondsCapitalMovements.reduce((sum, m) => sum + m.amount, 0);
-            html += `<div style="margin-top: 10px; padding: 10px; background: #fef3c7; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
-                <strong style="color: #92400e;">סה"כ הון מקורי אג"ח: ₪${totalBondsCapital.toLocaleString()}</strong>
+            html += `<div style="margin-top: 12px; padding: 14px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ הון מקורי אג"ח:</span>
+                <strong style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${totalBondsCapital.toLocaleString()}</strong>
             </div>`;
             
             container.innerHTML = html;
@@ -7757,16 +7887,16 @@ ${msg}`, 'warning');
             
             // טבלה רוחבית
             let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden;">';
-            html += `<thead style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: white;">
-                <tr>
-                    <th style="padding: 15px; text-align: right; font-weight: 700;">סימול / נ.ע.</th>
-                    <th style="padding: 15px; text-align: center;">יחידות</th>
-                    <th style="padding: 15px; text-align: center;">מחיר קנייה</th>
-                    <th style="padding: 15px; text-align: center;">מחיר נוכחי</th>
-                    <th style="padding: 15px; text-align: center;">שווי</th>
-                    <th style="padding: 15px; text-align: center;">רווח/הפסד</th>
-                    <th style="padding: 15px; text-align: center;">תאריך קנייה</th>
-                    <th style="padding: 15px; text-align: center;">פעולות</th>
+            html += `<thead>
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <th style="padding: 14px 16px; text-align: right; font-weight: 500; color: var(--text-muted); font-size: 0.78rem;">סימול / נ.ע.</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">יחידות</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מחיר קנייה</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מחיר נוכחי</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">שווי</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">רווח/הפסד</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">תאריך קנייה</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">פעולות</th>
                 </tr>
             </thead><tbody>`;
             
@@ -9099,33 +9229,34 @@ ${msg}`, 'warning');
                 return;
             }
             
-            let html = '<table style="width: 100%; border-collapse: collapse;">';
-            html += '<thead><tr style="background: #f0f0f0;"><th style="padding: 8px;">תאריך</th><th>סכום</th><th>סוג</th><th>הערה</th><th>פעולות</th></tr></thead>';
-            html += '<tbody>';
-            
+            let html = '';
+
             const sorted = [...portfolio.capitalMovements].sort((a, b) => new Date(b.date) - new Date(a.date));
-            
+
             sorted.forEach(m => {
                 const date = new Date(m.date).toLocaleDateString('he-IL');
-                const amount = m.amount >= 0 ? `+₪${m.amount.toLocaleString()}` : `-₪${Math.abs(m.amount).toLocaleString()}`;
-                const color = m.amount >= 0 ? 'green' : 'red';
-                const typeText = m.type === 'deposit' ? 'הפקדה' : 'משיכה';
-                
-                html += `<tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 8px;">${date}</td>
-                    <td style="color: ${color}; font-weight: bold;">${amount}</td>
-                    <td>${typeText}</td>
-                    <td style="color: #666;">${m.note || '-'}</td>
-                    <td><button onclick="deleteCapitalMovement(${m.id})" style="background: var(--loss); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">מחק</button></td>
-                </tr>`;
+                const absAmount = `₪${Math.abs(m.amount).toLocaleString()}`;
+                const txType = m.amount >= 0 ? 'deposit' : 'withdrawal';
+                const txLabel = m.amount >= 0 ? 'הפקדה' : 'משיכה';
+                const txIcon = m.amount >= 0 ? '↓' : '↑';
+
+                html += `<div class="tx-card">
+                    <div class="tx-icon ${txType}">${txIcon}</div>
+                    <div class="tx-details">
+                        <div class="tx-title">${txLabel}</div>
+                        <div class="tx-sub">${date}${m.note ? ' · ' + m.note : ''}</div>
+                    </div>
+                    <span class="tx-badge ${txType}">${txLabel}</span>
+                    <div class="tx-amount" style="color: ${m.amount >= 0 ? 'var(--profit)' : 'var(--loss)'};">${m.amount >= 0 ? '+' : '-'}${absAmount}</div>
+                    <button onclick="deleteCapitalMovement(${m.id})" class="action-btn danger" title="מחק" style="flex-shrink:0;">×</button>
+                </div>`;
             });
-            
-            html += '</tbody></table>';
-            
+
             // Add summary
             const totalCapital = portfolio.capitalMovements.reduce((sum, m) => sum + m.amount, 0);
-            html += `<div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px; text-align: center;">
-                <strong>סה"כ הון מקורי: ₪${totalCapital.toLocaleString()}</strong>
+            html += `<div style="margin-top: 12px; padding: 14px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ הון מקורי:</span>
+                <strong style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${totalCapital.toLocaleString()}</strong>
             </div>`;
             
             container.innerHTML = html;
@@ -9145,74 +9276,63 @@ ${msg}`, 'warning');
             
             let html = '';
             
-            // מכירות מניות
+            // מכירות מניות - Lovable style
             if (hasStockSales) {
-                html += '<h4 style="margin-bottom: 15px; color: #3b82f6;">📈 מכירות מניות</h4>';
-                html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">';
-                html += '<thead><tr style="background: #eff6ff;"><th style="padding: 8px;">תאריך</th><th>סימול</th><th>כמות</th><th>מחיר מכירה</th><th>מחיר קנייה</th><th>רווח/הפסד</th><th>פעולות</th></tr></thead>';
-                html += '<tbody>';
-                
+                html += '<div class="section-title" style="margin-bottom: 12px;"><span class="group-badge blue">מניות</span> מכירות</div>';
+
                 const sortedStocks = [...portfolio.sales].sort((a, b) => new Date(b.date) - new Date(a.date));
-                
+
                 let totalRealizedStocks = 0;
                 sortedStocks.forEach(s => {
                     const date = new Date(s.date).toLocaleDateString('he-IL');
-                    const color = s.profit >= 0 ? 'green' : 'red';
                     const profitText = `${getCurrencySymbol(s.currency)}${s.profit.toFixed(2)} (${s.profitPercent}%)`;
-                    
-                    // Convert to ILS for total
                     const rate = s.currency === 'ILS' ? 1 : (portfolio.rates[s.currency] || 1);
                     totalRealizedStocks += s.profit * rate;
-                    
-                    html += `<tr style="border-bottom: 1px solid #dbeafe;">
-                        <td style="padding: 8px;">${date}</td>
-                        <td><strong>${s.symbol}</strong></td>
-                        <td>${s.shares}</td>
-                        <td>${getCurrencySymbol(s.currency)}${s.salePrice.toFixed(2)}</td>
-                        <td>${getCurrencySymbol(s.currency)}${s.costBasis.toFixed(2)}</td>
-                        <td style="color: ${color}; font-weight: bold;">${profitText}</td>
-                        <td><button onclick="deleteSale(${s.id})" style="background: var(--loss); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">🗑️</button></td>
-                    </tr>`;
+
+                    html += `<div class="tx-card">
+                        <div class="tx-icon sell">↘</div>
+                        <div class="tx-details">
+                            <div class="tx-title">${s.symbol} · ${s.shares} מניות</div>
+                            <div class="tx-sub">${date} · קנייה: ${getCurrencySymbol(s.currency)}${s.costBasis.toFixed(2)} → מכירה: ${getCurrencySymbol(s.currency)}${s.salePrice.toFixed(2)}</div>
+                        </div>
+                        <span class="tx-badge ${s.profit >= 0 ? 'buy' : 'sell'}">${profitText}</span>
+                        <button onclick="deleteSale(${s.id})" class="action-btn danger" title="מחק" style="flex-shrink:0;">×</button>
+                    </div>`;
                 });
-                
-                html += '</tbody></table>';
-                html += `<div style="margin-bottom: 20px; padding: 10px; background: #eff6ff; border-radius: 8px; text-align: center; border: 2px solid #3b82f6;">
-                    <strong style="color: #1e40af;">סה"כ רווח ממומש ממניות: ₪${Math.round(totalRealizedStocks).toLocaleString()}</strong>
+
+                html += `<div style="margin: 12px 0 20px; padding: 14px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ רווח ממומש ממניות:</span>
+                    <strong style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${Math.round(totalRealizedStocks).toLocaleString()}</strong>
                 </div>`;
             }
-            
-            // מכירות אג"ח
+
+            // מכירות אג"ח - Lovable style
             if (hasBondSales) {
-                html += '<h4 style="margin-bottom: 15px; color: var(--warning);">💼 מכירות אג"ח</h4>';
-                html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">';
-                html += '<thead><tr style="background: #fef3c7;"><th style="padding: 8px;">תאריך</th><th>שם קרן</th><th>יחידות</th><th>מחיר מכירה</th><th>מחיר קנייה</th><th>רווח/הפסד</th><th>פעולות</th></tr></thead>';
-                html += '<tbody>';
-                
+                html += '<div class="section-title" style="margin-bottom: 12px;"><span class="group-badge orange">אג"ח</span> מכירות</div>';
+
                 const sortedBonds = [...portfolio.bondsSales].sort((a, b) => new Date(b.date) - new Date(a.date));
-                
+
                 let totalRealizedBonds = 0;
                 sortedBonds.forEach(s => {
                     const date = new Date(s.date).toLocaleDateString('he-IL');
-                    const color = s.profit >= 0 ? 'green' : 'red';
                     const profitPercent = ((s.salePrice - s.costBasis) / s.costBasis * 100).toFixed(2);
                     const profitText = `₪${s.profit.toFixed(2)} (${profitPercent}%)`;
-                    
                     totalRealizedBonds += s.profit;
-                    
-                    html += `<tr style="border-bottom: 1px solid #fde68a;">
-                        <td style="padding: 8px;">${date}</td>
-                        <td><strong>${s.fundName}</strong></td>
-                        <td>${s.units}</td>
-                        <td>₪${s.salePrice.toFixed(2)}</td>
-                        <td>₪${s.costBasis.toFixed(2)}</td>
-                        <td style="color: ${color}; font-weight: bold;">${profitText}</td>
-                        <td><button onclick="deleteBondSale(${s.id})" style="background: var(--loss); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">🗑️</button></td>
-                    </tr>`;
+
+                    html += `<div class="tx-card">
+                        <div class="tx-icon sell">↘</div>
+                        <div class="tx-details">
+                            <div class="tx-title">${s.fundName} · ${s.units} יחידות</div>
+                            <div class="tx-sub">${date} · קנייה: ₪${s.costBasis.toFixed(2)} → מכירה: ₪${s.salePrice.toFixed(2)}</div>
+                        </div>
+                        <span class="tx-badge ${s.profit >= 0 ? 'buy' : 'sell'}">${profitText}</span>
+                        <button onclick="deleteBondSale(${s.id})" class="action-btn danger" title="מחק" style="flex-shrink:0;">×</button>
+                    </div>`;
                 });
-                
-                html += '</tbody></table>';
-                html += `<div style="margin-bottom: 20px; padding: 10px; background: #fef3c7; border-radius: 8px; text-align: center; border: 1px solid var(--border);">
-                    <strong style="color: #92400e;">סה"כ רווח ממומש מאג"ח: ₪${Math.round(totalRealizedBonds).toLocaleString()}</strong>
+
+                html += `<div style="margin: 12px 0 20px; padding: 14px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ רווח ממומש מאג"ח:</span>
+                    <strong style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${Math.round(totalRealizedBonds).toLocaleString()}</strong>
                 </div>`;
             }
             
@@ -9225,8 +9345,9 @@ ${msg}`, 'warning');
                 const totalBonds = portfolio.bondsSales.reduce((sum, s) => sum + s.profit, 0);
                 const grandTotal = totalStocks + totalBonds;
                 
-                html += `<div style="padding: 15px; background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%); border-radius: 8px; text-align: center; border: 2px solid #8b5cf6;">
-                    <strong style="color: #5b21b6; font-size: 1.2rem;">💰 סה"כ רווח ממומש כולל: ₪${Math.round(grandTotal).toLocaleString()}</strong>
+                html += `<div style="padding: 16px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border-accent);">
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ רווח ממומש כולל:</span>
+                    <strong style="color: var(--text-primary); font-size: 1.2rem; font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${Math.round(grandTotal).toLocaleString()}</strong>
                 </div>`;
             }
             
@@ -9280,29 +9401,30 @@ ${msg}`, 'warning');
                 return;
             }
             
-            let html = '<h4 style="margin-bottom: 15px;">📊 כל העסקאות</h4>';
-            html += '<table style="width: 100%; border-collapse: collapse; margin-bottom: 30px;">';
-            html += '<thead><tr style="background: #eff6ff;"><th style="padding: 8px;">תאריך</th><th>סוג</th><th>פעולה</th><th>סימול</th><th>כמות</th><th>מחיר</th><th>סה"כ</th></tr></thead>';
-            html += '<tbody>';
-            
+            let html = '<div class="section-title" style="margin-bottom: 16px;"><i data-lucide="list" style="width:18px;height:18px;color:var(--text-muted);"></i> כל העסקאות</div>';
+
             allTransactions.forEach(t => {
                 const date = new Date(t.date).toLocaleDateString('he-IL');
                 const currSymbol = getCurrencySymbol(t.currency || 'ILS');
                 const total = (t.shares * t.price).toFixed(2);
-                const actionColor = t.type === 'buy' ? '#10b981' : '#ef4444';
-                
-                html += `<tr style="border-bottom: 1px solid #dbeafe;">
-                    <td style="padding: 8px;">${date}</td>
-                    <td>${t.displayType}</td>
-                    <td style="color: ${actionColor}; font-weight: bold;">${t.displayAction}</td>
-                    <td><strong>${t.symbol}</strong></td>
-                    <td>${t.shares}</td>
-                    <td>${currSymbol}${t.price.toFixed(2)}</td>
-                    <td>${currSymbol}${total}</td>
-                </tr>`;
+                const txType = t.type === 'buy' ? 'buy' : (t.type === 'deposit' ? 'deposit' : 'sell');
+                const txLabel = t.type === 'buy' ? 'קנייה' : (t.type === 'deposit' ? 'הפקדה' : 'מכירה');
+                const txIcon = t.type === 'buy' ? '↗' : (t.type === 'deposit' ? '↓' : '↘');
+                const assetLabel = t.assetType === 'bond' ? 'אג"ח' : (t.assetType === 'cash' ? '' : 'מניה');
+
+                html += `<div class="tx-card">
+                    <div class="tx-icon ${txType}">${txIcon}</div>
+                    <div class="tx-details">
+                        <div class="tx-title">${t.symbol}${assetLabel ? ' · ' + assetLabel : ''}</div>
+                        <div class="tx-sub">${date} · ${t.shares} × ${currSymbol}${t.price.toFixed(2)}</div>
+                    </div>
+                    <span class="tx-badge ${txType}">${txLabel}</span>
+                    <div class="tx-amount">${currSymbol}${total}</div>
+                </div>`;
             });
-            
-            html += '</tbody></table>';
+
+            // Re-render Lucide icons
+            setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             
             container.innerHTML = html;
         }
@@ -9367,100 +9489,106 @@ ${msg}`, 'warning');
             
             let html = '';
             
-            // מניות
+            // מניות - Lovable style
             html += `
-                <div style="background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 2px solid #3b82f6;">
-                    <h4 style="margin-bottom: 15px; color: #1e40af;">📈 מניות</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                <div class="section-card" style="margin-bottom: 16px;">
+                    <div class="section-title">
+                        <div class="card-icon cyan" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="trending-up" style="width:18px;height:18px;"></i></div>
+                        מניות
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
                         <div>
-                            <div style="color: #1e40af; font-size: 0.8rem; margin-bottom: 3px;">הון מקורי</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #1e40af;">₪${stocksCapital.toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">הון מקורי</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${stocksCapital.toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #1e40af; font-size: 0.8rem; margin-bottom: 3px;">שווי נוכחי</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #1e40af;">₪${Math.round(stocksValue).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">שווי נוכחי</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(stocksValue).toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #1e40af; font-size: 0.8rem; margin-bottom: 3px;">רווח ממומש</div>
-                            <div style="font-size: 1.1rem; font-weight: bold; color: #1e40af;">₪${Math.round(stocksRealizedProfit).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח ממומש</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(stocksRealizedProfit).toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #1e40af; font-size: 0.8rem; margin-bottom: 3px;">רווח לא ממומש</div>
-                            <div style="font-size: 1.1rem; font-weight: bold; color: #1e40af;">₪${Math.round(stocksUnrealizedProfit).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח לא ממומש</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(stocksUnrealizedProfit).toLocaleString()}</div>
                         </div>
-                        <div style="grid-column: span 2;">
-                            <div style="color: #1e40af; font-size: 0.8rem; margin-bottom: 3px;">💰 רווח כולל</div>
-                            <div style="font-size: 1.5rem; font-weight: bold; color: ${stocksTotalProfit >= 0 ? '#10b981' : '#ef4444'};">
-                                ${stocksTotalProfit >= 0 ? '+' : ''}₪${Math.round(stocksTotalProfit).toLocaleString()} (${stocksProfitPercent.toFixed(1)}%)
-                            </div>
+                    </div>
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח כולל</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: ${stocksTotalProfit >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-family: 'JetBrains Mono', monospace;">
+                            ${stocksTotalProfit >= 0 ? '+' : ''}₪${Math.round(stocksTotalProfit).toLocaleString()} (${stocksProfitPercent.toFixed(1)}%)
                         </div>
                     </div>
                 </div>
             `;
-            
-            // אג"ח
+
+            // אג"ח - Lovable style
             html += `
-                <div style="background: var(--bg-elevated); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 15px; color: #92400e;">💼 אג"ח</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                <div class="section-card" style="margin-bottom: 16px;">
+                    <div class="section-title">
+                        <div class="card-icon orange" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="file-text" style="width:18px;height:18px;"></i></div>
+                        אג"ח
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
                         <div>
-                            <div style="color: #92400e; font-size: 0.8rem; margin-bottom: 3px;">הון מקורי</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #92400e;">₪${bondsCapital.toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">הון מקורי</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${bondsCapital.toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #92400e; font-size: 0.8rem; margin-bottom: 3px;">שווי נוכחי</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #92400e;">₪${Math.round(bondsValue).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">שווי נוכחי</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(bondsValue).toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #92400e; font-size: 0.8rem; margin-bottom: 3px;">רווח ממומש</div>
-                            <div style="font-size: 1.1rem; font-weight: bold; color: #92400e;">₪${Math.round(bondsRealizedProfit).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח ממומש</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(bondsRealizedProfit).toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #92400e; font-size: 0.8rem; margin-bottom: 3px;">רווח לא ממומש</div>
-                            <div style="font-size: 1.1rem; font-weight: bold; color: #92400e;">₪${Math.round(bondsUnrealizedProfit).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח לא ממומש</div>
+                            <div style="font-size: 1.1rem; font-weight: 600; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(bondsUnrealizedProfit).toLocaleString()}</div>
                         </div>
-                        <div style="grid-column: span 2;">
-                            <div style="color: #92400e; font-size: 0.8rem; margin-bottom: 3px;">💰 רווח כולל</div>
-                            <div style="font-size: 1.5rem; font-weight: bold; color: ${bondsTotalProfit >= 0 ? '#10b981' : '#ef4444'};">
-                                ${bondsTotalProfit >= 0 ? '+' : ''}₪${Math.round(bondsTotalProfit).toLocaleString()} (${bondsProfitPercent.toFixed(1)}%)
-                            </div>
+                    </div>
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח כולל</div>
+                        <div style="font-size: 1.5rem; font-weight: 700; color: ${bondsTotalProfit >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-family: 'JetBrains Mono', monospace;">
+                            ${bondsTotalProfit >= 0 ? '+' : ''}₪${Math.round(bondsTotalProfit).toLocaleString()} (${bondsProfitPercent.toFixed(1)}%)
                         </div>
                     </div>
                 </div>
             `;
-            
-            // סה"כ
+
+            // סה"כ - Lovable style
             html += `
-                <div style="background: linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%); padding: 20px; border-radius: 12px; border: 2px solid #8b5cf6;">
-                    <h4 style="margin-bottom: 15px; color: #5b21b6;">💰 סה"כ תיק השקעות</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                <div class="section-card" style="border-color: var(--border-accent);">
+                    <div class="section-title">
+                        <div class="card-icon purple" style="width:32px;height:32px;margin-bottom:0;"><i data-lucide="wallet" style="width:18px;height:18px;"></i></div>
+                        סה"כ תיק השקעות
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
                         <div>
-                            <div style="color: #5b21b6; font-size: 0.8rem; margin-bottom: 3px;">הון מקורי כולל</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #5b21b6;">₪${totalCapital.toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">הון מקורי כולל</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${totalCapital.toLocaleString()}</div>
                         </div>
                         <div>
-                            <div style="color: #5b21b6; font-size: 0.8rem; margin-bottom: 3px;">שווי כולל</div>
-                            <div style="font-size: 1.3rem; font-weight: bold; color: #5b21b6;">₪${Math.round(totalValue).toLocaleString()}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">שווי כולל</div>
+                            <div style="font-size: 1.2rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">₪${Math.round(totalValue).toLocaleString()}</div>
                         </div>
-                        <div style="grid-column: span 2;">
-                            <div style="color: #5b21b6; font-size: 0.8rem; margin-bottom: 3px;">💎 רווח כולל</div>
-                            <div style="font-size: 1.8rem; font-weight: bold; color: ${totalProfit >= 0 ? '#10b981' : '#ef4444'};">
-                                ${totalProfit >= 0 ? '+' : ''}₪${Math.round(totalProfit).toLocaleString()} (${totalProfitPercent.toFixed(1)}%)
-                            </div>
+                    </div>
+                    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">רווח כולל</div>
+                        <div style="font-size: 1.8rem; font-weight: 700; color: ${totalProfit >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-family: 'JetBrains Mono', monospace;">
+                            ${totalProfit >= 0 ? '+' : ''}₪${Math.round(totalProfit).toLocaleString()} (${totalProfitPercent.toFixed(1)}%)
                         </div>
                     </div>
                 </div>
             `;
-            
+
             // הסבר
             html += `
-                <div style="margin-top: 20px; padding: 15px; background: #f9fafb; border-radius: 8px; border: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 10px; color: var(--text-secondary); font-size: 0.95rem;">📊 הסבר חישוב:</h4>
-                    <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
-                        <strong>רווח כולל = שווי נוכחי - הון מקורי</strong><br>
-                        <div style="margin-top: 10px; padding: 8px; background: #fef3c7; border-radius: 4px; border-right: 3px solid #f59e0b;">
-                            💡 <strong>חשוב:</strong> החישוב לוקח בחשבון את תנועות ההון (הפקדות ומשיכות) ולא את עלות הרכישה הממוצעת.
-                        </div>
+                <div style="margin-top: 16px; padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                    <div style="font-size: 0.85rem; color: var(--text-muted); line-height: 1.6;">
+                        <strong style="color: var(--text-secondary);">רווח כולל = שווי נוכחי - הון מקורי</strong><br>
+                        <span style="font-size: 0.8rem;">החישוב לוקח בחשבון את תנועות ההון (הפקדות ומשיכות) ולא את עלות הרכישה הממוצעת.</span>
                     </div>
                 </div>
             `;
@@ -9607,80 +9735,79 @@ ${msg}`, 'warning');
                 return;
             }
             
-            // טבלה רוחבית נקייה
-            let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: var(--bg-surface); border-radius: 12px; overflow: hidden;">';
-            html += `<thead style="background: var(--bg-elevated);">
-                <tr>
-                    <th style="padding: 15px; text-align: right; font-weight: 600; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">סימול</th>
-                    <th style="padding: 15px; text-align: right; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">קבוצה</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">מניות</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">מחיר קנייה</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">מחיר נוכחי</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">שווי</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">רווח/הפסד</th>
-                    <th style="padding: 15px; text-align: center; color: var(--text-muted); font-size: 0.8rem; text-transform: uppercase;">פעולות</th>
+            // Lovable-style clean table with group badges
+            const badgeColors = ['green', 'blue', 'purple', 'orange', 'cyan', 'pink', 'red', 'gray'];
+            const groupColorMap = {};
+            let colorIdx = 0;
+            portfolio.groups.forEach(g => {
+                groupColorMap[g.id] = badgeColors[colorIdx % badgeColors.length];
+                colorIdx++;
+            });
+
+            let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: var(--bg-surface); border-radius: var(--radius); overflow: hidden;">';
+            html += `<thead>
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <th style="padding: 14px 16px; text-align: right; font-weight: 500; color: var(--text-muted); font-size: 0.78rem; letter-spacing: 0.3px;">סימול</th>
+                    <th style="padding: 14px 16px; text-align: right; color: var(--text-muted); font-size: 0.78rem;">קבוצה</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מניות</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מחיר קנייה</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מחיר נוכחי</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">שווי</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">רווח/הפסד</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">פעולות</th>
                 </tr>
             </thead><tbody>`;
-            
+
             portfolio.holdings.forEach(holding => {
                 const holdingGroupId = parseInt(holding.groupId);
                 const group = portfolio.groups.find(g => g.id === holdingGroupId);
-                
+                const badgeColor = groupColorMap[holdingGroupId] || 'gray';
+
                 const currentValue = holding.shares * (holding.currentPrice || holding.costBasis);
                 const costValue = holding.shares * holding.costBasis;
                 const profit = currentValue - costValue;
                 const profitPercent = (profit / costValue) * 100;
                 const profitColor = profit >= 0 ? 'var(--profit)' : 'var(--loss)';
-                
-                html += `<tr style="border-bottom: 1px solid var(--border);">
-                    <td style="padding: 15px; font-weight: 700; color: var(--text-primary);">
+
+                html += `<tr style="border-bottom: 1px solid var(--border); transition: background 0.1s;" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background='transparent'">
+                    <td style="padding: 14px 16px; font-weight: 600; color: var(--text-primary);">
                         ${holding.symbol}
-                        ${holding.altTicker ? `<br><span style="font-size: 0.75rem; color: var(--accent);">→ ${holding.altTicker}</span>` : ''}
-                        ${holding.isManualPrice ? '<span style="font-size: 0.75rem; color: var(--warning); margin-right: 5px;" title="מחיר ידני - מוגן">🔒</span>' : ''}
+                        ${holding.altTicker ? `<br><span style="font-size: 0.72rem; color: var(--text-muted);">→ ${holding.altTicker}</span>` : ''}
+                        ${holding.isManualPrice ? '<span style="font-size: 0.72rem; color: var(--warning); margin-right: 4px;" title="מחיר ידני">&#128274;</span>' : ''}
                     </td>
-                    <td style="padding: 15px; color: var(--text-secondary);">
-                        ${group ? group.name : 'לא ידוע'}
+                    <td style="padding: 14px 16px;">
+                        <span class="group-badge ${badgeColor}">${group ? group.name : 'לא ידוע'}</span>
                     </td>
-                    <td style="padding: 15px; text-align: center; font-weight: 600; color: var(--text-primary);">
+                    <td style="padding: 14px 16px; text-align: center; font-weight: 600; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">
                         ${holding.shares}
                     </td>
-                    <td style="padding: 15px; text-align: center; color: var(--text-secondary);">
+                    <td style="padding: 14px 16px; text-align: center; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem;">
                         ${getCurrencySymbol(holding.currency)}${holding.costBasis.toFixed(2)}
                     </td>
-                    <td style="padding: 15px; text-align: center; font-weight: 600; color: var(--text-primary);">
+                    <td style="padding: 14px 16px; text-align: center; font-weight: 600; color: var(--text-primary); font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">
                         ${getCurrencySymbol(holding.currency)}${(holding.currentPrice || holding.costBasis).toFixed(2)}
                     </td>
-                    <td style="padding: 15px; text-align: center; font-weight: 700; color: var(--text-primary);">
+                    <td style="padding: 14px 16px; text-align: center; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;">
                         ${getCurrencySymbol(holding.currency)}${currentValue.toFixed(2)}
                     </td>
-                    <td style="padding: 15px; text-align: center; font-weight: 700; color: ${profitColor};">
+                    <td style="padding: 14px 16px; text-align: center; font-weight: 600; color: ${profitColor}; font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">
                         ${profit >= 0 ? '+' : ''}${getCurrencySymbol(holding.currency)}${profit.toFixed(2)}
-                        <br>
-                        <span style="font-size: 0.85rem;">(${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)</span>
+                        <div style="font-size: 0.78rem; opacity: 0.8;">(${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)</div>
                     </td>
-                    <td style="padding: 15px; text-align: center;">
-                        <div style="display: flex; gap: 5px; justify-content: center; flex-wrap: wrap;">
-                            <button onclick="showAddSharesForm(${holding.id})" class="btn btn-sm" title="הוסף מניות" style="background: var(--profit); color: white; padding: 6px 10px; font-size: 0.8rem;">
-                                ➕
-                            </button>
-                            <button onclick="showSellSharesForm(${holding.id})" class="btn btn-sm" title="מכור" style="background: var(--warning); color: white; padding: 6px 10px; font-size: 0.8rem;">
-                                💸
-                            </button>
-                            <button onclick="editHolding(${holding.id})" class="btn btn-sm" title="ערוך" style="background: var(--info); color: white; padding: 6px 10px; font-size: 0.8rem;">
-                                ✏️
-                            </button>
-                            <button onclick="updatePriceManually(${holding.id})" class="btn btn-sm" title="${holding.isManualPrice ? 'מחיר מוגן' : 'עדכן מחיר'}" style="background: var(--accent); color: white; padding: 6px 10px; font-size: 0.8rem;">
-                                ${holding.isManualPrice ? '🔒' : '💰'}
-                            </button>
-                            <button onclick="deleteHolding(${holding.id})" class="btn btn-sm" title="מחק" style="background: var(--loss); color: white; padding: 6px 10px; font-size: 0.8rem;">
-                                🗑️
-                            </button>
+                    <td style="padding: 14px 16px; text-align: center;">
+                        <div style="display: flex; gap: 4px; justify-content: center;">
+                            <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות">+</button>
+                            <button onclick="showSellSharesForm(${holding.id})" class="action-btn" title="מכור">$</button>
+                            <button onclick="editHolding(${holding.id})" class="action-btn" title="ערוך"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
+                            <button onclick="deleteHolding(${holding.id})" class="action-btn danger" title="מחק"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
                         </div>
                     </td>
                 </tr>`;
             });
-            
+
             html += '</tbody></table></div>';
+            // Re-render Lucide icons after table update
+            setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
             container.innerHTML = html;
         }
 
@@ -9759,14 +9886,14 @@ ${msg}`, 'warning');
                 // Period Info
                 if (totalTWR.years !== undefined) {
                     const days = Math.round(totalTWR.years * 365);
-                    document.getElementById('twr-period-info').textContent = 
-                        `📅 מתחילת התיק: ${totalTWR.years.toFixed(1)} שנים (${days} ימים)`;
+                    document.getElementById('twr-period-info').textContent =
+                        `מתחילת התיק: ${totalTWR.years.toFixed(1)} שנים (${days} ימים)`;
                 }
             } else {
                 document.getElementById('main-twr-display').textContent = '--';
                 document.getElementById('twr-breakdown').textContent = 'צבור נתונים...';
                 document.getElementById('main-profit-display').textContent = '₪0';
-                document.getElementById('twr-period-info').textContent = '📅 הוסף הפקדה או משיכה לחישוב TWR';
+                document.getElementById('twr-period-info').textContent = 'הוסף הפקדה או משיכה לחישוב TWR';
             }
             
             // =============================================
