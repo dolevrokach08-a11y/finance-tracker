@@ -33,10 +33,10 @@
             --accent: hsl(142, 60%, 50%);
             --accent-dim: hsla(142, 60%, 50%, 0.12);
             --accent-secondary: hsl(210, 80%, 55%);
-            --text-primary: hsl(210, 20%, 95%);
+            --text-primary: hsl(210, 20%, 92%);
             --text-secondary: hsl(210, 20%, 75%);
-            --text-muted: hsl(215, 12%, 55%);
-            --border: hsl(220, 14%, 18%);
+            --text-muted: hsl(215, 12%, 52%);
+            --border: hsl(220, 14%, 16%);
             --profit: hsl(142, 60%, 50%);
             --loss: hsl(0, 72%, 55%);
         }
@@ -53,11 +53,11 @@
         }
 
         .container {
-            background: var(--bg-surface);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 40px;
-            max-width: 520px;
+            background: transparent;
+            border: none;
+            border-radius: 0;
+            padding: 40px 20px;
+            max-width: 900px;
             width: 100%;
             text-align: center;
             position: relative;
@@ -69,110 +69,124 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Accent glow line at top */
         .container::before {
-            content: '';
-            position: absolute;
-            top: -1px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 40%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, var(--accent), transparent);
-            border-radius: 2px;
+            display: none;
         }
 
         h1 {
             color: var(--text-primary);
             margin-bottom: 8px;
             font-size: 1.75rem;
-            font-weight: 600;
+            font-weight: 700;
         }
 
         .subtitle {
-            color: var(--text-secondary);
-            margin-bottom: 36px;
+            color: var(--text-muted);
+            margin-bottom: 40px;
             font-size: 0.95rem;
         }
 
         .buttons-container {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
         }
 
         .app-button {
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: space-between;
-            padding: 22px 24px;
-            border-radius: 12px;
+            justify-content: center;
+            padding: 40px 24px 32px;
+            border-radius: 16px;
             text-decoration: none;
             transition: all 0.25s ease;
             border: 1px solid var(--border);
-            background: var(--bg-elevated);
+            background: var(--bg-surface);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .app-button::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            opacity: 0.12;
+            border-radius: 16px;
+            transition: opacity 0.25s ease;
         }
 
         .app-button:hover {
-            border-color: var(--accent);
-            box-shadow: 0 0 20px hsla(142, 60%, 50%, 0.1);
-            transform: translateY(-2px);
+            transform: translateY(-4px);
+            border-color: hsla(0, 0%, 100%, 0.15);
+        }
+
+        .app-button:hover::before {
+            opacity: 0.18;
+        }
+
+        .finance-button::before {
+            background: radial-gradient(ellipse at bottom right, hsl(142, 60%, 50%), transparent 70%);
         }
 
         .finance-button {
-            border-color: var(--profit);
+            border-color: hsla(142, 60%, 50%, 0.2);
         }
 
-        .finance-button:hover {
-            border-color: var(--profit);
-            box-shadow: 0 0 20px hsla(142, 60%, 50%, 0.15);
+        .portfolio-button::before {
+            background: radial-gradient(ellipse at bottom right, hsl(210, 80%, 55%), transparent 70%);
         }
 
         .portfolio-button {
-            border-color: var(--accent-secondary);
+            border-color: hsla(210, 80%, 55%, 0.2);
         }
 
-        .portfolio-button:hover {
-            border-color: var(--accent-secondary);
-            box-shadow: 0 0 20px hsla(210, 80%, 55%, 0.15);
+        .tax-button::before {
+            background: radial-gradient(ellipse at bottom right, hsl(38, 80%, 50%), transparent 70%);
         }
 
         .tax-button {
-            border-color: hsl(38, 60%, 50%);
-        }
-
-        .tax-button:hover {
-            border-color: hsl(38, 60%, 50%);
-            box-shadow: 0 0 20px hsla(38, 60%, 50%, 0.15);
+            border-color: hsla(38, 80%, 50%, 0.2);
         }
 
         .icon {
-            font-size: 2.5rem;
-            opacity: 0.9;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 14px;
+            background: var(--bg-elevated);
+            font-size: 1.6rem;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
         }
 
         .button-content {
-            text-align: right;
+            text-align: center;
+            position: relative;
+            z-index: 1;
         }
 
         .button-title {
-            font-size: 1.25rem;
+            font-size: 1.15rem;
             font-weight: 600;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
             color: var(--text-primary);
         }
 
         .button-description {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
+            font-size: 0.8rem;
+            color: var(--text-muted);
         }
 
         .footer {
-            margin-top: 32px;
+            margin-top: 40px;
             color: var(--text-muted);
             font-size: 0.85rem;
-            padding-top: 24px;
-            border-top: 1px solid var(--border);
+            padding-top: 0;
+            border-top: none;
         }
 
         .user-header {
@@ -226,9 +240,13 @@
             font-size: 1.2rem;
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
+            .buttons-container {
+                grid-template-columns: 1fr;
+            }
+
             .container {
-                padding: 28px 20px;
+                padding: 28px 16px;
             }
 
             h1 {
@@ -236,15 +254,7 @@
             }
 
             .app-button {
-                padding: 20px;
-            }
-
-            .icon {
-                font-size: 2rem;
-            }
-
-            .button-title {
-                font-size: 1.1rem;
+                padding: 32px 20px 24px;
             }
         }
     </style>
@@ -268,27 +278,27 @@
         
         <div class="buttons-container">
             <a href="finance.html" class="app-button finance-button">
+                <div class="icon">💵</div>
                 <div class="button-content">
                     <div class="button-title">מעקב כספי</div>
                     <div class="button-description">הכנסות • הוצאות • מעשרות</div>
                 </div>
-                <div class="icon">💵</div>
             </a>
 
             <a href="portfolio.html" class="app-button portfolio-button">
+                <div class="icon">📈</div>
                 <div class="button-content">
                     <div class="button-title">תיק השקעות</div>
                     <div class="button-description">מניות • אג"ח • מדדים</div>
                 </div>
-                <div class="icon">📈</div>
             </a>
 
             <a href="tax-optimizer.html" class="app-button tax-button">
+                <div class="icon">🧮</div>
                 <div class="button-content">
                     <div class="button-title">אופטימיזציית מס</div>
                     <div class="button-description">נקודות זיכוי • מענקים • רווחי הון</div>
                 </div>
-                <div class="icon">🧮</div>
             </a>
         </div>
 

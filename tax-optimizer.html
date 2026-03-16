@@ -6,19 +6,21 @@
 <title>🧮 אופטימיזציית מס</title>
 
 <!-- PWA Meta Tags -->
-<meta name="theme-color" content="#c4944a">
+<meta name="theme-color" content="#0f1419">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Noto Sans Hebrew', 'Segoe UI', Tahoma, sans-serif; background: linear-gradient(170deg, #0e0e1f 0%, #161630 40%, #0c1825 100%); color: #e0dcd0; min-height: 100vh; }
-input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: rgba(255,255,255,0.1); border-radius: 4px; outline: none; cursor: pointer; accent-color: #c4944a; }
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #c4944a; cursor: pointer; }
-a { color: #c4944a; }
+body { font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif; background: hsl(220, 20%, 7%); color: hsl(210, 20%, 92%); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: hsl(220, 14%, 16%); border-radius: 4px; outline: none; cursor: pointer; accent-color: hsl(142, 60%, 50%); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: hsl(142, 60%, 50%); cursor: pointer; }
+a { color: hsl(142, 60%, 50%); }
 
 /* Navigation Bar */
 .nav-bar {
@@ -26,8 +28,8 @@ a { color: #c4944a; }
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: rgba(0,0,0,0.3);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: hsla(220, 18%, 10%, 0.95);
+  border-bottom: 1px solid hsl(220, 14%, 16%);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -40,23 +42,23 @@ a { color: #c4944a; }
   font-size: 12px;
   font-weight: 600;
   text-decoration: none;
-  color: #a0a0b8;
-  border: 1px solid rgba(255,255,255,0.08);
+  color: hsl(215, 12%, 52%);
+  border: 1px solid hsl(220, 14%, 16%);
   transition: all 0.2s;
 }
-.nav-links a:hover { background: rgba(255,255,255,0.05); color: #e0dcd0; }
+.nav-links a:hover { background: hsl(220, 16%, 18%); color: hsl(210, 20%, 92%); }
 .nav-user {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #7a7a9a;
+  color: hsl(215, 12%, 52%);
 }
 .nav-user img {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid rgba(196,148,74,0.4);
+  border: 1px solid hsla(142, 60%, 50%, 0.4);
 }
 
 /* Auth loading */
@@ -66,7 +68,7 @@ a { color: #c4944a; }
   justify-content: center;
   min-height: 60vh;
   font-size: 16px;
-  color: #7a7a9a;
+  color: hsl(215, 12%, 52%);
 }
 
 /* Data banner */
@@ -79,31 +81,31 @@ a { color: #c4944a; }
   align-items: center;
   gap: 8px;
 }
-.data-banner.success { background: rgba(30,120,30,0.1); border: 1px solid rgba(30,120,30,0.3); color: #a8cca8; }
-.data-banner.warning { background: rgba(196,148,74,0.1); border: 1px solid rgba(196,148,74,0.3); color: #c4944a; }
-.data-banner.info { background: rgba(77,171,247,0.1); border: 1px solid rgba(77,171,247,0.3); color: #7ab8e0; }
+.data-banner.success { background: hsla(142, 60%, 50%, 0.08); border: 1px solid hsla(142, 60%, 50%, 0.3); color: hsl(142, 40%, 70%); }
+.data-banner.warning { background: hsla(38, 92%, 55%, 0.08); border: 1px solid hsla(38, 92%, 55%, 0.3); color: hsl(38, 92%, 55%); }
+.data-banner.info { background: hsla(210, 80%, 55%, 0.08); border: 1px solid hsla(210, 80%, 55%, 0.3); color: hsl(210, 60%, 70%); }
 
 /* Year selector */
 .year-selector {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: hsl(220, 16%, 13%);
+  border: 1px solid hsl(220, 14%, 16%);
   border-radius: 10px;
   padding: 6px 12px;
 }
 .year-selector select {
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.15);
-  color: #e0dcd0;
+  background: hsl(220, 20%, 7%);
+  border: 1px solid hsl(220, 14%, 16%);
+  color: hsl(210, 20%, 92%);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
 }
-.year-selector select option { background: #1a1a2e; }
+.year-selector select option { background: hsl(220, 18%, 10%); }
 </style>
 </head>
 <body>
@@ -437,8 +439,8 @@ function InfoTip({ text }) {
   return (
     <span style={{ position: "relative", display: "inline-block", marginRight: 4, cursor: "pointer" }}
       onMouseEnter={() => setS(true)} onMouseLeave={() => setS(false)} onClick={() => setS(!s)}>
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "#1a1a2e", fontSize: 10, fontWeight: 700 }}>?</span>
-      {s && <span style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "#e0dcd0", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "hsl(220, 18%, 10%)", fontSize: 10, fontWeight: 700 }}>?</span>
+      {s && <span style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "hsl(210, 20%, 92%)", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
     </span>
   );
 }
@@ -447,8 +449,8 @@ function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
   return (
     <div style={{ gridColumn: wide ? "1 / -1" : undefined }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <label style={{ fontSize: 12, color: "#a0a0b8", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
+        <label style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
     </div>
@@ -459,9 +461,9 @@ function Tog({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{
       padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12,
-      border: `1px solid ${active ? "#c4944a" : "rgba(255,255,255,0.1)"}`,
-      background: active ? "rgba(196,148,74,0.15)" : "transparent",
-      color: active ? "#c4944a" : "#7a7a9a", fontWeight: active ? 600 : 400
+      border: `1px solid ${active ? "hsl(142, 60%, 50%)" : "rgba(255,255,255,0.1)"}`,
+      background: active ? "rgba(76,175,80,0.15)" : "transparent",
+      color: active ? "hsl(142, 60%, 50%)" : "hsl(215, 12%, 52%)", fontWeight: active ? 600 : 400
     }}>{active ? "\u2713 " : ""}{label}</button>
   );
 }
@@ -469,7 +471,7 @@ function Tog({ label, active, onClick }) {
 function R({ label, amount, color, bold }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: bold ? 14 : 12, fontWeight: bold ? 700 : 400, marginBottom: bold ? 0 : 4, paddingTop: bold ? 6 : 0, borderTop: bold ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
-      <span>{label}</span><span style={{ color: color || "#e0dcd0" }}>{amount}</span>
+      <span>{label}</span><span style={{ color: color || "hsl(210, 20%, 92%)" }}>{amount}</span>
     </div>
   );
 }
@@ -1077,13 +1079,13 @@ function App() {
   const fm = n => n.toLocaleString("he-IL");
 
   return (
-    <div style={{ minHeight: "100vh", color: "#e0dcd0", padding: 0 }}>
-      <div style={{ background: "linear-gradient(135deg,#181835,#251838)", borderBottom: "2px solid #c4944a", padding: "24px 20px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 12, color: "#c4944a", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>מחשבון אופטימיזציה ביתי</div>
-        <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px", background: "linear-gradient(90deg,#c4944a,#e8c878,#c4944a)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+    <div style={{ minHeight: "100vh", color: "hsl(210, 20%, 92%)", padding: 0 }}>
+      <div style={{ background: "linear-gradient(135deg,#181835,#251838)", borderBottom: "2px solid hsl(142, 60%, 50%)", padding: "24px 20px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "hsl(142, 60%, 50%)", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>מחשבון אופטימיזציה ביתי</div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px", background: "linear-gradient(90deg,hsl(142, 60%, 50%),#e8c878,hsl(142, 60%, 50%))", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
           נקודות זיכוי × מענק עבודה × רווחי הון
         </h1>
-        <p style={{ fontSize: 12, color: "#7a7a9a", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
+        <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
       </div>
 
       {/* Data Integration Banner */}
@@ -1095,18 +1097,18 @@ function App() {
               <span style={{ fontSize: 13, fontWeight: 600, color: "#7ab8e0" }}>נתונים מהמערכת הפיננסית</span>
             </div>
             <div className="year-selector" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "4px 10px" }}>
-              <label style={{ fontSize: 11, color: "#a0a0b8" }}>שנה:</label>
+              <label style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>שנה:</label>
               <select value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setAutoApplied(false); }}
-                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
+                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
                 {taxData.availableYears.map(y => (
-                  <option key={y} value={y} style={{ background: "#1a1a2e" }}>
+                  <option key={y} value={y} style={{ background: "hsl(220, 18%, 10%)" }}>
                     {y} {taxData.years[y]?.isComplete ? "(12 חודשים)" : `(${taxData.years[y]?.monthCount} חודשים)`}
                   </option>
                 ))}
               </select>
               <button onClick={() => applyYearData(selectedYear)} style={{
                 padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.15)", color: "#c4944a", fontFamily: "inherit"
+                border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.15)", color: "hsl(142, 60%, 50%)", fontFamily: "inherit"
               }}>החל</button>
             </div>
           </div>
@@ -1128,7 +1130,7 @@ function App() {
                 </span>
               )}
               {yearInfo.untaggedMonthly > 0 && (
-                <span style={{ background: "rgba(196,148,74,0.1)", border: "1px solid rgba(196,148,74,0.25)", padding: "3px 10px", borderRadius: 6, color: "#c4944a" }}>
+                <span style={{ background: "rgba(76,175,80,0.1)", border: "1px solid rgba(76,175,80,0.25)", padding: "3px 10px", borderRadius: 6, color: "hsl(142, 60%, 50%)" }}>
                   ⚠️ לא משויך: {fm(yearInfo.untaggedMonthly)} ₪/חודש
                 </span>
               )}
@@ -1141,8 +1143,8 @@ function App() {
           )}
 
           {yearInfo && yearInfo.untaggedMonthly > 0 && (
-            <div style={{ marginTop: 8, fontSize: 11, color: "#c4944a", lineHeight: 1.5 }}>
-              💡 יש הכנסות שלא שויכו לאב/אם. <a href="finance.html" style={{ color: "#c4944a", textDecoration: "underline" }}>שייך אותן במערכת הפיננסית</a> לחישוב מדויק יותר.
+            <div style={{ marginTop: 8, fontSize: 11, color: "hsl(142, 60%, 50%)", lineHeight: 1.5 }}>
+              💡 יש הכנסות שלא שויכו לאב/אם. <a href="finance.html" style={{ color: "hsl(142, 60%, 50%)", textDecoration: "underline" }}>שייך אותן במערכת הפיננסית</a> לחישוב מדויק יותר.
             </div>
           )}
           <div style={{ marginTop: 8, fontSize: 10, color: "#6a6a8a", lineHeight: 1.5 }}>
@@ -1152,8 +1154,8 @@ function App() {
       )}
 
       {taxData.loaded && taxData.availableYears.length === 0 && (
-        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(196,148,74,0.08)", border: "1px solid rgba(196,148,74,0.25)", borderRadius: 12, fontSize: 12, color: "#c4944a" }}>
-          <span style={{ fontSize: 16 }}>💡</span> אין נתוני הכנסה במערכת. <a href="finance.html" style={{ color: "#c4944a", textDecoration: "underline" }}>הוסף הכנסות</a> כדי למלא את הסליידרים אוטומטית.
+        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", borderRadius: 12, fontSize: 12, color: "hsl(142, 60%, 50%)" }}>
+          <span style={{ fontSize: 16 }}>💡</span> אין נתוני הכנסה במערכת. <a href="finance.html" style={{ color: "hsl(142, 60%, 50%)", textDecoration: "underline" }}>הוסף הכנסות</a> כדי למלא את הסליידרים אוטומטית.
         </div>
       )}
 
@@ -1170,7 +1172,7 @@ function App() {
       <div style={{ padding: "0 14px 32px", maxWidth: 720, margin: "0 auto" }}>
         {/* INPUTS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <Sl label="הכנסת האב (חודשי ברוטו)" value={fM} onChange={v => { setFM(v); }} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
@@ -1208,7 +1210,7 @@ function App() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <select value={payslipEarner} onChange={e => setPayslipEarner(e.target.value)}
-                  style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontFamily: "inherit" }}>
+                  style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontFamily: "inherit" }}>
                   <option value="">בעל/ת הכנסה</option>
                   <option value="father">אב</option>
                   <option value="mother">אם</option>
@@ -1222,7 +1224,7 @@ function App() {
                 </label>
                 <button onClick={() => setPendingPayslip({ _manualEntry: true, fileName: 'הזנה ידנית', deductions: {} })} style={{
                   padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
-                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "#a0a0b8"
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "hsl(215, 12%, 52%)"
                 }}>הזנה ידנית</button>
               </div>
             </div>
@@ -1233,33 +1235,33 @@ function App() {
 
             {/* Preview — auto-parsed or manual entry */}
             {pendingPayslip && (
-              <div style={{ background: pendingPayslip._isForm106 ? "rgba(196,148,74,0.08)" : "rgba(77,171,247,0.08)", border: `1px solid ${pendingPayslip._isForm106 ? "rgba(196,148,74,0.25)" : "rgba(77,171,247,0.2)"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+              <div style={{ background: pendingPayslip._isForm106 ? "rgba(76,175,80,0.08)" : "rgba(77,171,247,0.08)", border: `1px solid ${pendingPayslip._isForm106 ? "rgba(76,175,80,0.25)" : "rgba(77,171,247,0.2)"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
                 {pendingPayslip._isForm106 ? (
                   <>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#c4944a", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "hsl(142, 60%, 50%)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
                       <span>טופס 106 זוהה — סיכום שנתי</span>
                       <input type="number" min="2020" max="2030" value={pendingPayslip.year || ''}
                         onChange={e => setPendingPayslip(p => ({...p, year: e.target.value || null}))}
-                        style={{ width: 60, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(196,148,74,0.4)", color: "#c4944a", borderRadius: 4, padding: "2px 4px", fontSize: 12, fontWeight: 700, fontFamily: "inherit", textAlign: "center" }}
+                        style={{ width: 60, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(76,175,80,0.4)", color: "hsl(142, 60%, 50%)", borderRadius: 4, padding: "2px 4px", fontSize: 12, fontWeight: 700, fontFamily: "inherit", textAlign: "center" }}
                       />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
                       <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
-                        <div style={{ color: "#7a7a9a", marginBottom: 4 }}>נתונים שנתיים</div>
-                        {pendingPayslip.annualGross && <div><span style={{ color: "#7a7a9a" }}>ברוטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualGross.toLocaleString()}</strong></div>}
-                        {pendingPayslip.annualNet && <div><span style={{ color: "#7a7a9a" }}>נטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualNet.toLocaleString()}</strong></div>}
-                        <div style={{ color: "#7a7a9a", marginTop: 2 }}>חודשי עבודה: {pendingPayslip.months}</div>
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>נתונים שנתיים</div>
+                        {pendingPayslip.annualGross && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.annualNet && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualNet.toLocaleString()}</strong></div>}
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginTop: 2 }}>חודשי עבודה: {pendingPayslip.months}</div>
                       </div>
                       <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
-                        <div style={{ color: "#7a7a9a", marginBottom: 4 }}>ממוצע חודשי (חישוב)</div>
-                        {pendingPayslip.monthlyGross && <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#c4944a" }}>₪{pendingPayslip.monthlyGross.toLocaleString()}</strong></div>}
-                        {pendingPayslip.monthlyNet && <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#c4944a" }}>₪{pendingPayslip.monthlyNet.toLocaleString()}</strong></div>}
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>ממוצע חודשי (חישוב)</div>
+                        {pendingPayslip.monthlyGross && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "hsl(142, 60%, 50%)" }}>₪{pendingPayslip.monthlyGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.monthlyNet && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו: </span><strong style={{ color: "hsl(142, 60%, 50%)" }}>₪{pendingPayslip.monthlyNet.toLocaleString()}</strong></div>}
                       </div>
                     </div>
                     {!pendingPayslip.earner && !payslipEarner && (
                       <div style={{ color: "#e07070", fontSize: 10, marginTop: 6 }}>יש לבחור בן זוג (אב/אם) למעלה לפני האישור</div>
                     )}
-                    <div style={{ fontSize: 10, color: "#a0a0b8", marginTop: 6 }}>
+                    <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 6 }}>
                       ייווצרו {pendingPayslip.months} רשומות חודשיות עבור שנת {pendingPayslip.year}
                     </div>
                     <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
@@ -1267,12 +1269,12 @@ function App() {
                         disabled={!pendingPayslip.earner && !payslipEarner}
                         style={{
                           padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.earner && !payslipEarner) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
-                          border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.15)", color: "#c4944a",
+                          border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.15)", color: "hsl(142, 60%, 50%)",
                           opacity: (!pendingPayslip.earner && !payslipEarner) ? 0.4 : 1
                       }}>אשר טופס 106</button>
                       <button onClick={() => setPendingPayslip(null)} style={{
                         padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
-                        border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#7a7a9a"
+                        border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
                       }}>בטל</button>
                     </div>
                   </>
@@ -1285,24 +1287,24 @@ function App() {
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
                       <div>
-                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>חודש</label>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>חודש</label>
                         <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
                           onChange={e => { const [y,m]=(e.target.value||'').split('-'); setPendingPayslip(p=>({...p,month:m||null,year:y||null})); }}
-                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
                         />
                       </div>
                       <div>
-                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
                         <input type="number" placeholder="15,000" value={pendingPayslip.gross||''}
                           onChange={e => setPendingPayslip(p=>({...p,gross:e.target.value?parseFloat(e.target.value):null}))}
-                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
                         />
                       </div>
                       <div>
-                        <label style={{ color: "#7a7a9a", display: "block", marginBottom: 2 }}>נטו (₪)</label>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>נטו (₪)</label>
                         <input type="number" placeholder="11,000" value={pendingPayslip.net||''}
                           onChange={e => setPendingPayslip(p=>({...p,net:e.target.value?parseFloat(e.target.value):null}))}
-                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"#e0dcd0",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
                         />
                       </div>
                     </div>
@@ -1312,22 +1314,22 @@ function App() {
                     <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>נתונים שחולצו:</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11, alignItems: "center" }}>
                       <div>
-                        <span style={{ color: "#7a7a9a" }}>חודש: </span>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>חודש: </span>
                         <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
                           onChange={e => {
                             const [y, m] = (e.target.value || '').split('-');
                             setPendingPayslip(prev => ({ ...prev, month: m || null, year: y || null }));
                           }}
-                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#e0dcd0", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
                         />
                         {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
                       </div>
-                      <div><span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
-                      <div><span style={{ color: "#7a7a9a" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
-                      <div><span style={{ color: "#7a7a9a" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
+                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
+                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
+                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
                     </div>
                     {Object.keys(pendingPayslip.deductions || {}).length > 0 && (
-                      <div style={{ fontSize: 10, color: "#7a7a9a", marginTop: 4 }}>
+                      <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 4 }}>
                         {Object.values(pendingPayslip.deductions).map(d => `${d.label}: ₪${d.amount.toLocaleString()}`).join(' | ')}
                       </div>
                     )}
@@ -1344,7 +1346,7 @@ function App() {
                     }}>אשר ושמור</button>
                     <button onClick={() => setPendingPayslip(null)} style={{
                       padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
-                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#7a7a9a"
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
                     }}>בטל</button>
                   </div>
                 )}
@@ -1378,16 +1380,16 @@ function App() {
             {/* Payslip History */}
             {payslips.length > 0 && (
               <div>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "#a0a0b8", marginBottom: 4 }}>תלושים ({payslips.length}):</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>תלושים ({payslips.length}):</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 150, overflowY: "auto" }}>
                   {payslips.sort((a,b) => (b.month||'').localeCompare(a.month||'')).map(p => (
                     <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11 }}>
-                      <span style={{ color: "#a0a0b8" }}>
+                      <span style={{ color: "hsl(215, 12%, 52%)" }}>
                         {p.month} {p.earner === 'father' ? '👨' : p.earner === 'mother' ? '👩' : ''}
                       </span>
                       <span>
-                        <span style={{ color: "#7a7a9a" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>₪{p.gross?.toLocaleString() || '?'}</strong>
-                        <span style={{ color: "#7a7a9a", marginRight: 8 }}> נטו: </span><strong>₪{p.net?.toLocaleString() || '?'}</strong>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>₪{p.gross?.toLocaleString() || '?'}</strong>
+                        <span style={{ color: "hsl(215, 12%, 52%)", marginRight: 8 }}> נטו: </span><strong>₪{p.net?.toLocaleString() || '?'}</strong>
                       </span>
                       <button onClick={() => handleDeletePayslip(p.id)} style={{
                         width: 18, height: 18, borderRadius: "50%", cursor: "pointer", fontSize: 11,
@@ -1406,21 +1408,21 @@ function App() {
           {payslips.length === 0 && (
           <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(0,0,0,0.15)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: "#a0a0b8" }}>יחס ברוטו/נטו</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "hsl(215, 12%, 52%)" }}>יחס ברוטו/נטו</span>
               <InfoTip text={"הנתונים מהמעקב הפיננסי הם נטו (מה שנכנס לחשבון). יחס זה מכפיל את הנטו לברוטו משוער.\n\nלחלופין — העלה תלושי משכורת למעלה לחישוב מדויק.\n\n• 1.00 = כבר ברוטו\n• 1.07 = ללא מס (רק ביטוח לאומי+בריאות)\n• 1.20 = מדרגת 10%\n• 1.26 = מדרגת 14%"} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <label style={{ fontSize: 11, color: "#7ab8e0" }}>👨 אב</label>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#e0dcd0" }}>×{fRatio.toFixed(2)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>×{fRatio.toFixed(2)}</span>
                 </div>
                 <input type="range" min={1.0} max={1.5} step={0.01} value={fRatio} onChange={e => setFRatio(+e.target.value)} />
               </div>
               <div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                   <label style={{ fontSize: 11, color: "#d898c8" }}>👩 אם</label>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: "#e0dcd0" }}>×{mRatio.toFixed(2)}</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>×{mRatio.toFixed(2)}</span>
                 </div>
                 <input type="range" min={1.0} max={1.5} step={0.01} value={mRatio} onChange={e => setMRatio(+e.target.value)} />
               </div>
@@ -1431,20 +1433,20 @@ function App() {
           {/* CHILDREN */}
           <div style={{ marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: "#a0a0b8" }}>👶 ילדים ({children.length})</label>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "hsl(215, 12%, 52%)" }}>👶 ילדים ({children.length})</label>
               <button onClick={addChild} style={{
                 padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
-                border: "1px solid rgba(196,148,74,0.4)", background: "rgba(196,148,74,0.1)", color: "#c4944a"
+                border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.1)", color: "hsl(142, 60%, 50%)"
               }}>+ הוסף ילד</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {children.map((child, i) => (
                 <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: "8px 12px" }}>
-                  <span style={{ fontSize: 12, color: "#7a7a9a", minWidth: 50 }}>ילד {i + 1}</span>
+                  <span style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", minWidth: 50 }}>ילד {i + 1}</span>
                   <input type="range" min={0} max={18} step={1} value={child.age}
                     onChange={e => updateChildAge(child.id, +e.target.value)}
                     style={{ flex: 1 }} />
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#e0dcd0", minWidth: 55, textAlign: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)", minWidth: 55, textAlign: "center" }}>
                     {child.age === 0 ? "לידה" : `${child.age} ${child.age === 1 ? "שנה" : "שנים"}`}
                   </span>
                   <button onClick={() => removeChild(child.id)} style={{
@@ -1474,7 +1476,7 @@ function App() {
 
         {/* CREDIT POINTS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>📊 נקודות זיכוי</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>📊 נקודות זיכוי</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[{ d: r.f, icon: "👨", clr: "#7ab8e0", lbl: "האב", base: "2.25 (תושב)" },
               { d: r.m, icon: "👩", clr: "#d898c8", lbl: "האם", base: "2.75 (תושבת+אישה)" }].map(({ d, icon, clr, lbl, base }) => (
@@ -1486,25 +1488,25 @@ function App() {
                 <div style={{ marginTop: 8 }}>
                   <R label="שווי נקודות" amount={`${fm(d.pVal)} ₪`} />
                   {stl && <R label="זיכוי ישוב" amount={`${fm(d.sCredit)} ₪`} />}
-                  <R label="סה״כ זיכויים" amount={`${fm(d.totalCr)} ₪`} color="#c4944a" bold />
+                  <R label="סה״כ זיכויים" amount={`${fm(d.totalCr)} ₪`} color="hsl(142, 60%, 50%)" bold />
                 </div>
                 <div style={{ marginTop: 8 }}>
                   <R label="מס הכנסה שנתי" amount={`${fm(d.tax)} ₪`} color="#e07070" />
-                  <R label="עודפים" amount={`${fm(d.unused)} ₪`} color="#c4944a" bold />
+                  <R label="עודפים" amount={`${fm(d.unused)} ₪`} color="hsl(142, 60%, 50%)" bold />
                 </div>
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(196,148,74,0.08)", borderRadius: 10, textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#a0a0b8" }}>סה״כ זיכויים עודפים למשק הבית</div>
-            <div style={{ fontSize: 26, fontWeight: 800, color: "#c4944a" }}>{fm(r.hUnused)} ₪</div>
-            <div style={{ fontSize: 11, color: "#7a7a9a" }}>הולכים לאיבוד — אלא אם מממשים רווחי הון</div>
+          <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(76,175,80,0.08)", borderRadius: 10, textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>סה״כ זיכויים עודפים למשק הבית</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>{fm(r.hUnused)} ₪</div>
+            <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>הולכים לאיבוד — אלא אם מממשים רווחי הון</div>
           </div>
         </div>
 
         {/* WORK GRANT */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[{ d: r.f, m: fM, icon: "👨", clr: "#7ab8e0", lbl: "האב" },
               { d: r.m, m: mM, icon: "👩", clr: "#d898c8", lbl: "האם" }].map(({ d, m: mo, icon, clr, lbl }) => (
@@ -1531,8 +1533,8 @@ function App() {
         </div>
 
         {/* CAPITAL GAINS */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(196,148,74,0.3)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(76,175,80,0.3)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             {[{ lbl: "👨 חלק האב", sh: r.fShare, tx: r.fCGTax, sv: r.fSaved, clr: "#7ab8e0" },
               { lbl: "👩 חלק האם", sh: r.mShare, tx: r.mCGTax, sv: r.mSaved, clr: "#d898c8" }].map(x => (
@@ -1545,8 +1547,8 @@ function App() {
               </div>
             ))}
           </div>
-          <div style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(196,148,74,0.1),rgba(196,148,74,0.03))", border: "1px solid rgba(196,148,74,0.25)" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#c4944a", marginBottom: 6 }}>💰 סכום מימוש אופטימלי</div>
+          <div style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(76,175,80,0.1),rgba(76,175,80,0.03))", border: "1px solid rgba(76,175,80,0.25)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "hsl(142, 60%, 50%)", marginBottom: 6 }}>💰 סכום מימוש אופטימלי</div>
             <p style={{ fontSize: 13, lineHeight: 1.7, margin: "0 0 4px" }}>
               לניצול מלוא הזיכויים ({fm(r.hUnused)} ₪): ממש <strong>{fm(r.hOpt)} ₪</strong>
               {jnt && ` (${fm(r.fOpt)} אב + ${fm(r.mOpt)} אם)`}
@@ -1556,8 +1558,8 @@ function App() {
         </div>
 
         {/* BOTTOM LINE */}
-        <div style={{ background: "linear-gradient(135deg,rgba(196,148,74,0.06),rgba(196,148,74,0.02))", borderRadius: 14, border: "1px solid rgba(196,148,74,0.2)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
+        <div style={{ background: "linear-gradient(135deg,rgba(76,175,80,0.06),rgba(76,175,80,0.02))", borderRadius: 14, border: "1px solid rgba(76,175,80,0.2)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
               <div style={{ fontSize: 12, color: "#8a8aaa", marginBottom: 6 }}>ללא מימוש</div>
@@ -1578,10 +1580,10 @@ function App() {
               <R label="סה״כ" amount={`${fm(r.hGrant + r.hUnused)} ₪`} color="#5ab85a" bold />
             </div>
           </div>
-          <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(196,148,74,0.1)", textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "#a0a0b8" }}>רווח נוסף ממימוש בפועל</div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: "#c4944a" }}>+{fm(r.fSaved + r.mSaved)} ₪</div>
-            <div style={{ fontSize: 12, color: "#7a7a9a" }}>
+          <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(76,175,80,0.1)", textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>רווח נוסף ממימוש בפועל</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>+{fm(r.fSaved + r.mSaved)} ₪</div>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>
               {r.fSaved + r.mSaved < r.hUnused
                 ? `ניתן לחסוך עוד ${fm(r.hUnused - r.fSaved - r.mSaved)} ₪ ע״י מימוש ${fm(r.hOpt - cg)} ₪ נוספים`
                 : "ניצול מלוא הזיכויים! 🎯"}
@@ -1590,7 +1592,7 @@ function App() {
         </div>
 
         {/* DETAIL TABLE */}
-        <button onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "#a0a0b8", fontWeight: 600, marginBottom: 16 }}>
+        <button onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 16 }}>
           {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל (רפורמת 2024)
         </button>
         {det && (
@@ -1599,7 +1601,7 @@ function App() {
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
                   {["גיל", "אב בסיס", "רפורמה", "אב סה״כ", "אם בסיס", "רפורמה", "אם סה״כ"].map(h => (
-                    <th key={h} style={{ padding: "8px 4px", textAlign: "center", color: "#a0a0b8", fontSize: 11 }}>{h}</th>
+                    <th key={h} style={{ padding: "8px 4px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1632,7 +1634,7 @@ function App() {
 
         {/* STEPS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "#c4944a", margin: "0 0 12px" }}>🗂️ צעדים</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🗂️ צעדים</h2>
           {[
             ["1", "הגשת בקשה למענק עבודה", "שני בני הזוג בנפרד, לשנת 2024 (עד 31.12.26) ו-2025 (עד 31.12.27)"],
             ["2", "בדיקת רווחים צבורים", "בקש טופס 867 מהבנק/ברוקר"],
@@ -1641,8 +1643,8 @@ function App() {
             ["5", "עדכון טופס 101", "פרטי ילדים + ישוב מזכה"],
           ].map(([n, t, d]) => (
             <div key={n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#c4944a", color: "#1a1a2e", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
-              <div><div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 11, color: "#7a7a9a" }}>{d}</div></div>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "hsl(142, 60%, 50%)", color: "hsl(220, 18%, 10%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
+              <div><div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>{d}</div></div>
             </div>
           ))}
         </div>

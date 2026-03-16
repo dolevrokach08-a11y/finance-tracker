@@ -6,7 +6,7 @@
     <title>מעקב כספי חכם</title>
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#00f0ff">
+    <meta name="theme-color" content="#0f1419">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Finance">
@@ -127,85 +127,85 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
-        /* ==================== DARK FINTECH THEME ==================== */
+        /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
         :root {
-            /* Dark backgrounds (default) */
-            --bg-base: #0a0a0f;
-            --bg-surface: #12121a;
-            --bg-elevated: #1a1a24;
-            --bg-hover: #22222e;
-            
-            /* Accent - Neon Cyan */
-            --accent: #00f5d4;
-            --accent-dim: rgba(0, 245, 212, 0.15);
-            --accent-glow: 0 0 20px rgba(0, 245, 212, 0.3);
-            
-            /* Text */
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --text-muted: #6a6a7a;
-            
+            /* Dark backgrounds — Bloomberg/Terminal inspired */
+            --bg-base: hsl(220, 20%, 7%);
+            --bg-surface: hsl(220, 18%, 10%);
+            --bg-elevated: hsl(220, 16%, 13%);
+            --bg-hover: hsl(220, 16%, 18%);
+
+            /* Accent - Finance Green */
+            --accent: hsl(142, 60%, 50%);
+            --accent-dim: hsla(142, 60%, 50%, 0.12);
+            --accent-glow: 0 0 20px hsla(142, 60%, 50%, 0.3);
+
+            /* Text — improved contrast */
+            --text-primary: hsl(210, 20%, 92%);
+            --text-secondary: hsl(210, 20%, 75%);
+            --text-muted: hsl(215, 12%, 52%);
+
             /* Status Colors */
-            --profit: #00f5d4;
-            --loss: #ff6b6b;
-            --warning: #ffd93d;
-            --info: #4dabf7;
-            --success: #00f5d4;
-            --danger: #ff6b6b;
-            
+            --profit: hsl(142, 60%, 50%);
+            --loss: hsl(0, 72%, 55%);
+            --warning: hsl(38, 92%, 55%);
+            --info: hsl(210, 80%, 55%);
+            --success: hsl(142, 60%, 50%);
+            --danger: hsl(0, 72%, 55%);
+
             /* Borders */
-            --border: rgba(255, 255, 255, 0.1);
-            --border-accent: rgba(0, 245, 212, 0.3);
-            --border-color: rgba(255, 255, 255, 0.1);
-            
+            --border: hsl(220, 14%, 16%);
+            --border-accent: hsla(142, 60%, 50%, 0.3);
+            --border-color: hsl(220, 14%, 16%);
+
             /* Legacy mapping */
-            --bg-primary: #12121a;
-            --bg-secondary: #1a1a24;
-            --bg-tertiary: #22222e;
-            --bg-gradient-start: #0a0a0f;
-            --bg-gradient-end: #12121a;
-            --glass-bg: rgba(18, 18, 26, 0.95);
+            --bg-primary: hsl(220, 18%, 10%);
+            --bg-secondary: hsl(220, 16%, 13%);
+            --bg-tertiary: hsl(220, 16%, 18%);
+            --bg-gradient-start: hsl(220, 20%, 7%);
+            --bg-gradient-end: hsl(220, 18%, 10%);
+            --glass-bg: hsla(220, 18%, 10%, 0.95);
             --shadow-color: rgba(0,0,0,0.4);
             --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
-            
+
             /* Misc */
-            --radius: 16px;
+            --radius: 12px;
             --radius-sm: 8px;
             --radius-md: 12px;
-            --radius-lg: 16px;
-            --radius-xl: 24px;
+            --radius-lg: 12px;
+            --radius-xl: 16px;
         }
-        
+
         /* Light Theme */
         [data-theme="light"] {
-            --bg-base: #f8f9fa;
-            --bg-surface: #ffffff;
-            --bg-elevated: #f1f3f5;
-            --bg-hover: #e9ecef;
-            
-            --accent: #00b894;
-            --accent-dim: rgba(0, 184, 148, 0.12);
-            
-            --text-primary: #1a1a2e;
-            --text-secondary: #5a5a7a;
-            --text-muted: #8b8ba0;
-            
-            --profit: #00b894;
-            --loss: #e74c3c;
-            --success: #00b894;
-            --danger: #e74c3c;
-            
-            --border: rgba(0, 0, 0, 0.08);
-            --border-color: rgba(0, 0, 0, 0.08);
-            
-            --bg-primary: #ffffff;
-            --bg-secondary: #f1f3f5;
-            --bg-tertiary: #e9ecef;
-            --bg-gradient-start: #f8f9fa;
-            --bg-gradient-end: #ffffff;
-            --glass-bg: rgba(255, 255, 255, 0.95);
-            --shadow-color: rgba(0,0,0,0.08);
-            --shadow-lg: 0 10px 40px rgba(0,0,0,0.08);
+            --bg-base: hsl(220, 15%, 96%);
+            --bg-surface: hsl(0, 0%, 100%);
+            --bg-elevated: hsl(220, 15%, 94%);
+            --bg-hover: hsl(220, 12%, 90%);
+
+            --accent: hsl(142, 55%, 40%);
+            --accent-dim: hsla(142, 55%, 40%, 0.1);
+
+            --text-primary: hsl(220, 25%, 12%);
+            --text-secondary: hsl(220, 12%, 42%);
+            --text-muted: hsl(220, 10%, 58%);
+
+            --profit: hsl(142, 55%, 38%);
+            --loss: hsl(0, 65%, 50%);
+            --success: hsl(142, 55%, 38%);
+            --danger: hsl(0, 65%, 50%);
+
+            --border: hsl(220, 12%, 88%);
+            --border-color: hsl(220, 12%, 88%);
+
+            --bg-primary: hsl(0, 0%, 100%);
+            --bg-secondary: hsl(220, 15%, 94%);
+            --bg-tertiary: hsl(220, 12%, 90%);
+            --bg-gradient-start: hsl(220, 15%, 96%);
+            --bg-gradient-end: hsl(0, 0%, 100%);
+            --glass-bg: hsla(0, 0%, 100%, 0.95);
+            --shadow-color: rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 40px rgba(0,0,0,0.06);
         }
         
         /* ==================== ANIMATIONS ==================== */
