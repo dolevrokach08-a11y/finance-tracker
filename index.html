@@ -302,8 +302,12 @@
             </a>
         </div>
 
-        <div class="footer">
+        <div class="footer" style="margin-bottom: 12px;">
             💡 הנתונים מסונכרנים בענן בין כל המכשירים שלך
+        </div>
+        <div style="display: flex; justify-content: center; gap: 12px; margin-bottom: 8px;">
+            <span style="font-size: 0.72rem; color: var(--text-muted); background: var(--bg-surface); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);">Ctrl+K חיפוש מהיר</span>
+            <span style="font-size: 0.72rem; color: var(--text-muted); background: var(--bg-surface); padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);">Ctrl+J עוזר AI</span>
         </div>
     </div>
 
@@ -376,6 +380,39 @@
                     });
             });
         }
+    </script>
+
+    <!-- AI Assistant & UI Enhancement Modules -->
+    <script src="ai-assistant.js"></script>
+    <script>
+    (function() {
+        'use strict';
+
+        function initAIFeatures() {
+            // Command Palette for hub navigation
+            const cmdPalette = new CommandPalette({
+                commands: [
+                    { title: 'מעקב כספי', description: 'הכנסות, הוצאות, מעשרות', icon: '💵', keywords: ['finance', 'כספי', 'הכנסות', 'הוצאות'], action: () => { window.location.href = 'finance.html'; } },
+                    { title: 'תיק השקעות', description: 'מניות, אג"ח, מדדים', icon: '📈', keywords: ['portfolio', 'מניות', 'השקעות', 'תיק'], action: () => { window.location.href = 'portfolio.html'; } },
+                    { title: 'אופטימיזציית מס', description: 'נקודות זיכוי, מענקים, רווחי הון', icon: '🧮', keywords: ['tax', 'מס', 'זיכוי', 'מענק'], action: () => { window.location.href = 'tax-optimizer.html'; } },
+                ]
+            });
+
+            // Stagger animation on cards
+            const buttonsContainer = document.querySelector('.buttons-container');
+            if (buttonsContainer) {
+                MicroInteractions.staggerIn(buttonsContainer, '.app-button', 120);
+            }
+
+            console.log('✅ AI features initialized (home)');
+        }
+
+        if (document.readyState === 'complete') {
+            setTimeout(initAIFeatures, 300);
+        } else {
+            window.addEventListener('load', () => setTimeout(initAIFeatures, 300));
+        }
+    })();
     </script>
 </body>
 </html>

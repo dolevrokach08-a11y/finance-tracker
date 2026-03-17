@@ -12622,5 +12622,53 @@ ${msg}`, 'warning');
         }
 
     </script>
+
+    <!-- AI Assistant & UI Enhancement Modules -->
+    <script src="ai-assistant.js"></script>
+    <script>
+    (function() {
+        'use strict';
+
+        function initAIFeatures() {
+            // 1. AI Chat Assistant for Portfolio
+            const aiAssistant = new FinancialAIAssistant({
+                getFinanceData: () => window.__financeData || {},
+                getPortfolioData: () => window.portfolio || {}
+            });
+
+            // 2. Command Palette
+            const cmdPalette = new CommandPalette({
+                commands: [
+                    { title: 'סקירה כללית', description: 'סקירת התיק', icon: '📊', keywords: ['overview', 'סקירה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'overview\')"]'); if (btn) btn.click(); } },
+                    { title: 'אחזקות', description: 'צפה באחזקות', icon: '💼', keywords: ['holdings', 'אחזקות', 'מניות'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'holdings\')"]'); if (btn) btn.click(); } },
+                    { title: 'ביצועים', description: 'ביצועי התיק', icon: '📈', keywords: ['performance', 'ביצועים', 'TWR'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'performance\')"]'); if (btn) btn.click(); } },
+                    { title: 'תכנון', description: 'הקצאת יעד ו-rebalancing', icon: '🎯', keywords: ['planning', 'תכנון', 'הקצאה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'planning\')"]'); if (btn) btn.click(); } },
+                    { title: 'היסטוריה', description: 'היסטוריית עסקאות', icon: '📋', keywords: ['history', 'היסטוריה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'history\')"]'); if (btn) btn.click(); } },
+                    { title: 'רענן מחירים', description: 'עדכון מחירי נכסים', icon: '🔄', keywords: ['refresh', 'רענן', 'מחירים'], action: () => { if (typeof refreshPrices === 'function') refreshPrices(); } },
+                    { title: 'מעקב כספי', description: 'עבור לדף הכספי', icon: '💵', keywords: ['finance', 'כספי'], action: () => { window.location.href = 'finance.html'; } },
+                    { title: 'אופטימיזציית מס', description: 'עבור למחשבון המס', icon: '🧮', keywords: ['tax', 'מס'], action: () => { window.location.href = 'tax-optimizer.html'; } },
+                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר'], shortcut: 'Ctrl+J', action: () => { aiAssistant.toggle(); } },
+                    { title: 'דף הבית', description: 'חזור לדף הראשי', icon: '🏠', keywords: ['home', 'בית'], action: () => { window.location.href = 'index.html'; } },
+                ]
+            });
+
+            // Ctrl+J to open AI assistant
+            document.addEventListener('keydown', (e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+                    e.preventDefault();
+                    aiAssistant.toggle();
+                }
+            });
+
+            console.log('✅ AI features initialized (portfolio)');
+        }
+
+        if (document.readyState === 'complete') {
+            setTimeout(initAIFeatures, 500);
+        } else {
+            window.addEventListener('load', () => setTimeout(initAIFeatures, 500));
+        }
+    })();
+    </script>
 </body>
 </html>
