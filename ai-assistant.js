@@ -11,14 +11,15 @@
 
 class FinancialAIAssistant {
     constructor(options = {}) {
-        this.apiKey = options.apiKey || null;
-        this.model = options.model || 'claude-sonnet-4-6';
+        this.apiKey = options.apiKey || localStorage.getItem('ai_api_key') || null;
+        this.model = options.model || localStorage.getItem('ai_model') || 'claude-sonnet-4-6';
         this.getFinanceData = options.getFinanceData || (() => ({}));
         this.getPortfolioData = options.getPortfolioData || (() => ({}));
         this.isOpen = false;
         this.messages = [];
         this.isTyping = false;
         this.container = null;
+        this.settingsOpen = false;
         this.onAction = options.onAction || (() => {});
 
         this._injectStyles();
@@ -137,6 +138,97 @@ class FinancialAIAssistant {
                 background: hsl(142, 60%, 50%);
                 display: inline-block;
             }
+            .ai-chat-status.connected { color: hsl(142, 60%, 50%); }
+            .ai-chat-status.connected::before { background: hsl(142, 60%, 50%); }
+            .ai-chat-status.local { color: hsl(38, 80%, 55%); }
+            .ai-chat-status.local::before { background: hsl(38, 80%, 55%); }
+
+            .ai-settings-btn {
+                background: transparent;
+                border: none;
+                color: hsl(215, 12%, 50%);
+                cursor: pointer;
+                padding: 4px;
+                border-radius: 6px;
+                transition: all 0.2s;
+                display: flex;
+                align-items: center;
+            }
+            .ai-settings-btn:hover { color: hsl(210, 20%, 85%); background: hsl(220, 16%, 16%); }
+
+            .ai-settings-panel {
+                padding: 16px;
+                border-bottom: 1px solid hsl(220, 14%, 16%);
+                background: hsl(220, 16%, 9%);
+                display: none;
+                animation: ai-msg-in 0.2s ease both;
+            }
+            .ai-settings-panel.open { display: block; }
+            .ai-settings-panel label {
+                display: block;
+                font-size: 0.75rem;
+                color: hsl(215, 12%, 52%);
+                margin-bottom: 6px;
+                direction: rtl;
+            }
+            .ai-settings-panel input,
+            .ai-settings-panel select {
+                width: 100%;
+                background: hsl(220, 16%, 13%);
+                border: 1px solid hsl(220, 14%, 20%);
+                border-radius: 8px;
+                padding: 8px 12px;
+                color: hsl(210, 20%, 92%);
+                font-size: 0.8rem;
+                font-family: inherit;
+                outline: none;
+                margin-bottom: 12px;
+                direction: ltr;
+                transition: border-color 0.2s;
+            }
+            .ai-settings-panel input:focus,
+            .ai-settings-panel select:focus {
+                border-color: hsl(142, 60%, 50%);
+            }
+            .ai-settings-panel input[type="password"] {
+                font-family: 'JetBrains Mono', monospace;
+                letter-spacing: 1px;
+            }
+            .ai-settings-save {
+                width: 100%;
+                padding: 8px;
+                border-radius: 8px;
+                border: none;
+                background: hsl(142, 60%, 45%);
+                color: white;
+                font-size: 0.8rem;
+                font-weight: 600;
+                cursor: pointer;
+                font-family: inherit;
+                transition: background 0.2s;
+            }
+            .ai-settings-save:hover { background: hsl(142, 60%, 50%); }
+            .ai-settings-info {
+                font-size: 0.68rem;
+                color: hsl(215, 12%, 42%);
+                margin-top: 8px;
+                text-align: center;
+                direction: rtl;
+            }
+            .ai-settings-clear {
+                background: transparent;
+                border: 1px solid hsla(0, 72%, 55%, 0.3);
+                color: hsl(0, 72%, 55%);
+                padding: 6px;
+                border-radius: 8px;
+                font-size: 0.72rem;
+                cursor: pointer;
+                font-family: inherit;
+                width: 100%;
+                margin-top: 6px;
+                transition: all 0.2s;
+            }
+            .ai-settings-clear:hover { background: hsla(0, 72%, 55%, 0.1); }
 
             .ai-chat-messages {
                 flex: 1;
@@ -307,6 +399,11 @@ class FinancialAIAssistant {
         this.panel.className = 'ai-chat-panel';
         this.panel.setAttribute('role', 'dialog');
         this.panel.setAttribute('aria-label', 'עוזר פיננסי AI');
+        const hasKey = !!this.apiKey;
+        const statusClass = hasKey ? 'connected' : 'local';
+        const statusText = hasKey ? 'Claude API מחובר' : 'מצב מקומי';
+        const maskedKey = hasKey ? this.apiKey.slice(0, 10) + '...' + this.apiKey.slice(-4) : '';
+
         this.panel.innerHTML = `
             <div class="ai-chat-header">
                 <div class="ai-chat-header-title">
@@ -316,11 +413,34 @@ class FinancialAIAssistant {
                     </svg>
                     עוזר פיננסי AI
                 </div>
-                <div class="ai-chat-status">מוכן</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div class="ai-chat-status ${statusClass}">${statusText}</div>
+                    <button class="ai-settings-btn" id="aiSettingsToggle" aria-label="הגדרות API">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="ai-settings-panel" id="aiSettingsPanel">
+                <label for="aiApiKeyInput">Claude API Key</label>
+                <input type="password" id="aiApiKeyInput" placeholder="sk-ant-api03-..." value="${maskedKey}" autocomplete="off">
+                <label for="aiModelSelect">מודל</label>
+                <select id="aiModelSelect">
+                    <option value="claude-sonnet-4-6" ${this.model === 'claude-sonnet-4-6' ? 'selected' : ''}>Claude Sonnet 4.6 (מהיר, מומלץ)</option>
+                    <option value="claude-haiku-4-5-20251001" ${this.model === 'claude-haiku-4-5-20251001' ? 'selected' : ''}>Claude Haiku 4.5 (מהיר מאוד, זול)</option>
+                    <option value="claude-opus-4-6" ${this.model === 'claude-opus-4-6' ? 'selected' : ''}>Claude Opus 4.6 (חכם ביותר, יקר)</option>
+                </select>
+                <button class="ai-settings-save" id="aiSettingsSave">שמור הגדרות</button>
+                <button class="ai-settings-clear" id="aiSettingsClear">מחק API Key</button>
+                <div class="ai-settings-info">
+                    המפתח נשמר מקומית בדפדפן בלבד (localStorage).<br>
+                    ללא מפתח, העוזר עובד במצב מקומי עם ניתוח בסיסי.
+                </div>
             </div>
             <div class="ai-chat-messages" id="aiChatMessages">
                 <div class="ai-msg assistant">
-                    שלום! אני העוזר הפיננסי שלך. אפשר לשאול אותי על ההוצאות, ההכנסות, התיק שלך ועוד. איך אפשר לעזור?
+                    שלום! אני העוזר הפיננסי שלך. ${hasKey ? 'מחובר ל-Claude API - אפשר לשאול שאלות מורכבות!' : 'עובד במצב מקומי. להגדרת Claude API לחץ על גלגל השיניים למעלה.'}
                 </div>
             </div>
             <div class="ai-quick-actions" id="aiQuickActions">
@@ -347,6 +467,7 @@ class FinancialAIAssistant {
         this.input = this.panel.querySelector('#aiChatInput');
         this.sendBtn = this.panel.querySelector('#aiChatSend');
         this.statusEl = this.panel.querySelector('.ai-chat-status');
+        this.settingsPanel = this.panel.querySelector('#aiSettingsPanel');
     }
 
     // ---- Event Binding ----
@@ -360,6 +481,27 @@ class FinancialAIAssistant {
                 this._handleSend();
             }
         });
+
+        // Settings panel toggle
+        const settingsToggle = this.panel.querySelector('#aiSettingsToggle');
+        if (settingsToggle) {
+            settingsToggle.addEventListener('click', () => {
+                this.settingsOpen = !this.settingsOpen;
+                this.settingsPanel.classList.toggle('open', this.settingsOpen);
+            });
+        }
+
+        // Save settings
+        const saveBtn = this.panel.querySelector('#aiSettingsSave');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => this._saveSettings());
+        }
+
+        // Clear API key
+        const clearBtn = this.panel.querySelector('#aiSettingsClear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this._clearApiKey());
+        }
 
         // Quick action buttons
         this.panel.querySelectorAll('.ai-quick-btn').forEach(btn => {
@@ -639,9 +781,83 @@ class FinancialAIAssistant {
             'נסה לשאול אחת מהשאלות האלה!';
     }
 
+    // ---- Settings Management ----
+    _saveSettings() {
+        const keyInput = this.panel.querySelector('#aiApiKeyInput');
+        const modelSelect = this.panel.querySelector('#aiModelSelect');
+        const key = keyInput.value.trim();
+        const model = modelSelect.value;
+
+        // Only save if key looks new (not masked)
+        if (key && !key.includes('...')) {
+            if (!key.startsWith('sk-ant-')) {
+                this._addMessage('assistant', 'המפתח לא נראה תקין. מפתח Claude API מתחיל ב-**sk-ant-**');
+                return;
+            }
+            this.apiKey = key;
+            localStorage.setItem('ai_api_key', key);
+            keyInput.value = key.slice(0, 10) + '...' + key.slice(-4);
+        }
+
+        this.model = model;
+        localStorage.setItem('ai_model', model);
+
+        // Update status indicator
+        this._updateStatus();
+
+        // Close settings
+        this.settingsOpen = false;
+        this.settingsPanel.classList.remove('open');
+
+        this._addMessage('assistant', this.apiKey
+            ? `הגדרות נשמרו! מחובר ל-**${this._modelDisplayName()}**. אפשר לשאול שאלות מורכבות עכשיו.`
+            : 'הגדרות נשמרו. עובד במצב מקומי (ללא API key).'
+        );
+    }
+
+    _clearApiKey() {
+        this.apiKey = null;
+        localStorage.removeItem('ai_api_key');
+        localStorage.removeItem('ai_model');
+        this.model = 'claude-sonnet-4-6';
+
+        const keyInput = this.panel.querySelector('#aiApiKeyInput');
+        const modelSelect = this.panel.querySelector('#aiModelSelect');
+        if (keyInput) keyInput.value = '';
+        if (modelSelect) modelSelect.value = 'claude-sonnet-4-6';
+
+        this._updateStatus();
+        this.settingsOpen = false;
+        this.settingsPanel.classList.remove('open');
+
+        this._addMessage('assistant', 'API Key נמחק. העוזר עובד כעת במצב מקומי.');
+    }
+
+    _updateStatus() {
+        if (!this.statusEl) return;
+        if (this.apiKey) {
+            this.statusEl.className = 'ai-chat-status connected';
+            this.statusEl.textContent = 'Claude API מחובר';
+        } else {
+            this.statusEl.className = 'ai-chat-status local';
+            this.statusEl.textContent = 'מצב מקומי';
+        }
+    }
+
+    _modelDisplayName() {
+        const names = {
+            'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+            'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
+            'claude-opus-4-6': 'Claude Opus 4.6'
+        };
+        return names[this.model] || this.model;
+    }
+
     // ---- Public API ----
     setApiKey(key) {
         this.apiKey = key;
+        localStorage.setItem('ai_api_key', key);
+        this._updateStatus();
     }
 
     destroy() {
