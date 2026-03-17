@@ -878,6 +878,11 @@
             border-radius: var(--radius);
             padding: 24px;
             margin-bottom: 16px;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .section-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
         }
         .section-card .section-title {
             font-size: 1rem;
@@ -927,6 +932,8 @@
 
         .chart-container:hover {
             border-color: var(--border-accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
         }
         
         .chart-container.large {
@@ -9900,14 +9907,17 @@ ${msg}`, 'warning');
             // UPDATE STOCKS CARD
             // =============================================
             document.getElementById('stocks-value').textContent = `₪${Math.round(stocksValue).toLocaleString()}`;
-            
+
             const usdTotal = portfolio.holdings.filter(h => h.currency === 'USD')
                 .reduce((sum, h) => sum + (h.shares * (h.currentPrice || h.costBasis)), 0);
             const eurTotal = portfolio.holdings.filter(h => h.currency === 'EUR')
                 .reduce((sum, h) => sum + (h.shares * (h.currentPrice || h.costBasis)), 0);
-            
-            document.getElementById('stocks-value-original').textContent = 
-                `$${Math.round(usdTotal).toLocaleString()} + €${Math.round(eurTotal).toLocaleString()}`;
+
+            // Show P/L for stocks
+            const stocksPL = stocksValue - stocksInvested;
+            const stocksPLpct = stocksInvested > 0 ? ((stocksPL / stocksInvested) * 100).toFixed(1) : 0;
+            document.getElementById('stocks-value-original').innerHTML =
+                `$${Math.round(usdTotal).toLocaleString()} + €${Math.round(eurTotal).toLocaleString()} <span style="margin-right: 6px; color: ${stocksPL >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-weight: 600;">${stocksPL >= 0 ? '↑' : '↓'}${Math.abs(stocksPLpct)}%</span>`;
             
             document.getElementById('stocks-count').textContent = `${portfolio.holdings.length} החזקות`;
             document.getElementById('stocks-capital').textContent = `₪${Math.round(stocksInvested).toLocaleString()}`;
@@ -9928,7 +9938,21 @@ ${msg}`, 'warning');
             const overviewTotalDepositsEl = document.getElementById('overview-total-deposits');
             
             if (totalValueEl) totalValueEl.textContent = `₪${Math.round(totalValue).toLocaleString()}`;
-            if (totalValue2El) totalValue2El.textContent = `₪${Math.round(totalValue).toLocaleString()}`;
+            if (totalValue2El) {
+                totalValue2El.textContent = `₪${Math.round(totalValue).toLocaleString()}`;
+                // Add total P/L indicator below
+                const totalPL = totalValue - totalDeposits;
+                const totalPLpct = totalDeposits > 0 ? ((totalPL / totalDeposits) * 100).toFixed(1) : 0;
+                let plIndicator = totalValue2El.parentElement.querySelector('.portfolio-pl-indicator');
+                if (!plIndicator) {
+                    plIndicator = document.createElement('div');
+                    plIndicator.className = 'portfolio-pl-indicator';
+                    plIndicator.style.cssText = 'font-size: 0.8rem; margin-top: 4px; font-weight: 600;';
+                    totalValue2El.parentElement.appendChild(plIndicator);
+                }
+                plIndicator.style.color = totalPL >= 0 ? 'var(--profit)' : 'var(--loss)';
+                plIndicator.textContent = `${totalPL >= 0 ? '+' : ''}₪${Math.round(totalPL).toLocaleString()} (${totalPL >= 0 ? '+' : ''}${totalPLpct}%)`;
+            }
             if (overviewTotalDepositsEl) overviewTotalDepositsEl.textContent = `הושקע: ₪${Math.round(totalDeposits).toLocaleString()}`;
             
             const availableCashOverviewEl = document.getElementById('available-cash-overview');
@@ -10064,6 +10088,12 @@ ${msg}`, 'warning');
                 }, 0);
             });
             
+            // Calculate target vs actual for tooltip
+            const groupMeta = portfolio.groups.map((g, i) => {
+                const actual = totalValue > 0 ? (data[i] / totalValue * 100) : 0;
+                return { name: g.name, target: g.target || 0, actual: actual.toFixed(1), value: data[i] };
+            });
+
             charts.portfolio = new Chart(canvas, {
                 type: 'doughnut',
                 data: {
@@ -10072,26 +10102,46 @@ ${msg}`, 'warning');
                         data: data,
                         backgroundColor: portfolio.groups.map(g => g.color),
                         borderWidth: 2,
-                        borderColor: '#fff'
+                        borderColor: 'hsl(220, 18%, 10%)',
+                        hoverBorderColor: '#fff',
+                        hoverOffset: 10
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    cutout: '55%',
+                    animation: { animateRotate: true, duration: 1200, easing: 'easeOutQuart' },
                     plugins: {
                         legend: {
                             position: 'bottom',
                             labels: {
-                                font: { size: 14 },
-                                padding: 15
+                                font: { size: 12 },
+                                padding: 12,
+                                usePointStyle: true
                             }
                         },
                         tooltip: {
+                            backgroundColor: 'hsl(220, 18%, 12%)',
+                            titleColor: 'hsl(210, 20%, 92%)',
+                            bodyColor: 'hsl(210, 20%, 80%)',
+                            borderColor: 'hsl(220, 14%, 22%)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 12,
                             callbacks: {
                                 label: function(context) {
+                                    const meta = groupMeta[context.dataIndex];
+                                    if (!meta) return '';
                                     const value = context.parsed;
-                                    const percent = totalValue > 0 ? (value / totalValue * 100).toFixed(1) : 0;
-                                    return `${context.label}: ₪${Math.round(value).toLocaleString()} (${percent}%)`;
+                                    const lines = [
+                                        `${context.label}: ₪${Math.round(value).toLocaleString()} (${meta.actual}%)`
+                                    ];
+                                    if (meta.target > 0) {
+                                        const diff = (parseFloat(meta.actual) - meta.target).toFixed(1);
+                                        lines.push(`יעד: ${meta.target}% | סטייה: ${diff > 0 ? '+' : ''}${diff}%`);
+                                    }
+                                    return lines;
                                 }
                             }
                         }
@@ -11873,12 +11923,13 @@ ${msg}`, 'warning');
                             }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                            titleColor: '#fff',
-                            bodyColor: '#fff',
-                            borderColor: 'var(--accent)',
+                            backgroundColor: 'hsl(220, 18%, 12%)',
+                            titleColor: 'hsl(210, 20%, 92%)',
+                            bodyColor: 'hsl(210, 20%, 80%)',
+                            borderColor: 'hsl(220, 14%, 22%)',
                             borderWidth: 1,
-                            padding: 12,
+                            cornerRadius: 10,
+                            padding: 14,
                             displayColors: true,
                             callbacks: {
                                 label: function(context) {
@@ -11889,7 +11940,12 @@ ${msg}`, 'warning');
                                         const value = context[0].parsed.y;
                                         const deposits = context[1].parsed.y;
                                         const profit = value - deposits;
-                                        return '\n💰 רווח: ' + (profit >= 0 ? '+' : '') + '₪' + Math.round(profit).toLocaleString();
+                                        const pct = deposits > 0 ? ((profit / deposits) * 100).toFixed(1) : 0;
+                                        return [
+                                            '',
+                                            `רווח: ${profit >= 0 ? '+' : ''}₪${Math.round(profit).toLocaleString()}`,
+                                            `תשואה: ${profit >= 0 ? '+' : ''}${pct}%`
+                                        ];
                                     }
                                     return '';
                                 }
@@ -12025,18 +12081,24 @@ ${msg}`, 'warning');
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                            titleColor: '#fff',
-                            bodyColor: '#fff',
-                            padding: 12,
+                            backgroundColor: 'hsl(220, 18%, 12%)',
+                            titleColor: 'hsl(210, 20%, 92%)',
+                            bodyColor: 'hsl(210, 20%, 80%)',
+                            borderColor: 'hsl(220, 14%, 22%)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 14,
                             callbacks: {
+                                title: function(ctx) {
+                                    const point = ctx[0].raw;
+                                    return point.name + (point.type === 'bond' ? ' (אג"ח)' : ' (מניה)');
+                                },
                                 label: function(ctx) {
                                     const point = ctx.raw;
                                     return [
-                                        '📌 ' + point.name + (point.type === 'bond' ? ' (אג"ח)' : ''),
-                                        '📊 גודל: ' + point.x.toFixed(1) + '% מהתיק',
-                                        '💰 שווי: ₪' + Math.round(point.value).toLocaleString(),
-                                        '📈 תשואה: ' + (point.y >= 0 ? '+' : '') + point.y.toFixed(1) + '%'
+                                        `גודל: ${point.x.toFixed(1)}% מהתיק`,
+                                        `שווי: ₪${Math.round(point.value).toLocaleString()}`,
+                                        `תשואה: ${point.y >= 0 ? '+' : ''}${point.y.toFixed(1)}%`
                                     ];
                                 }
                             }
@@ -12162,12 +12224,27 @@ ${msg}`, 'warning');
                             }
                         },
                         tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            backgroundColor: 'hsl(220, 18%, 12%)',
+                            titleColor: 'hsl(210, 20%, 92%)',
+                            bodyColor: 'hsl(210, 20%, 80%)',
+                            borderColor: 'hsl(220, 14%, 22%)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 12,
                             callbacks: {
                                 label: function(context) {
                                     const value = context.parsed;
                                     const percent = grandTotal > 0 ? (value / grandTotal * 100).toFixed(1) : 0;
-                                    return context.label + ': ₪' + Math.round(value).toLocaleString() + ' (' + percent + '%)';
+                                    const idx = context.dataIndex;
+                                    const origAmounts = [
+                                        `₪${Math.round(ilsTotal).toLocaleString()}`,
+                                        `$${Math.round(usdTotal).toLocaleString()}`,
+                                        `€${Math.round(eurTotal).toLocaleString()}`
+                                    ];
+                                    return [
+                                        `${context.label}: ₪${Math.round(value).toLocaleString()} (${percent}%)`,
+                                        `סכום מקורי: ${origAmounts[idx]}`
+                                    ];
                                 }
                             }
                         }

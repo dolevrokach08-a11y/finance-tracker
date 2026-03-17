@@ -1788,6 +1788,7 @@
 
                     // Also save to localStorage as backup
                     localStorage.setItem('financeTrackerData', JSON.stringify(data));
+                    window.__financeData = data;
                     return true;
                 } else {
                     console.log('No Firebase data, trying localStorage...');
@@ -1822,6 +1823,7 @@
                     // Don't set cloudLastModified - we don't know what's in the cloud
                     
                     console.log('✅ Data loaded from localStorage');
+                    window.__financeData = data;
                     return true;
                 }
             } catch(e) {
@@ -5273,7 +5275,7 @@
                     { title: 'הגדרות', description: 'קטגוריות, תקציבים, כללים', icon: '⚙️', keywords: ['settings', 'הגדרות', 'תקציב'], action: () => { document.querySelectorAll('.tab-btn')[5]?.click(); } },
                     { title: 'תיק השקעות', description: 'עבור לדף תיק ההשקעות', icon: '📈', keywords: ['portfolio', 'מניות', 'השקעות'], action: () => { window.location.href = 'portfolio.html'; } },
                     { title: 'אופטימיזציית מס', description: 'עבור למחשבון המס', icon: '🧮', keywords: ['tax', 'מס', 'זיכוי'], action: () => { window.location.href = 'tax-optimizer.html'; } },
-                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר', 'צ\'אט'], shortcut: 'Ctrl+J', action: () => { aiAssistant.toggle(); } },
+                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר', 'צ\'אט'], shortcut: 'Ctrl+Shift+J', action: () => { aiAssistant.toggle(); } },
                     { title: 'דף הבית', description: 'חזור לדף הראשי', icon: '🏠', keywords: ['home', 'בית', 'ראשי'], action: () => { window.location.href = 'index.html'; } },
                 ]
             });
@@ -5284,9 +5286,9 @@
                 MicroInteractions.staggerIn(summaryGrid, ':scope > *', 100);
             }
 
-            // Ctrl+J shortcut to open AI assistant
+            // Ctrl+Shift+J shortcut to open AI assistant (avoid Ctrl+J Chrome conflict)
             document.addEventListener('keydown', (e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+                if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
                     e.preventDefault();
                     aiAssistant.toggle();
                 }

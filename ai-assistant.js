@@ -638,147 +638,301 @@ class FinancialAIAssistant {
     }
 
     // ---- Local Analysis (No API Key) ----
-    async _localAnalysis(query) {
-        // Simulate thinking time
-        await new Promise(r => setTimeout(r, 600 + Math.random() * 800));
-
+    // Helper: get full monthly summary including fixed incomes/expenses
+    _getMonthSummary(month) {
         const data = this.getFinanceData();
         const transactions = data.transactions || [];
+        const fixedIncomes = data.fixedIncomes || [];
+        const fixedExpenses = data.fixedExpenses || [];
+
+        const monthTx = transactions.filter(t => t.month === month && t.type !== 'manual-tithe');
+        let inc = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + (t.amt || 0), 0);
+        let exp = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amt || 0), 0);
+
+        // Add fixed incomes/expenses for this month
+        fixedIncomes.forEach(f => {
+            if (this._monthInRange(month, f.start, f.end)) inc += f.amount;
+        });
+        fixedExpenses.forEach(f => {
+            if (this._monthInRange(month, f.start, f.end)) exp += f.amount;
+        });
+
+        const bal = inc - exp;
+        return { inc, exp, bal, transactions: monthTx };
+    }
+
+    _monthInRange(month, start, end) {
+        if (!start || !end) return false;
+        return month >= start && month <= end;
+    }
+
+    _getMonthExpensesByCategory(month) {
+        const data = this.getFinanceData();
+        const transactions = data.transactions || [];
+        const fixedExpenses = data.fixedExpenses || [];
+        const cats = {};
+
+        transactions.filter(t => t.month === month && t.type === 'expense').forEach(t => {
+            cats[t.cat || 'אחר'] = (cats[t.cat || 'אחר'] || 0) + (t.amt || 0);
+        });
+        fixedExpenses.forEach(f => {
+            if (this._monthInRange(month, f.start, f.end)) {
+                cats[f.category || 'אחר'] = (cats[f.category || 'אחר'] || 0) + f.amount;
+            }
+        });
+        return cats;
+    }
+
+    _getMonthIncomesByCategory(month) {
+        const data = this.getFinanceData();
+        const transactions = data.transactions || [];
+        const fixedIncomes = data.fixedIncomes || [];
+        const cats = {};
+
+        transactions.filter(t => t.month === month && t.type === 'income').forEach(t => {
+            cats[t.cat || 'אחר'] = (cats[t.cat || 'אחר'] || 0) + (t.amt || 0);
+        });
+        fixedIncomes.forEach(f => {
+            if (this._monthInRange(month, f.start, f.end)) {
+                cats[f.category || 'אחר'] = (cats[f.category || 'אחר'] || 0) + f.amount;
+            }
+        });
+        return cats;
+    }
+
+    async _localAnalysis(query) {
+        await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
+
+        const data = this.getFinanceData();
         const budgets = data.budgets || {};
         const q = query.toLowerCase();
 
         const now = new Date();
         const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const prevMonth = now.getMonth() === 0
-            ? `${now.getFullYear() - 1}-12`
-            : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, '0')}`;
+        const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1);
+        const prevMonth = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
 
-        const thisMonthTx = transactions.filter(t => t.month === currentMonth);
-        const prevMonthTx = transactions.filter(t => t.month === prevMonth);
-
-        const sumByType = (txs, type) => txs.filter(t => t.type === type).reduce((s, t) => s + (t.amt || 0), 0);
-        const sumByCat = (txs, type) => {
-            const cats = {};
-            txs.filter(t => t.type === type).forEach(t => {
-                cats[t.cat || 'אחר'] = (cats[t.cat || 'אחר'] || 0) + (t.amt || 0);
-            });
-            return cats;
-        };
-
-        const fmt = (n) => new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(n);
+        const current = this._getMonthSummary(currentMonth);
+        const prev = this._getMonthSummary(prevMonth);
+        const fmt = (n) => `₪${Math.round(n).toLocaleString()}`;
+        const monthName = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 
         // Monthly summary
         if (q.includes('סכם') || q.includes('סיכום') || q.includes('חודש')) {
-            const income = sumByType(thisMonthTx, 'income');
-            const expense = sumByType(thisMonthTx, 'expense');
-            const savings = income - expense;
-            const savingsRate = income > 0 ? ((savings / income) * 100).toFixed(1) : 0;
+            const savingsRate = current.inc > 0 ? ((current.bal / current.inc) * 100).toFixed(1) : 0;
+            const incChange = prev.inc > 0 ? (((current.inc - prev.inc) / prev.inc) * 100).toFixed(1) : null;
+            const expChange = prev.exp > 0 ? (((current.exp - prev.exp) / prev.exp) * 100).toFixed(1) : null;
 
-            return `**סיכום חודשי - ${currentMonth}**\n\n` +
-                `הכנסות: **${fmt(income)}**\n` +
-                `הוצאות: **${fmt(expense)}**\n` +
-                `חיסכון: **${fmt(savings)}** (${savingsRate}%)\n\n` +
-                (savings > 0
-                    ? `מצוין! את/ה חוסכ/ת ${savingsRate}% מההכנסה.`
-                    : `שים לב - ההוצאות עולות על ההכנסות. מומלץ לבדוק את הקטגוריות הגדולות.`);
+            let text = `**סיכום ${monthName}**\n\n`;
+            text += `הכנסות: **${fmt(current.inc)}**`;
+            if (incChange !== null) text += ` (${incChange > 0 ? '+' : ''}${incChange}% מחודש קודם)`;
+            text += `\nהוצאות: **${fmt(current.exp)}**`;
+            if (expChange !== null) text += ` (${expChange > 0 ? '+' : ''}${expChange}% מחודש קודם)`;
+            text += `\nיתרה: **${fmt(current.bal)}** (${savingsRate}% חיסכון)\n\n`;
+
+            // Top 3 expense categories
+            const cats = this._getMonthExpensesByCategory(currentMonth);
+            const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
+            if (sorted.length > 0) {
+                text += '**הוצאות עיקריות:**\n';
+                sorted.forEach(([cat, amt]) => {
+                    text += `• ${cat}: ${fmt(amt)}\n`;
+                });
+            }
+
+            if (current.bal >= 0) {
+                text += `\n${savingsRate >= 20 ? 'מעולה' : savingsRate >= 10 ? 'טוב' : 'סביר'}! ${savingsRate >= 20 ? 'שיעור חיסכון מצוין.' : 'כדאי לשאוף ל-20% חיסכון.'}`;
+            } else {
+                text += `\n⚠️ ההוצאות עולות על ההכנסות ב-${fmt(Math.abs(current.bal))}. כדאי לבדוק את הקטגוריות הגדולות.`;
+            }
+            return text;
         }
 
         // Savings tips
         if (q.includes('חסוך') || q.includes('חיסכון') || q.includes('טיפ')) {
-            const cats = sumByCat(thisMonthTx, 'expense');
+            const cats = this._getMonthExpensesByCategory(currentMonth);
+            const prevCats = this._getMonthExpensesByCategory(prevMonth);
             const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-            const top3 = sorted.slice(0, 3);
 
-            let tips = '**טיפים לחיסכון:**\n\n';
-            top3.forEach(([cat, amt], i) => {
+            let tips = `**טיפים לחיסכון - ${monthName}:**\n\n`;
+
+            sorted.slice(0, 5).forEach(([cat, amt], i) => {
                 const budget = budgets[cat];
+                const prevAmt = prevCats[cat];
+                const increased = prevAmt && amt > prevAmt * 1.1;
+
                 if (budget && amt > budget) {
-                    tips += `${i + 1}. **${cat}**: הוצאת ${fmt(amt)} מתוך תקציב של ${fmt(budget)} - חריגה של ${fmt(amt - budget)}\n`;
+                    tips += `${i + 1}. **${cat}**: ${fmt(amt)} / ${fmt(budget)} - חריגה של **${fmt(amt - budget)}**\n`;
+                } else if (increased) {
+                    const pct = Math.round(((amt - prevAmt) / prevAmt) * 100);
+                    tips += `${i + 1}. **${cat}**: ${fmt(amt)} - עליה של ${pct}% לעומת חודש קודם\n`;
                 } else {
-                    tips += `${i + 1}. **${cat}**: ${fmt(amt)} - הקטגוריה הגדולה ביותר\n`;
+                    tips += `${i + 1}. **${cat}**: ${fmt(amt)}\n`;
                 }
             });
 
-            tips += `\nנסה להגדיר תקציב לכל קטגוריה ולעקוב אחרי החריגות.`;
+            if (current.inc > 0) {
+                const idealSave = current.inc * 0.2;
+                const actualSave = current.bal;
+                if (actualSave < idealSave) {
+                    tips += `\nכדי להגיע ל-20% חיסכון (${fmt(idealSave)}), צריך לחסוך עוד **${fmt(idealSave - actualSave)}**.`;
+                } else {
+                    tips += `\nאת/ה כבר חוסכ/ת ${fmt(actualSave)} - מעל יעד ה-20%!`;
+                }
+            }
             return tips;
         }
 
         // Budget status
         if (q.includes('תקציב')) {
-            const cats = sumByCat(thisMonthTx, 'expense');
+            const cats = this._getMonthExpensesByCategory(currentMonth);
             const budgetEntries = Object.entries(budgets);
 
             if (budgetEntries.length === 0) {
-                return 'לא הוגדרו תקציבים עדיין. לך להגדרות כדי להגדיר תקציב לכל קטגוריה.';
+                return `**אין תקציבים מוגדרים**\n\nלך לטאב הגדרות כדי להגדיר תקציב לכל קטגוריה.\n\nבינתיים, הנה ההוצאות ב${monthName}:\n` +
+                    Object.entries(cats).sort((a,b) => b[1]-a[1]).map(([c,a]) => `• ${c}: ${fmt(a)}`).join('\n');
             }
 
-            let status = '**מצב תקציב:**\n\n';
-            let overBudget = 0;
+            let status = `**מצב תקציב - ${monthName}:**\n\n`;
+            let overBudget = 0, totalSpent = 0, totalBudget = 0;
             budgetEntries.forEach(([cat, budget]) => {
                 const spent = cats[cat] || 0;
-                const pct = budget > 0 ? ((spent / budget) * 100).toFixed(0) : 0;
-                const bar = pct >= 100 ? '!' : pct >= 80 ? '~' : '+';
+                totalSpent += spent;
+                totalBudget += budget;
+                const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0;
+                const bar = pct >= 100 ? '🔴' : pct >= 80 ? '🟡' : '🟢';
                 status += `${bar} **${cat}**: ${fmt(spent)} / ${fmt(budget)} (${pct}%)\n`;
                 if (spent > budget) overBudget++;
             });
 
+            const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+            status += `\n**סה"כ**: ${fmt(totalSpent)} / ${fmt(totalBudget)} (${totalPct}%)\n`;
+
             if (overBudget > 0) {
-                status += `\n${overBudget} קטגוריות חרגו מהתקציב. שים לב!`;
+                status += `\n⚠️ ${overBudget} קטגוריות חרגו מהתקציב!`;
             } else {
-                status += '\nכל הקטגוריות בתוך התקציב - כל הכבוד!';
+                status += '\n✓ כל הקטגוריות בתוך התקציב!';
             }
             return status;
         }
 
         // Expense analysis
         if (q.includes('נתח') || q.includes('ניתוח') || q.includes('הוצאות')) {
-            const cats = sumByCat(thisMonthTx, 'expense');
-            const prevCats = sumByCat(prevMonthTx, 'expense');
-            const totalExp = sumByType(thisMonthTx, 'expense');
+            const cats = this._getMonthExpensesByCategory(currentMonth);
+            const prevCats = this._getMonthExpensesByCategory(prevMonth);
 
-            let analysis = '**ניתוח הוצאות:**\n\n';
+            let analysis = `**ניתוח הוצאות - ${monthName}:**\n\n`;
             const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+            const totalExp = current.exp;
 
-            sorted.slice(0, 5).forEach(([cat, amt]) => {
+            sorted.forEach(([cat, amt]) => {
                 const pct = totalExp > 0 ? ((amt / totalExp) * 100).toFixed(1) : 0;
                 const prevAmt = prevCats[cat] || 0;
-                const change = prevAmt > 0 ? (((amt - prevAmt) / prevAmt) * 100).toFixed(0) : 0;
-                const trend = change > 10 ? ' (עליה)' : change < -10 ? ' (ירידה)' : '';
-                analysis += `**${cat}**: ${fmt(amt)} (${pct}%)${trend}\n`;
+                let trend = '';
+                if (prevAmt > 0) {
+                    const change = Math.round(((amt - prevAmt) / prevAmt) * 100);
+                    trend = change > 10 ? ` ↑${change}%` : change < -10 ? ` ↓${Math.abs(change)}%` : ' →';
+                }
+                analysis += `• **${cat}**: ${fmt(amt)} (${pct}%)${trend}\n`;
             });
 
-            if (sorted.length === 0) {
-                analysis += 'אין עסקאות החודש עדיין.';
+            analysis += `\n**סה"כ הוצאות**: ${fmt(totalExp)}`;
+            if (prev.exp > 0) {
+                const totalChange = Math.round(((totalExp - prev.exp) / prev.exp) * 100);
+                analysis += ` (${totalChange > 0 ? '+' : ''}${totalChange}% מחודש קודם)`;
             }
-
             return analysis;
         }
 
         // Income analysis
         if (q.includes('הכנסה') || q.includes('הכנסות') || q.includes('משכורת')) {
-            const income = sumByType(thisMonthTx, 'income');
-            const prevIncome = sumByType(prevMonthTx, 'income');
-            const change = prevIncome > 0 ? (((income - prevIncome) / prevIncome) * 100).toFixed(1) : 0;
-            const incomeCats = sumByCat(thisMonthTx, 'income');
+            const incomeCats = this._getMonthIncomesByCategory(currentMonth);
+            const prevIncomeCats = this._getMonthIncomesByCategory(prevMonth);
 
-            let text = `**סיכום הכנסות - ${currentMonth}**\n\n`;
-            text += `סה"כ: **${fmt(income)}**\n`;
-            if (prevIncome > 0) text += `שינוי מחודש קודם: ${change}%\n`;
-            text += '\n';
-            Object.entries(incomeCats).forEach(([cat, amt]) => {
-                text += `${cat}: ${fmt(amt)}\n`;
+            let text = `**הכנסות - ${monthName}**\n\n`;
+            text += `סה"כ: **${fmt(current.inc)}**\n`;
+            if (prev.inc > 0) {
+                const change = Math.round(((current.inc - prev.inc) / prev.inc) * 100);
+                text += `שינוי מחודש קודם: ${change > 0 ? '+' : ''}${change}%\n`;
+            }
+            text += '\n**פירוט:**\n';
+            Object.entries(incomeCats).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {
+                const prevAmt = prevIncomeCats[cat] || 0;
+                let trend = '';
+                if (prevAmt > 0) {
+                    const change = Math.round(((amt - prevAmt) / prevAmt) * 100);
+                    if (Math.abs(change) > 5) trend = change > 0 ? ` ↑${change}%` : ` ↓${Math.abs(change)}%`;
+                }
+                text += `• ${cat}: ${fmt(amt)}${trend}\n`;
             });
             return text;
         }
 
-        // Default
-        return 'אני יכול לעזור עם:\n\n' +
-            '- **סיכום חודשי** - סקירה של הכנסות והוצאות\n' +
-            '- **טיפים לחיסכון** - איפה אפשר לחסוך\n' +
-            '- **מצב תקציב** - עמידה ביעדים\n' +
-            '- **ניתוח הוצאות** - פילוח לפי קטגוריות\n' +
-            '- **ניתוח הכנסות** - סקירת מקורות הכנסה\n\n' +
-            'נסה לשאול אחת מהשאלות האלה!';
+        // Comparison / vs
+        if (q.includes('השוואה') || q.includes('השווה') || q.includes('לעומת')) {
+            let text = `**השוואה: ${monthName} לעומת חודש קודם**\n\n`;
+            text += `| | חודש נוכחי | חודש קודם | שינוי |\n`;
+            const incChange = prev.inc > 0 ? Math.round(((current.inc - prev.inc) / prev.inc) * 100) : 0;
+            const expChange = prev.exp > 0 ? Math.round(((current.exp - prev.exp) / prev.exp) * 100) : 0;
+            text += `הכנסות: **${fmt(current.inc)}** ← ${fmt(prev.inc)} (${incChange > 0 ? '+' : ''}${incChange}%)\n`;
+            text += `הוצאות: **${fmt(current.exp)}** ← ${fmt(prev.exp)} (${expChange > 0 ? '+' : ''}${expChange}%)\n`;
+            text += `יתרה: **${fmt(current.bal)}** ← ${fmt(prev.bal)}\n`;
+            return text;
+        }
+
+        // Fixed expenses/incomes
+        if (q.includes('קבוע') || q.includes('קבועות') || q.includes('קבועים')) {
+            const fixedInc = (data.fixedIncomes || []).filter(f => this._monthInRange(currentMonth, f.start, f.end));
+            const fixedExp = (data.fixedExpenses || []).filter(f => this._monthInRange(currentMonth, f.start, f.end));
+
+            let text = `**הוצאות והכנסות קבועות - ${monthName}:**\n\n`;
+            if (fixedInc.length > 0) {
+                text += '**הכנסות קבועות:**\n';
+                fixedInc.forEach(f => { text += `• ${f.description}: ${fmt(f.amount)} (${f.category})\n`; });
+                text += '\n';
+            }
+            if (fixedExp.length > 0) {
+                text += '**הוצאות קבועות:**\n';
+                fixedExp.forEach(f => { text += `• ${f.description}: ${fmt(f.amount)} (${f.category})\n`; });
+            }
+            if (fixedInc.length === 0 && fixedExp.length === 0) {
+                text += 'לא הוגדרו הוצאות/הכנסות קבועות לחודש זה.';
+            }
+            return text;
+        }
+
+        // General financial question - provide smart default with actual data
+        // This is the catch-all for free-form questions
+        const hasData = current.inc > 0 || current.exp > 0;
+        if (!hasData) {
+            return `**אין נתונים ל${monthName}**\n\nייתכן שעדיין לא הוזנו נתונים לחודש הנוכחי.\nנסה לבדוק את חודשים קודמים, או הוסף עסקאות בטאב "הוספה".`;
+        }
+
+        // Smart catch-all: give an overview + answer the question contextually
+        const savingsRate = current.inc > 0 ? Math.round((current.bal / current.inc) * 100) : 0;
+        const topCats = Object.entries(this._getMonthExpensesByCategory(currentMonth)).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+        let response = `הנה מה שאני יודע על ${monthName}:\n\n`;
+        response += `הכנסות: **${fmt(current.inc)}** | הוצאות: **${fmt(current.exp)}** | יתרה: **${fmt(current.bal)}** (${savingsRate}%)\n\n`;
+
+        if (topCats.length > 0) {
+            response += `ההוצאות הגדולות: ${topCats.map(([c,a]) => `${c} (${fmt(a)})`).join(', ')}\n\n`;
+        }
+
+        // Try to answer specific questions
+        if (q.includes('כמה') || q.includes('מה') || q.includes('איך') || q.includes('למה') || q.includes('?')) {
+            response += 'אני עובד במצב מקומי (ללא API). אני יכול לענות על:\n';
+            response += '• **סיכום חודשי** - תמונת מצב מלאה\n';
+            response += '• **ניתוח הוצאות** - פירוט לפי קטגוריות\n';
+            response += '• **מצב תקציב** - עמידה ביעדים\n';
+            response += '• **טיפים לחיסכון** - המלצות\n';
+            response += '• **הכנסות** - פירוט מקורות\n';
+            response += '• **השוואה** - לעומת חודש קודם\n';
+            response += '• **קבועות** - הוצאות/הכנסות קבועות\n\n';
+            response += 'להגדרת מפתח Claude API (להתאמה מלאה), לחצו על ⚙️ בצ\'אט.';
+        }
+
+        return response;
     }
 
     // ---- Settings Management ----
@@ -1060,9 +1214,9 @@ class CommandPalette {
     }
 
     _bindEvents() {
-        // Cmd/Ctrl + K to open
+        // Cmd/Ctrl + Shift + K to open (avoid Ctrl+K Chrome conflict)
         document.addEventListener('keydown', (e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'k' || e.key === 'K')) {
                 e.preventDefault();
                 this.toggle();
             }
@@ -1177,110 +1331,187 @@ class SmartInsightsWidget {
         this.container = options.container || null;
     }
 
-    generateInsights() {
+    // Helper: get full monthly summary including fixed incomes/expenses
+    _getMonthData(month) {
         const data = this.getFinanceData();
         const transactions = data.transactions || [];
+        const fixedIncomes = data.fixedIncomes || [];
+        const fixedExpenses = data.fixedExpenses || [];
+
+        const monthTx = transactions.filter(t => t.month === month && t.type !== 'manual-tithe');
+        let inc = monthTx.filter(t => t.type === 'income').reduce((s, t) => s + (t.amt || 0), 0);
+        let exp = monthTx.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amt || 0), 0);
+
+        const inRange = (m, start, end) => start && end && m >= start && m <= end;
+        fixedIncomes.forEach(f => { if (inRange(month, f.start, f.end)) inc += f.amount; });
+        fixedExpenses.forEach(f => { if (inRange(month, f.start, f.end)) exp += f.amount; });
+
+        // Expense by category
+        const catSpend = {};
+        monthTx.filter(t => t.type === 'expense').forEach(t => {
+            catSpend[t.cat || 'אחר'] = (catSpend[t.cat || 'אחר'] || 0) + (t.amt || 0);
+        });
+        fixedExpenses.forEach(f => {
+            if (inRange(month, f.start, f.end)) {
+                catSpend[f.category || 'אחר'] = (catSpend[f.category || 'אחר'] || 0) + f.amount;
+            }
+        });
+
+        // Income sources
+        const incomeSources = new Set();
+        monthTx.filter(t => t.type === 'income').forEach(t => incomeSources.add(t.cat));
+        fixedIncomes.forEach(f => { if (inRange(month, f.start, f.end)) incomeSources.add(f.category); });
+
+        return { inc, exp, bal: inc - exp, catSpend, incomeSources, txCount: monthTx.length };
+    }
+
+    generateInsights() {
+        const data = this.getFinanceData();
         const budgets = data.budgets || {};
 
         const now = new Date();
         const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const prevMonth = now.getMonth() === 0
-            ? `${now.getFullYear() - 1}-12`
-            : `${now.getFullYear()}-${String(now.getMonth()).padStart(2, '0')}`;
+        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1);
+        const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
 
-        const thisMonthTx = transactions.filter(t => t.month === currentMonth);
-        const prevMonthTx = transactions.filter(t => t.month === prevMonth);
+        const current = this._getMonthData(currentMonth);
+        const prev = this._getMonthData(prevMonth);
+        const fmt = (n) => `₪${Math.round(n).toLocaleString()}`;
 
         const insights = [];
 
-        // Financial Health Score
-        const income = thisMonthTx.filter(t => t.type === 'income').reduce((s, t) => s + (t.amt || 0), 0);
-        const expense = thisMonthTx.filter(t => t.type === 'expense').reduce((s, t) => s + (t.amt || 0), 0);
-        const savingsRate = income > 0 ? (income - expense) / income : 0;
+        // ========== Detailed Financial Health Score ==========
+        const savingsRate = current.inc > 0 ? (current.bal / current.inc) : 0;
+        const scoreBreakdown = [];
+        let healthScore = 0;
 
-        let healthScore = 50;
-        if (savingsRate >= 0.2) healthScore += 20;
-        else if (savingsRate >= 0.1) healthScore += 10;
-        else if (savingsRate < 0) healthScore -= 20;
+        // 1. Savings Rate (0-30 points)
+        let savingsPoints = 0;
+        if (savingsRate >= 0.2) savingsPoints = 30;
+        else if (savingsRate >= 0.15) savingsPoints = 25;
+        else if (savingsRate >= 0.1) savingsPoints = 20;
+        else if (savingsRate >= 0.05) savingsPoints = 12;
+        else if (savingsRate >= 0) savingsPoints = 5;
+        else savingsPoints = 0;
+        healthScore += savingsPoints;
+        scoreBreakdown.push({ label: `חיסכון (${Math.round(savingsRate * 100)}%)`, points: savingsPoints, max: 30 });
 
-        // Budget adherence
-        const catSpend = {};
-        thisMonthTx.filter(t => t.type === 'expense').forEach(t => {
-            catSpend[t.cat || 'אחר'] = (catSpend[t.cat || 'אחר'] || 0) + (t.amt || 0);
-        });
-        let budgetOK = 0, budgetTotal = 0;
-        Object.entries(budgets).forEach(([cat, budget]) => {
-            budgetTotal++;
-            if ((catSpend[cat] || 0) <= budget) budgetOK++;
-        });
-        if (budgetTotal > 0) {
-            healthScore += (budgetOK / budgetTotal) * 20;
+        // 2. Budget Adherence (0-25 points)
+        let budgetPoints = 0;
+        const budgetEntries = Object.entries(budgets);
+        if (budgetEntries.length > 0) {
+            let withinBudget = 0;
+            budgetEntries.forEach(([cat, budget]) => {
+                if ((current.catSpend[cat] || 0) <= budget) withinBudget++;
+            });
+            budgetPoints = Math.round((withinBudget / budgetEntries.length) * 25);
+        } else {
+            budgetPoints = 10; // Partial credit for no budgets set
         }
+        healthScore += budgetPoints;
+        scoreBreakdown.push({ label: `עמידה בתקציב`, points: budgetPoints, max: 25 });
 
-        // Diversity of income
-        const incomeSourceCount = new Set(thisMonthTx.filter(t => t.type === 'income').map(t => t.cat)).size;
-        if (incomeSourceCount >= 2) healthScore += 10;
+        // 3. Expense Stability (0-20 points) - compared to previous month
+        let stabilityPoints = 10; // base
+        if (prev.exp > 0) {
+            const expChange = Math.abs((current.exp - prev.exp) / prev.exp);
+            if (expChange <= 0.05) stabilityPoints = 20;
+            else if (expChange <= 0.15) stabilityPoints = 15;
+            else if (expChange <= 0.3) stabilityPoints = 10;
+            else stabilityPoints = 5;
+        }
+        healthScore += stabilityPoints;
+        scoreBreakdown.push({ label: 'יציבות הוצאות', points: stabilityPoints, max: 20 });
 
-        healthScore = Math.min(100, Math.max(0, Math.round(healthScore)));
+        // 4. Income Diversity (0-15 points)
+        const sourceCount = current.incomeSources.size;
+        let diversityPoints = sourceCount >= 3 ? 15 : sourceCount >= 2 ? 10 : sourceCount >= 1 ? 5 : 0;
+        healthScore += diversityPoints;
+        scoreBreakdown.push({ label: `גיוון הכנסות (${sourceCount} מקורות)`, points: diversityPoints, max: 15 });
+
+        // 5. Data completeness (0-10 points)
+        let dataPoints = 0;
+        if (current.inc > 0) dataPoints += 3;
+        if (current.exp > 0) dataPoints += 3;
+        if (budgetEntries.length > 0) dataPoints += 2;
+        if ((data.fixedIncomes || []).length > 0 || (data.fixedExpenses || []).length > 0) dataPoints += 2;
+        healthScore += dataPoints;
+        scoreBreakdown.push({ label: 'שלמות נתונים', points: dataPoints, max: 10 });
+
+        healthScore = Math.min(100, Math.max(0, healthScore));
+
+        // Build description with breakdown
+        let healthDesc = '';
+        if (healthScore >= 80) healthDesc = 'מצוין! המצב הפיננסי שלך יציב ובריא';
+        else if (healthScore >= 65) healthDesc = 'טוב - יש מקום קטן לשיפור';
+        else if (healthScore >= 45) healthDesc = 'בינוני - כדאי לשפר כמה נקודות';
+        else healthDesc = 'דורש תשומת לב - יש מקום משמעותי לשיפור';
 
         insights.push({
             type: 'health-score',
             score: healthScore,
+            breakdown: scoreBreakdown,
             title: 'ציון בריאות פיננסית',
-            description: healthScore >= 80 ? 'מצוין! המצב הפיננסי שלך יציב'
-                : healthScore >= 60 ? 'טוב, יש מקום לשיפור'
-                : healthScore >= 40 ? 'בינוני - שים לב להוצאות'
-                : 'דורש תשומת לב - יש חריגות משמעותיות',
-            color: healthScore >= 80 ? '#22c55e' : healthScore >= 60 ? '#eab308' : healthScore >= 40 ? '#f97316' : '#ef4444'
+            description: healthDesc,
+            color: healthScore >= 80 ? '#22c55e' : healthScore >= 65 ? '#eab308' : healthScore >= 45 ? '#f97316' : '#ef4444'
         });
 
-        // Anomaly detection
-        const prevCatSpend = {};
-        prevMonthTx.filter(t => t.type === 'expense').forEach(t => {
-            prevCatSpend[t.cat || 'אחר'] = (prevCatSpend[t.cat || 'אחר'] || 0) + (t.amt || 0);
-        });
-
-        Object.entries(catSpend).forEach(([cat, amt]) => {
-            const prev = prevCatSpend[cat] || 0;
-            if (prev > 0 && amt > prev * 1.5) {
+        // ========== Anomaly detection (using full data) ==========
+        Object.entries(current.catSpend).forEach(([cat, amt]) => {
+            const prevAmt = prev.catSpend[cat] || 0;
+            if (prevAmt > 0 && amt > prevAmt * 1.5) {
                 insights.push({
                     type: 'anomaly',
                     title: `חריגה ב${cat}`,
-                    description: `עליה של ${Math.round(((amt - prev) / prev) * 100)}% לעומת חודש קודם`,
+                    description: `${fmt(amt)} - עליה של ${Math.round(((amt - prevAmt) / prevAmt) * 100)}% (חודש קודם: ${fmt(prevAmt)})`,
                     color: '#ef4444',
-                    icon: '!'
+                    icon: '⚠'
                 });
             }
         });
 
         // Predictive spending
-        if (thisMonthTx.length > 0) {
+        if (current.exp > 0) {
             const dayOfMonth = now.getDate();
             const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-            const projectedExpense = (expense / dayOfMonth) * daysInMonth;
+            const projectedExpense = Math.round((current.exp / dayOfMonth) * daysInMonth);
 
-            if (projectedExpense > income * 0.95 && income > 0) {
+            if (projectedExpense > current.inc * 0.95 && current.inc > 0) {
                 insights.push({
                     type: 'prediction',
                     title: 'חיזוי: חריגה צפויה',
-                    description: `בקצב הנוכחי, ההוצאות צפויות להגיע ל-${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(projectedExpense)}`,
+                    description: `בקצב הנוכחי, ההוצאות צפויות להגיע ל-${fmt(projectedExpense)} (הכנסות: ${fmt(current.inc)})`,
                     color: '#f97316',
-                    icon: '~'
+                    icon: '📊'
                 });
             }
         }
 
         // Savings recommendation
-        if (savingsRate > 0 && savingsRate < 0.2) {
-            const neededSave = income * 0.2 - (income - expense);
+        if (savingsRate > 0 && savingsRate < 0.2 && current.inc > 0) {
+            const neededSave = Math.round(current.inc * 0.2 - current.bal);
             insights.push({
                 type: 'recommendation',
                 title: 'המלצת חיסכון',
-                description: `כדי להגיע ל-20% חיסכון, צריך לחסוך עוד ${new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS' }).format(neededSave)} החודש`,
+                description: `כדי להגיע ל-20% חיסכון, צריך לחסוך עוד ${fmt(neededSave)} החודש`,
                 color: '#3b82f6',
-                icon: 'i'
+                icon: '💡'
             });
         }
+
+        // Budget overruns
+        budgetEntries.forEach(([cat, budget]) => {
+            const spent = current.catSpend[cat] || 0;
+            if (spent > budget * 1.2) {
+                insights.push({
+                    type: 'budget-alert',
+                    title: `חריגת תקציב: ${cat}`,
+                    description: `${fmt(spent)} מתוך ${fmt(budget)} (${Math.round((spent/budget)*100)}%)`,
+                    color: '#ef4444',
+                    icon: '🔴'
+                });
+            }
+        });
 
         return insights;
     }
@@ -1306,40 +1537,52 @@ class SmartInsightsWidget {
                     border: 1px solid hsl(220, 14%, 18%);
                     border-radius: 12px;
                     padding: 20px;
-                    display: flex;
-                    align-items: center;
-                    gap: 20px;
                     animation: fadeInUp 0.5s ease both;
                 ">
-                    <div style="
-                        width: 72px;
-                        height: 72px;
-                        border-radius: 50%;
-                        background: conic-gradient(${healthInsight.color} ${healthInsight.score * 3.6}deg, hsl(220, 14%, 18%) 0deg);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        flex-shrink: 0;
-                        position: relative;
-                    ">
+                    <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 16px;">
                         <div style="
-                            width: 56px;
-                            height: 56px;
+                            width: 72px;
+                            height: 72px;
                             border-radius: 50%;
-                            background: hsl(220, 16%, 12%);
+                            background: conic-gradient(${healthInsight.color} ${healthInsight.score * 3.6}deg, hsl(220, 14%, 18%) 0deg);
                             display: flex;
                             align-items: center;
                             justify-content: center;
-                            font-size: 1.2rem;
-                            font-weight: 700;
-                            color: ${healthInsight.color};
-                            font-family: 'JetBrains Mono', monospace;
-                        ">${healthInsight.score}</div>
+                            flex-shrink: 0;
+                        ">
+                            <div style="
+                                width: 56px;
+                                height: 56px;
+                                border-radius: 50%;
+                                background: hsl(220, 16%, 12%);
+                                display: flex;
+                                align-items: center;
+                                justify-content: center;
+                                font-size: 1.2rem;
+                                font-weight: 700;
+                                color: ${healthInsight.color};
+                                font-family: 'JetBrains Mono', monospace;
+                            ">${healthInsight.score}</div>
+                        </div>
+                        <div>
+                            <div style="color: hsl(210, 20%, 92%); font-weight: 600; margin-bottom: 4px;">${healthInsight.title}</div>
+                            <div style="color: hsl(215, 12%, 52%); font-size: 0.8rem;">${healthInsight.description}</div>
+                        </div>
                     </div>
-                    <div>
-                        <div style="color: hsl(210, 20%, 92%); font-weight: 600; margin-bottom: 4px;">${healthInsight.title}</div>
-                        <div style="color: hsl(215, 12%, 52%); font-size: 0.8rem;">${healthInsight.description}</div>
-                    </div>
+                    ${healthInsight.breakdown ? `
+                    <div style="display: grid; gap: 6px;">
+                        ${healthInsight.breakdown.map(b => {
+                            const pct = Math.round((b.points / b.max) * 100);
+                            const barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#eab308' : pct >= 30 ? '#f97316' : '#ef4444';
+                            return `<div style="display: flex; align-items: center; gap: 8px; font-size: 0.72rem;">
+                                <div style="width: 120px; color: hsl(215, 12%, 58%); text-align: left; flex-shrink: 0;">${b.label}</div>
+                                <div style="flex: 1; height: 6px; background: hsl(220, 14%, 18%); border-radius: 3px; overflow: hidden;">
+                                    <div style="height: 100%; width: ${pct}%; background: ${barColor}; border-radius: 3px; transition: width 1s ease;"></div>
+                                </div>
+                                <div style="width: 40px; color: hsl(215, 12%, 48%); font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;">${b.points}/${b.max}</div>
+                            </div>`;
+                        }).join('')}
+                    </div>` : ''}
                 </div>` : ''}
 
                 ${otherInsights.map((insight, i) => `
