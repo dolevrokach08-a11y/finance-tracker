@@ -71,23 +71,36 @@ async function fetchPrice(symbol, currency) {
   if (/^\d+$/.test(symbol)) {
     return await fetchTASEPrice(symbol);
   }
-  
+
   // אם יש סיומת של בורסה
   if (symbol.includes('.')) {
     return await fetchYahooPrice(symbol);
   }
-  
+
   // ניסיון עם Yahoo (מניות אמריקאיות)
   let result = await fetchYahooPrice(symbol);
   if (result) return result;
-  
+
   // ניסיון עם סיומות שונות
   const suffixes = ['.L', '.DE', '.TA'];
   for (const suffix of suffixes) {
     result = await fetchYahooPrice(symbol + suffix);
     if (result) return result;
   }
-  
+
+  return null;
+}
+
+// שליפת מחיר עם retry
+async function fetchPriceWithRetry(symbol, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const result = await fetchPrice(symbol);
+    if (result) return result;
+    if (attempt < retries) {
+      console.log(`   🔄 Retry ${attempt + 1}/${retries} for ${symbol}...`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
   return null;
 }
 
@@ -161,11 +174,12 @@ async function main() {
     
     console.log(`📊 Found ${allSymbols.size} unique symbols`);
     
-    // שליפת מחירים לכל הסימבולים
+    // שליפת מחירים לכל הסימבולים (עם retry)
+    let failCount = 0;
     for (const symbol of allSymbols) {
       console.log(`   Fetching ${symbol}...`);
-      const result = await fetchPrice(symbol);
-      
+      const result = await fetchPriceWithRetry(symbol);
+
       if (result) {
         prices[symbol] = {
           price: result.price,
@@ -175,22 +189,38 @@ async function main() {
         };
         console.log(`   ✅ ${symbol}: ${result.price} ${result.currency}`);
       } else {
+        failCount++;
         console.log(`   ❌ ${symbol}: Failed to fetch`);
       }
-      
+
       // המתנה קצרה בין בקשות
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     
     // שמירה ב-Firebase
     if (Object.keys(prices).length > 0) {
+      // שמירה לפי תאריך
       await db.collection('dailyPrices').doc(todayDate).set({
         date: todayDate,
         prices: prices,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      
-      console.log(`\n✅ Saved ${Object.keys(prices).length} prices for ${todayDate}`);
+
+      // שמירת alias "latest" - כדי שהקליינט יוכל לקרוא בקלות
+      await db.collection('dailyPrices').doc('latest').set({
+        date: todayDate,
+        prices: prices,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      const successCount = Object.keys(prices).length;
+      console.log(`\n✅ Saved ${successCount} prices for ${todayDate}`);
+      console.log(`📊 Success rate: ${successCount}/${allSymbols.size} (${((successCount / allSymbols.size) * 100).toFixed(0)}%)`);
+
+      // כשל אם יותר מחצי נכשלו
+      if (failCount > allSymbols.size / 2) {
+        console.error('⚠️ More than 50% of symbols failed - marking as warning');
+      }
     } else {
       console.log('\n⚠️ No prices fetched');
     }
