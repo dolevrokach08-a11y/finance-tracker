@@ -850,6 +850,16 @@
                     </div>
                     <div id="ai-tips-content" class="space-y-2"></div>
                 </div>
+
+                <!-- Smart Insights Widget (AI-powered) -->
+                <div id="smart-insights-widget" class="glass p-4 mb-6" style="background: var(--bg-elevated); border: 1px solid var(--border);">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">🧠</span>
+                        <h3 class="text-lg font-semibold" style="color: hsl(210, 80%, 55%);">ניתוח AI מתקדם</h3>
+                        <span style="font-size: 0.65rem; background: hsla(210, 80%, 55%, 0.15); color: hsl(210, 80%, 55%); padding: 2px 8px; border-radius: 10px; margin-right: auto;">BETA</span>
+                    </div>
+                    <div id="smart-insights-content"></div>
+                </div>
                 
                 <div class="glass p-4">
                     <h3 class="text-lg font-semibold mb-3">פעילות אחרונה</h3>
@@ -4615,6 +4625,89 @@
                     });
             });
         }
+    </script>
+
+    <!-- AI Assistant & UI Enhancement Modules -->
+    <script src="ai-assistant.js"></script>
+    <script>
+    (function() {
+        'use strict';
+
+        // Wait for DOM and data to be ready
+        function initAIFeatures() {
+            const getFinanceData = () => window.__financeData || {};
+
+            // 1. AI Chat Assistant
+            const aiAssistant = new FinancialAIAssistant({
+                getFinanceData: getFinanceData,
+                getPortfolioData: () => ({})
+            });
+
+            // 2. Smart Insights Widget
+            const insightsWidget = new SmartInsightsWidget({
+                getFinanceData: getFinanceData
+            });
+
+            // Render insights when overview updates
+            const origUpdateOverview = window.updateOverview;
+            if (origUpdateOverview) {
+                window.updateOverview = function() {
+                    origUpdateOverview.apply(this, arguments);
+                    try {
+                        const el = document.getElementById('smart-insights-content');
+                        if (el) insightsWidget.render(el);
+                    } catch(e) { console.warn('Insights error:', e); }
+                };
+            }
+
+            // Also render on first load after short delay
+            setTimeout(() => {
+                try {
+                    const el = document.getElementById('smart-insights-content');
+                    if (el) insightsWidget.render(el);
+                } catch(e) {}
+            }, 2000);
+
+            // 3. Command Palette
+            const cmdPalette = new CommandPalette({
+                commands: [
+                    { title: 'סקירה כללית', description: 'עבור לטאב סקירה', icon: '📊', keywords: ['overview', 'סקירה', 'ראשי'], action: () => { document.querySelector('.tab-btn')?.click(); } },
+                    { title: 'הוסף עסקה', description: 'הוספת הכנסה או הוצאה', icon: '➕', keywords: ['add', 'הוסף', 'עסקה', 'חדש'], action: () => { document.querySelectorAll('.tab-btn')[1]?.click(); } },
+                    { title: 'דוחות', description: 'צפה בדוחות ובגרפים', icon: '📈', keywords: ['reports', 'דוחות', 'גרפים'], action: () => { document.querySelectorAll('.tab-btn')[2]?.click(); } },
+                    { title: 'ניתוח מתקדם', description: 'ניתוח 50/30/20 וטרנדים', icon: '🔬', keywords: ['analysis', 'ניתוח', '50/30/20'], action: () => { document.querySelectorAll('.tab-btn')[3]?.click(); } },
+                    { title: 'מעשרות', description: 'ניהול תרומות ומעשרות', icon: '🤲', keywords: ['tithe', 'מעשר', 'תרומות'], action: () => { document.querySelectorAll('.tab-btn')[4]?.click(); } },
+                    { title: 'הגדרות', description: 'קטגוריות, תקציבים, כללים', icon: '⚙️', keywords: ['settings', 'הגדרות', 'תקציב'], action: () => { document.querySelectorAll('.tab-btn')[5]?.click(); } },
+                    { title: 'תיק השקעות', description: 'עבור לדף תיק ההשקעות', icon: '📈', keywords: ['portfolio', 'מניות', 'השקעות'], action: () => { window.location.href = 'portfolio.html'; } },
+                    { title: 'אופטימיזציית מס', description: 'עבור למחשבון המס', icon: '🧮', keywords: ['tax', 'מס', 'זיכוי'], action: () => { window.location.href = 'tax-optimizer.html'; } },
+                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר', 'צ\'אט'], shortcut: 'Ctrl+J', action: () => { aiAssistant.toggle(); } },
+                    { title: 'דף הבית', description: 'חזור לדף הראשי', icon: '🏠', keywords: ['home', 'בית', 'ראשי'], action: () => { window.location.href = 'index.html'; } },
+                ]
+            });
+
+            // 4. Micro-Interactions: Apply staggered animation to summary cards
+            const summaryGrid = document.querySelector('#tab-overview .grid');
+            if (summaryGrid) {
+                MicroInteractions.staggerIn(summaryGrid, ':scope > *', 100);
+            }
+
+            // Ctrl+J shortcut to open AI assistant
+            document.addEventListener('keydown', (e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+                    e.preventDefault();
+                    aiAssistant.toggle();
+                }
+            });
+
+            console.log('✅ AI features initialized (finance)');
+        }
+
+        // Initialize after the page loads
+        if (document.readyState === 'complete') {
+            setTimeout(initAIFeatures, 500);
+        } else {
+            window.addEventListener('load', () => setTimeout(initAIFeatures, 500));
+        }
+    })();
     </script>
 </body>
 </html>
