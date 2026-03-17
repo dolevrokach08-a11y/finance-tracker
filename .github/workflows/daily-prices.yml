@@ -2,7 +2,8 @@ name: Daily Price Fetch
 
 on:
   schedule:
-    - cron: '0 21 * * *'
+    - cron: '0 14 * * 1-5'  # During US market hours (weekdays)
+    - cron: '0 21 * * *'    # After US market close (daily)
   workflow_dispatch:
 
 jobs:

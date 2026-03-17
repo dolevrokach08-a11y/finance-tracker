@@ -2810,7 +2810,13 @@
         // ===========================================
         // 🌐 GLOBAL CORS PROXIES
         // ===========================================
+        // 🔧 הגדר את ה-URL של ה-Cloudflare Worker שלך כאן (ראה worker/worker.js)
+        // אחרי deploy: npx wrangler deploy - תקבל URL כמו https://finance-proxy.YOUR_SUBDOMAIN.workers.dev
+        const CF_WORKER_URL = ''; // למשל: 'https://finance-proxy.my-account.workers.dev/?url='
+
         const CORS_PROXIES = [
+            // CF Worker יתווסף אוטומטית כראשון אם מוגדר
+            ...(CF_WORKER_URL ? [CF_WORKER_URL] : []),
             'https://api.allorigins.win/raw?url=',
             'https://corsproxy.io/?url=',
             'https://api.codetabs.com/v1/proxy?quest=',
@@ -5510,8 +5516,8 @@ function calculateTWRv3() {
             const errors = [];
             const manualUpdateNeeded = [];
             
-            // 🚀 שאיבה ב-batches של 2 במקביל (כדי לא להעמיס על הפרוקסים)
-            const BATCH_SIZE = 2;
+            // 🚀 שאיבה ב-batches במקביל (4 עם CF Worker, 2 עם פרוקסיים חינמיים)
+            const BATCH_SIZE = CF_WORKER_URL ? 4 : 2;
             const holdingsToFetch = [];
 
             for (let i = 0; i < portfolio.holdings.length; i++) {
@@ -5576,9 +5582,9 @@ function calculateTWRv3() {
                     }
                 }
 
-                // המתנה בין batches (כדי לא להעמיס על הפרוקסים)
+                // המתנה בין batches (קצרה יותר עם CF Worker)
                 if (batchStart + BATCH_SIZE < holdingsToFetch.length) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, CF_WORKER_URL ? 300 : 1000));
                 }
             }
             
@@ -11938,41 +11944,73 @@ ${msg}`, 'warning');
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
 
                     } else {
-                        // ✅ שלב 2: Fallback - נסה פרוקסים עם retry (בזה אחר זה כדי לא להעמיס על הפרוקסים)
+                        // ✅ שלב 2: Fallback - נסה פרוקסים עם retry (במקביל עם CF Worker, סדרתי עם פרוקסים חינמיים)
                         console.log('⚠️ No Firebase data, trying proxies with retry...');
 
-                        for (const idx of indexConfig) {
-                            try {
-                                const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000);
+                        if (CF_WORKER_URL) {
+                            // עם CF Worker - מקבילי, הרבה יותר מהיר
+                            const indexPromises = indexConfig.map(idx =>
+                                fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000)
+                                    .then(result => ({ key: idx.key, result }))
+                                    .catch(e => { console.log(`❌ ${idx.key} TWR failed:`, e.message); return { key: idx.key, result: null }; })
+                            );
+                            const results = await Promise.all(indexPromises);
+                            for (const { key, result } of results) {
                                 if (result !== null) {
-                                    indexResults[idx.key] = result;
+                                    indexResults[key] = result;
                                     useTWR = true;
-                                    console.log(`✅ ${idx.key} TWR: ${result.toFixed(2)}%`);
-                                } else {
-                                    console.log(`❌ ${idx.key} TWR failed`);
+                                    console.log(`✅ ${key} TWR: ${result.toFixed(2)}%`);
                                 }
-                            } catch (e) {
-                                console.log(`❌ ${idx.key} TWR failed:`, e.message);
                             }
-                            // Small delay between indices to avoid rate limiting
-                            await new Promise(r => setTimeout(r, 1000));
+                        } else {
+                            // בלי CF Worker - סדרתי עם דיליי כדי לא להעמיס על פרוקסים חינמיים
+                            for (const idx of indexConfig) {
+                                try {
+                                    const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000);
+                                    if (result !== null) {
+                                        indexResults[idx.key] = result;
+                                        useTWR = true;
+                                        console.log(`✅ ${idx.key} TWR: ${result.toFixed(2)}%`);
+                                    } else {
+                                        console.log(`❌ ${idx.key} TWR failed`);
+                                    }
+                                } catch (e) {
+                                    console.log(`❌ ${idx.key} TWR failed:`, e.message);
+                                }
+                                await new Promise(r => setTimeout(r, 1000));
+                            }
                         }
 
                         dataSource = useTWR ? 'TWR - השוואה הוגנת' : 'ממוצע היסטורי';
                     }
                 } else {
-                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון עם retry (בזה אחר זה)
+                    // אין snapshots - השתמש בחישוב פשוט מתאריך קנייה ראשון עם retry
                     console.log('🌐 No snapshots, using simple return calculation with retry');
-                    for (const idx of indexConfig) {
-                        try {
-                            const result = await fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 2000);
-                            if (result !== null) {
-                                indexResults[idx.key] = result;
-                            }
-                        } catch (e) {
-                            console.log(`❌ ${idx.key} simple return failed:`, e.message);
+
+                    if (CF_WORKER_URL) {
+                        // מקבילי עם CF Worker
+                        const indexPromises = indexConfig.map(idx =>
+                            fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 2000)
+                                .then(result => ({ key: idx.key, result }))
+                                .catch(e => { console.log(`❌ ${idx.key} simple return failed:`, e.message); return { key: idx.key, result: null }; })
+                        );
+                        const results = await Promise.all(indexPromises);
+                        for (const { key, result } of results) {
+                            if (result !== null) indexResults[key] = result;
                         }
-                        await new Promise(r => setTimeout(r, 1000));
+                    } else {
+                        // סדרתי עם דיליי
+                        for (const idx of indexConfig) {
+                            try {
+                                const result = await fetchWithRetry(() => fetchHistoricalReturn(idx.symbol || idx.key, firstDate), 2, 2000);
+                                if (result !== null) {
+                                    indexResults[idx.key] = result;
+                                }
+                            } catch (e) {
+                                console.log(`❌ ${idx.key} simple return failed:`, e.message);
+                            }
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
                     }
 
                     dataSource = `מ-${firstDate.toLocaleDateString('he-IL')}`;
