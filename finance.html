@@ -5244,14 +5244,15 @@
                 getFinanceData: getFinanceData
             });
 
-            // Render insights when overview updates
+            // Render insights when overview updates - pass selected month
             const origUpdateOverview = window.updateOverview;
             if (origUpdateOverview) {
                 window.updateOverview = function() {
                     origUpdateOverview.apply(this, arguments);
                     try {
                         const el = document.getElementById('smart-insights-content');
-                        if (el) insightsWidget.render(el);
+                        const selectedMonth = typeof getOverviewMonth === 'function' ? getOverviewMonth() : null;
+                        if (el) insightsWidget.render(el, selectedMonth);
                     } catch(e) { console.warn('Insights error:', e); }
                 };
             }
@@ -5260,7 +5261,8 @@
             setTimeout(() => {
                 try {
                     const el = document.getElementById('smart-insights-content');
-                    if (el) insightsWidget.render(el);
+                    const selectedMonth = typeof getOverviewMonth === 'function' ? getOverviewMonth() : null;
+                    if (el) insightsWidget.render(el, selectedMonth);
                 } catch(e) {}
             }, 2000);
 

@@ -12762,14 +12762,14 @@ ${msg}`, 'warning');
                     { title: 'רענן מחירים', description: 'עדכון מחירי נכסים', icon: '🔄', keywords: ['refresh', 'רענן', 'מחירים'], action: () => { if (typeof refreshPrices === 'function') refreshPrices(); } },
                     { title: 'מעקב כספי', description: 'עבור לדף הכספי', icon: '💵', keywords: ['finance', 'כספי'], action: () => { window.location.href = 'finance.html'; } },
                     { title: 'אופטימיזציית מס', description: 'עבור למחשבון המס', icon: '🧮', keywords: ['tax', 'מס'], action: () => { window.location.href = 'tax-optimizer.html'; } },
-                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר'], shortcut: 'Ctrl+J', action: () => { aiAssistant.toggle(); } },
+                    { title: 'עוזר AI', description: 'פתח את העוזר הפיננסי', icon: '🤖', keywords: ['ai', 'עוזר'], shortcut: 'Ctrl+Shift+J', action: () => { aiAssistant.toggle(); } },
                     { title: 'דף הבית', description: 'חזור לדף הראשי', icon: '🏠', keywords: ['home', 'בית'], action: () => { window.location.href = 'index.html'; } },
                 ]
             });
 
-            // Ctrl+J to open AI assistant
+            // Ctrl+Shift+J to open AI assistant (avoid Chrome DevTools conflict)
             document.addEventListener('keydown', (e) => {
-                if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
+                if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'j' || e.key === 'J')) {
                     e.preventDefault();
                     aiAssistant.toggle();
                 }
