@@ -700,12 +700,47 @@ class FinancialAIAssistant {
         return cats;
     }
 
+    // Get portfolio summary for chat
+    _getPortfolioSummary() {
+        const p = this.getPortfolioData();
+        if (!p || !p.holdings || p.holdings.length === 0) return null;
+
+        const holdings = p.holdings || [];
+        const bonds = p.bonds || [];
+        const rates = p.rates || { USD: 3.6, EUR: 3.9 };
+        const toILS = (val, cur) => cur === 'USD' ? val * rates.USD : cur === 'EUR' ? val * rates.EUR : val;
+
+        let stocksValue = 0, stocksCost = 0;
+        const topHoldings = [];
+        holdings.forEach(h => {
+            const val = toILS(h.shares * (h.currentPrice || h.costBasis), h.currency);
+            const cost = toILS(h.shares * h.costBasis, h.currency);
+            stocksValue += val;
+            stocksCost += cost;
+            topHoldings.push({ symbol: h.symbol, value: val, cost: cost, pl: val - cost, plPct: cost > 0 ? ((val-cost)/cost*100) : 0 });
+        });
+        topHoldings.sort((a,b) => b.value - a.value);
+
+        let bondsValue = 0, bondsCost = 0;
+        bonds.forEach(b => {
+            bondsValue += b.units * (b.currentPrice || b.costBasis);
+            bondsCost += b.units * b.costBasis;
+        });
+
+        const cash = (p.cash?.ILS || 0) + toILS(p.cash?.USD || 0, 'USD') + toILS(p.cash?.EUR || 0, 'EUR');
+        const total = stocksValue + bondsValue + cash;
+        const totalCost = stocksCost + bondsCost;
+
+        return { stocksValue, stocksCost, bondsValue, bondsCost, cash, total, totalCost, topHoldings, holdings, bonds, groups: p.groups || [] };
+    }
+
     async _localAnalysis(query) {
-        await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
 
         const data = this.getFinanceData();
         const budgets = data.budgets || {};
         const q = query.toLowerCase();
+        const portfolio = this._getPortfolioSummary();
 
         const now = new Date();
         const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -717,7 +752,132 @@ class FinancialAIAssistant {
         const fmt = (n) => `₪${Math.round(n).toLocaleString()}`;
         const monthName = now.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 
-        // Monthly summary
+        // ============ PORTFOLIO QUERIES ============
+        if (q.includes('תיק') || q.includes('השקעות') || q.includes('מניות') || q.includes('portfolio') || q.includes('אג"ח') || q.includes('אגח')) {
+            if (!portfolio) {
+                return '**אין נתוני תיק השקעות**\n\nלא נמצאו נתונים על תיק השקעות. עבור לדף תיק ההשקעות והוסף אחזקות.';
+            }
+
+            const pl = portfolio.total - portfolio.totalCost;
+            const plPct = portfolio.totalCost > 0 ? ((pl / portfolio.totalCost) * 100).toFixed(1) : 0;
+
+            let text = `**תיק ההשקעות:**\n\n`;
+            text += `שווי כולל: **${fmt(portfolio.total)}**\n`;
+            text += `רווח/הפסד: **${pl >= 0 ? '+' : ''}${fmt(pl)}** (${pl >= 0 ? '+' : ''}${plPct}%)\n\n`;
+
+            if (portfolio.stocksValue > 0) {
+                const sPL = portfolio.stocksValue - portfolio.stocksCost;
+                text += `**מניות**: ${fmt(portfolio.stocksValue)} (${sPL >= 0 ? '+' : ''}${fmt(sPL)})\n`;
+            }
+            if (portfolio.bondsValue > 0) {
+                const bPL = portfolio.bondsValue - portfolio.bondsCost;
+                text += `**אג"ח**: ${fmt(portfolio.bondsValue)} (${bPL >= 0 ? '+' : ''}${fmt(bPL)})\n`;
+            }
+            if (portfolio.cash > 0) {
+                text += `**מזומן**: ${fmt(portfolio.cash)}\n`;
+            }
+
+            // Top/Bottom holdings
+            if (portfolio.topHoldings.length > 0) {
+                text += '\n**אחזקות מובילות:**\n';
+                portfolio.topHoldings.slice(0, 5).forEach(h => {
+                    text += `• ${h.symbol}: ${fmt(h.value)} (${h.plPct >= 0 ? '+' : ''}${h.plPct.toFixed(1)}%)\n`;
+                });
+
+                // Best and worst performers
+                const sorted = [...portfolio.topHoldings].sort((a,b) => b.plPct - a.plPct);
+                const best = sorted[0];
+                const worst = sorted[sorted.length - 1];
+                if (sorted.length >= 2) {
+                    text += `\n**הכי רווחי**: ${best.symbol} (${best.plPct >= 0 ? '+' : ''}${best.plPct.toFixed(1)}%)`;
+                    text += `\n**הכי הפסדי**: ${worst.symbol} (${worst.plPct >= 0 ? '+' : ''}${worst.plPct.toFixed(1)}%)`;
+                }
+            }
+
+            return text;
+        }
+
+        // ============ SAVINGS TIPS - ACTIONABLE ============
+        if (q.includes('חסוך') || q.includes('חיסכון') || q.includes('טיפ') || q.includes('עצה') || q.includes('לשפר') || q.includes('recommend')) {
+            const cats = this._getMonthExpensesByCategory(currentMonth);
+            const prevCats = this._getMonthExpensesByCategory(prevMonth);
+            const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+
+            let tips = `**טיפים לחיסכון - ${monthName}:**\n\n`;
+            let tipNum = 1;
+
+            // 1. Budget overruns - specific action
+            Object.entries(budgets).forEach(([cat, budget]) => {
+                const spent = cats[cat] || 0;
+                if (spent > budget) {
+                    const excess = spent - budget;
+                    tips += `${tipNum}. **${cat}** - חריגה של ${fmt(excess)} מהתקציב.\n`;
+                    tips += `   → הגבל ל-${Math.ceil(budget / 30)} ₪ ליום (${fmt(budget)} / 30 ימים)\n\n`;
+                    tipNum++;
+                }
+            });
+
+            // 2. Categories that increased significantly
+            sorted.forEach(([cat, amt]) => {
+                const prevAmt = prevCats[cat];
+                if (prevAmt && amt > prevAmt * 1.2 && tipNum <= 5) {
+                    const increase = amt - prevAmt;
+                    const pct = Math.round(((amt - prevAmt) / prevAmt) * 100);
+                    tips += `${tipNum}. **${cat}** עלה ב-${pct}% (${fmt(increase)} יותר מחודש קודם).\n`;
+                    tips += `   → בדוק אם יש עסקאות חד-פעמיות שניתן לוותר עליהן\n\n`;
+                    tipNum++;
+                }
+            });
+
+            // 3. Large categories without budget
+            sorted.forEach(([cat, amt]) => {
+                if (!budgets[cat] && amt > current.exp * 0.15 && tipNum <= 6) {
+                    tips += `${tipNum}. **${cat}** (${fmt(amt)}) - אין תקציב מוגדר לקטגוריה גדולה.\n`;
+                    tips += `   → הגדר תקציב של ${fmt(Math.round(amt * 0.85))} (15% הורדה)\n\n`;
+                    tipNum++;
+                }
+            });
+
+            // 4. Fixed expenses optimization
+            const fixedExp = (data.fixedExpenses || []).filter(f => this._monthInRange(currentMonth, f.start, f.end));
+            const fixedTotal = fixedExp.reduce((s, f) => s + f.amount, 0);
+            if (fixedTotal > current.exp * 0.4 && tipNum <= 7) {
+                tips += `${tipNum}. **הוצאות קבועות** מהוות ${Math.round(fixedTotal / current.exp * 100)}% מההוצאות (${fmt(fixedTotal)}).\n`;
+                tips += `   → בדוק אם ניתן לנהל מו"מ על חוזים (אינטרנט, ביטוח, טלפון)\n\n`;
+                tipNum++;
+            }
+
+            // 5. Savings rate target
+            if (current.inc > 0) {
+                const savingsRate = Math.round((current.bal / current.inc) * 100);
+                const idealSave = current.inc * 0.2;
+                if (current.bal < idealSave) {
+                    const needed = idealSave - current.bal;
+                    tips += `${tipNum}. **יעד חיסכון**: שיעור החיסכון שלך הוא ${savingsRate}%. להגיע ל-20% חסרים **${fmt(needed)}**.\n`;
+                    // Find the category with easiest cut
+                    if (sorted.length > 0) {
+                        const easyCut = sorted.find(([cat]) => ['בילויים', 'קניות', 'מסעדות', 'בידור'].includes(cat)) || sorted[sorted.length > 2 ? 2 : 0];
+                        if (easyCut) {
+                            tips += `   → נסה לקצץ ב-**${easyCut[0]}** שהוא ${fmt(easyCut[1])} החודש\n\n`;
+                        }
+                    }
+                    tipNum++;
+                } else {
+                    tips += `\n✓ מצוין! שיעור חיסכון של **${savingsRate}%** - מעל יעד ה-20%!\n`;
+                    if (portfolio && portfolio.total > 0) {
+                        tips += `→ שקול להעביר חלק מהחיסכון לתיק ההשקעות\n`;
+                    }
+                }
+            }
+
+            if (tipNum === 1) {
+                tips += 'לא זוהו נקודות חיסכון ברורות. המצב הפיננסי נראה טוב!';
+            }
+
+            return tips;
+        }
+
+        // ============ MONTHLY SUMMARY ============
         if (q.includes('סכם') || q.includes('סיכום') || q.includes('חודש')) {
             const savingsRate = current.inc > 0 ? ((current.bal / current.inc) * 100).toFixed(1) : 0;
             const incChange = prev.inc > 0 ? (((current.inc - prev.inc) / prev.inc) * 100).toFixed(1) : null;
@@ -725,71 +885,39 @@ class FinancialAIAssistant {
 
             let text = `**סיכום ${monthName}**\n\n`;
             text += `הכנסות: **${fmt(current.inc)}**`;
-            if (incChange !== null) text += ` (${incChange > 0 ? '+' : ''}${incChange}% מחודש קודם)`;
+            if (incChange !== null) text += ` (${incChange > 0 ? '+' : ''}${incChange}%)`;
             text += `\nהוצאות: **${fmt(current.exp)}**`;
-            if (expChange !== null) text += ` (${expChange > 0 ? '+' : ''}${expChange}% מחודש קודם)`;
+            if (expChange !== null) text += ` (${expChange > 0 ? '+' : ''}${expChange}%)`;
             text += `\nיתרה: **${fmt(current.bal)}** (${savingsRate}% חיסכון)\n\n`;
 
-            // Top 3 expense categories
             const cats = this._getMonthExpensesByCategory(currentMonth);
             const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3);
             if (sorted.length > 0) {
                 text += '**הוצאות עיקריות:**\n';
-                sorted.forEach(([cat, amt]) => {
-                    text += `• ${cat}: ${fmt(amt)}\n`;
-                });
+                sorted.forEach(([cat, amt]) => { text += `• ${cat}: ${fmt(amt)}\n`; });
+            }
+
+            // Add portfolio snapshot if available
+            if (portfolio && portfolio.total > 0) {
+                const pl = portfolio.total - portfolio.totalCost;
+                text += `\n**תיק השקעות**: ${fmt(portfolio.total)} (${pl >= 0 ? '+' : ''}${fmt(pl)})`;
             }
 
             if (current.bal >= 0) {
-                text += `\n${savingsRate >= 20 ? 'מעולה' : savingsRate >= 10 ? 'טוב' : 'סביר'}! ${savingsRate >= 20 ? 'שיעור חיסכון מצוין.' : 'כדאי לשאוף ל-20% חיסכון.'}`;
+                text += `\n\n${savingsRate >= 20 ? 'מצוין!' : 'טוב.'} ${savingsRate < 20 ? 'כדאי לשאוף ל-20% חיסכון.' : ''}`;
             } else {
-                text += `\n⚠️ ההוצאות עולות על ההכנסות ב-${fmt(Math.abs(current.bal))}. כדאי לבדוק את הקטגוריות הגדולות.`;
+                text += `\n\n⚠️ ההוצאות עולות על ההכנסות ב-${fmt(Math.abs(current.bal))}`;
             }
             return text;
         }
 
-        // Savings tips
-        if (q.includes('חסוך') || q.includes('חיסכון') || q.includes('טיפ')) {
-            const cats = this._getMonthExpensesByCategory(currentMonth);
-            const prevCats = this._getMonthExpensesByCategory(prevMonth);
-            const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-
-            let tips = `**טיפים לחיסכון - ${monthName}:**\n\n`;
-
-            sorted.slice(0, 5).forEach(([cat, amt], i) => {
-                const budget = budgets[cat];
-                const prevAmt = prevCats[cat];
-                const increased = prevAmt && amt > prevAmt * 1.1;
-
-                if (budget && amt > budget) {
-                    tips += `${i + 1}. **${cat}**: ${fmt(amt)} / ${fmt(budget)} - חריגה של **${fmt(amt - budget)}**\n`;
-                } else if (increased) {
-                    const pct = Math.round(((amt - prevAmt) / prevAmt) * 100);
-                    tips += `${i + 1}. **${cat}**: ${fmt(amt)} - עליה של ${pct}% לעומת חודש קודם\n`;
-                } else {
-                    tips += `${i + 1}. **${cat}**: ${fmt(amt)}\n`;
-                }
-            });
-
-            if (current.inc > 0) {
-                const idealSave = current.inc * 0.2;
-                const actualSave = current.bal;
-                if (actualSave < idealSave) {
-                    tips += `\nכדי להגיע ל-20% חיסכון (${fmt(idealSave)}), צריך לחסוך עוד **${fmt(idealSave - actualSave)}**.`;
-                } else {
-                    tips += `\nאת/ה כבר חוסכ/ת ${fmt(actualSave)} - מעל יעד ה-20%!`;
-                }
-            }
-            return tips;
-        }
-
-        // Budget status
+        // ============ BUDGET STATUS ============
         if (q.includes('תקציב')) {
             const cats = this._getMonthExpensesByCategory(currentMonth);
             const budgetEntries = Object.entries(budgets);
 
             if (budgetEntries.length === 0) {
-                return `**אין תקציבים מוגדרים**\n\nלך לטאב הגדרות כדי להגדיר תקציב לכל קטגוריה.\n\nבינתיים, הנה ההוצאות ב${monthName}:\n` +
+                return `**אין תקציבים מוגדרים**\n\nלך לטאב הגדרות כדי להגדיר תקציב לכל קטגוריה.\n\nהנה ההוצאות ב${monthName}:\n` +
                     Object.entries(cats).sort((a,b) => b[1]-a[1]).map(([c,a]) => `• ${c}: ${fmt(a)}`).join('\n');
             }
 
@@ -797,36 +925,25 @@ class FinancialAIAssistant {
             let overBudget = 0, totalSpent = 0, totalBudget = 0;
             budgetEntries.forEach(([cat, budget]) => {
                 const spent = cats[cat] || 0;
-                totalSpent += spent;
-                totalBudget += budget;
+                totalSpent += spent; totalBudget += budget;
                 const pct = budget > 0 ? Math.round((spent / budget) * 100) : 0;
                 const bar = pct >= 100 ? '🔴' : pct >= 80 ? '🟡' : '🟢';
                 status += `${bar} **${cat}**: ${fmt(spent)} / ${fmt(budget)} (${pct}%)\n`;
                 if (spent > budget) overBudget++;
             });
-
             const totalPct = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
             status += `\n**סה"כ**: ${fmt(totalSpent)} / ${fmt(totalBudget)} (${totalPct}%)\n`;
-
-            if (overBudget > 0) {
-                status += `\n⚠️ ${overBudget} קטגוריות חרגו מהתקציב!`;
-            } else {
-                status += '\n✓ כל הקטגוריות בתוך התקציב!';
-            }
+            status += overBudget > 0 ? `\n⚠️ ${overBudget} קטגוריות חרגו!` : '\n✓ הכל בתקציב!';
             return status;
         }
 
-        // Expense analysis
+        // ============ EXPENSE ANALYSIS ============
         if (q.includes('נתח') || q.includes('ניתוח') || q.includes('הוצאות')) {
             const cats = this._getMonthExpensesByCategory(currentMonth);
             const prevCats = this._getMonthExpensesByCategory(prevMonth);
-
             let analysis = `**ניתוח הוצאות - ${monthName}:**\n\n`;
-            const sorted = Object.entries(cats).sort((a, b) => b[1] - a[1]);
-            const totalExp = current.exp;
-
-            sorted.forEach(([cat, amt]) => {
-                const pct = totalExp > 0 ? ((amt / totalExp) * 100).toFixed(1) : 0;
+            Object.entries(cats).sort((a, b) => b[1] - a[1]).forEach(([cat, amt]) => {
+                const pct = current.exp > 0 ? ((amt / current.exp) * 100).toFixed(1) : 0;
                 const prevAmt = prevCats[cat] || 0;
                 let trend = '';
                 if (prevAmt > 0) {
@@ -835,56 +952,44 @@ class FinancialAIAssistant {
                 }
                 analysis += `• **${cat}**: ${fmt(amt)} (${pct}%)${trend}\n`;
             });
-
-            analysis += `\n**סה"כ הוצאות**: ${fmt(totalExp)}`;
+            analysis += `\n**סה"כ**: ${fmt(current.exp)}`;
             if (prev.exp > 0) {
-                const totalChange = Math.round(((totalExp - prev.exp) / prev.exp) * 100);
-                analysis += ` (${totalChange > 0 ? '+' : ''}${totalChange}% מחודש קודם)`;
+                const c = Math.round(((current.exp - prev.exp) / prev.exp) * 100);
+                analysis += ` (${c > 0 ? '+' : ''}${c}% מחודש קודם)`;
             }
             return analysis;
         }
 
-        // Income analysis
+        // ============ INCOME ANALYSIS ============
         if (q.includes('הכנסה') || q.includes('הכנסות') || q.includes('משכורת')) {
             const incomeCats = this._getMonthIncomesByCategory(currentMonth);
-            const prevIncomeCats = this._getMonthIncomesByCategory(prevMonth);
-
-            let text = `**הכנסות - ${monthName}**\n\n`;
-            text += `סה"כ: **${fmt(current.inc)}**\n`;
+            let text = `**הכנסות - ${monthName}**\n\nסה"כ: **${fmt(current.inc)}**\n`;
             if (prev.inc > 0) {
-                const change = Math.round(((current.inc - prev.inc) / prev.inc) * 100);
-                text += `שינוי מחודש קודם: ${change > 0 ? '+' : ''}${change}%\n`;
+                const c = Math.round(((current.inc - prev.inc) / prev.inc) * 100);
+                text += `שינוי: ${c > 0 ? '+' : ''}${c}%\n`;
             }
-            text += '\n**פירוט:**\n';
+            text += '\n';
             Object.entries(incomeCats).sort((a,b) => b[1]-a[1]).forEach(([cat, amt]) => {
-                const prevAmt = prevIncomeCats[cat] || 0;
-                let trend = '';
-                if (prevAmt > 0) {
-                    const change = Math.round(((amt - prevAmt) / prevAmt) * 100);
-                    if (Math.abs(change) > 5) trend = change > 0 ? ` ↑${change}%` : ` ↓${Math.abs(change)}%`;
-                }
-                text += `• ${cat}: ${fmt(amt)}${trend}\n`;
+                text += `• ${cat}: ${fmt(amt)}\n`;
             });
             return text;
         }
 
-        // Comparison / vs
+        // ============ COMPARISON ============
         if (q.includes('השוואה') || q.includes('השווה') || q.includes('לעומת')) {
             let text = `**השוואה: ${monthName} לעומת חודש קודם**\n\n`;
-            text += `| | חודש נוכחי | חודש קודם | שינוי |\n`;
-            const incChange = prev.inc > 0 ? Math.round(((current.inc - prev.inc) / prev.inc) * 100) : 0;
-            const expChange = prev.exp > 0 ? Math.round(((current.exp - prev.exp) / prev.exp) * 100) : 0;
-            text += `הכנסות: **${fmt(current.inc)}** ← ${fmt(prev.inc)} (${incChange > 0 ? '+' : ''}${incChange}%)\n`;
-            text += `הוצאות: **${fmt(current.exp)}** ← ${fmt(prev.exp)} (${expChange > 0 ? '+' : ''}${expChange}%)\n`;
+            const ic = prev.inc > 0 ? Math.round(((current.inc - prev.inc) / prev.inc) * 100) : 0;
+            const ec = prev.exp > 0 ? Math.round(((current.exp - prev.exp) / prev.exp) * 100) : 0;
+            text += `הכנסות: **${fmt(current.inc)}** ← ${fmt(prev.inc)} (${ic > 0 ? '+' : ''}${ic}%)\n`;
+            text += `הוצאות: **${fmt(current.exp)}** ← ${fmt(prev.exp)} (${ec > 0 ? '+' : ''}${ec}%)\n`;
             text += `יתרה: **${fmt(current.bal)}** ← ${fmt(prev.bal)}\n`;
             return text;
         }
 
-        // Fixed expenses/incomes
+        // ============ FIXED EXPENSES ============
         if (q.includes('קבוע') || q.includes('קבועות') || q.includes('קבועים')) {
             const fixedInc = (data.fixedIncomes || []).filter(f => this._monthInRange(currentMonth, f.start, f.end));
             const fixedExp = (data.fixedExpenses || []).filter(f => this._monthInRange(currentMonth, f.start, f.end));
-
             let text = `**הוצאות והכנסות קבועות - ${monthName}:**\n\n`;
             if (fixedInc.length > 0) {
                 text += '**הכנסות קבועות:**\n';
@@ -895,42 +1000,76 @@ class FinancialAIAssistant {
                 text += '**הוצאות קבועות:**\n';
                 fixedExp.forEach(f => { text += `• ${f.description}: ${fmt(f.amount)} (${f.category})\n`; });
             }
-            if (fixedInc.length === 0 && fixedExp.length === 0) {
-                text += 'לא הוגדרו הוצאות/הכנסות קבועות לחודש זה.';
-            }
+            if (fixedInc.length === 0 && fixedExp.length === 0) text += 'לא הוגדרו הוצאות/הכנסות קבועות.';
             return text;
         }
 
-        // General financial question - provide smart default with actual data
-        // This is the catch-all for free-form questions
-        const hasData = current.inc > 0 || current.exp > 0;
-        if (!hasData) {
-            return `**אין נתונים ל${monthName}**\n\nייתכן שעדיין לא הוזנו נתונים לחודש הנוכחי.\nנסה לבדוק את חודשים קודמים, או הוסף עסקאות בטאב "הוספה".`;
+        // ============ SMART CATCH-ALL: Try to understand the question ============
+        const hasFinanceData = current.inc > 0 || current.exp > 0;
+        const hasPortfolioData = portfolio && portfolio.total > 0;
+
+        // Numbers / amounts
+        if (q.includes('כמה')) {
+            if (q.includes('הוצאתי') || q.includes('שילמתי')) {
+                // Try to find specific category
+                const cats = this._getMonthExpensesByCategory(currentMonth);
+                for (const [cat, amt] of Object.entries(cats)) {
+                    if (q.includes(cat.toLowerCase())) {
+                        return `ב${monthName} הוצאת **${fmt(amt)}** על **${cat}** (${current.exp > 0 ? ((amt/current.exp)*100).toFixed(1) : 0}% מסה"כ הוצאות).`;
+                    }
+                }
+                return `סה"כ הוצאות ב${monthName}: **${fmt(current.exp)}**\n\n` +
+                    Object.entries(cats).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([c,a]) => `• ${c}: ${fmt(a)}`).join('\n');
+            }
+            if (q.includes('הרווחתי') || q.includes('הכנסתי')) {
+                return `סה"כ הכנסות ב${monthName}: **${fmt(current.inc)}**`;
+            }
+            if (q.includes('חסכתי') || q.includes('נשאר')) {
+                return `יתרה ב${monthName}: **${fmt(current.bal)}** (${current.inc > 0 ? Math.round((current.bal/current.inc)*100) : 0}% חיסכון)`;
+            }
+            if (q.includes('שווה') && hasPortfolioData) {
+                return `שווי תיק ההשקעות: **${fmt(portfolio.total)}** (רווח: ${fmt(portfolio.total - portfolio.totalCost)})`;
+            }
         }
 
-        // Smart catch-all: give an overview + answer the question contextually
-        const savingsRate = current.inc > 0 ? Math.round((current.bal / current.inc) * 100) : 0;
-        const topCats = Object.entries(this._getMonthExpensesByCategory(currentMonth)).sort((a,b)=>b[1]-a[1]).slice(0,3);
-
-        let response = `הנה מה שאני יודע על ${monthName}:\n\n`;
-        response += `הכנסות: **${fmt(current.inc)}** | הוצאות: **${fmt(current.exp)}** | יתרה: **${fmt(current.bal)}** (${savingsRate}%)\n\n`;
-
-        if (topCats.length > 0) {
-            response += `ההוצאות הגדולות: ${topCats.map(([c,a]) => `${c} (${fmt(a)})`).join(', ')}\n\n`;
+        // What/why questions
+        if (q.includes('מה') || q.includes('למה') || q.includes('איך') || q.includes('איפה') || q.includes('?')) {
+            if (q.includes('הכי') && (q.includes('גדולה') || q.includes('יקרה') || q.includes('הוצאה'))) {
+                const cats = this._getMonthExpensesByCategory(currentMonth);
+                const top = Object.entries(cats).sort((a,b) => b[1]-a[1])[0];
+                if (top) return `ההוצאה הגדולה ביותר ב${monthName}: **${top[0]}** - ${fmt(top[1])} (${((top[1]/current.exp)*100).toFixed(0)}% מההוצאות)`;
+            }
+            if (q.includes('מצב') || q.includes('עומד')) {
+                let text = `**מצב פיננסי - ${monthName}:**\n\n`;
+                text += `הכנסות: ${fmt(current.inc)} | הוצאות: ${fmt(current.exp)} | יתרה: ${fmt(current.bal)}\n`;
+                if (hasPortfolioData) text += `תיק השקעות: ${fmt(portfolio.total)}\n`;
+                const savingsRate = current.inc > 0 ? Math.round((current.bal / current.inc) * 100) : 0;
+                text += `\nשיעור חיסכון: ${savingsRate}% ${savingsRate >= 20 ? '✓' : '(יעד: 20%)'}`;
+                return text;
+            }
         }
 
-        // Try to answer specific questions
-        if (q.includes('כמה') || q.includes('מה') || q.includes('איך') || q.includes('למה') || q.includes('?')) {
-            response += 'אני עובד במצב מקומי (ללא API). אני יכול לענות על:\n';
-            response += '• **סיכום חודשי** - תמונת מצב מלאה\n';
-            response += '• **ניתוח הוצאות** - פירוט לפי קטגוריות\n';
-            response += '• **מצב תקציב** - עמידה ביעדים\n';
-            response += '• **טיפים לחיסכון** - המלצות\n';
-            response += '• **הכנסות** - פירוט מקורות\n';
-            response += '• **השוואה** - לעומת חודש קודם\n';
-            response += '• **קבועות** - הוצאות/הכנסות קבועות\n\n';
-            response += 'להגדרת מפתח Claude API (להתאמה מלאה), לחצו על ⚙️ בצ\'אט.';
+        // If we still haven't matched - give useful overview
+        let response = '';
+        if (hasFinanceData) {
+            const savingsRate = current.inc > 0 ? Math.round((current.bal / current.inc) * 100) : 0;
+            response += `**${monthName}**: הכנסות ${fmt(current.inc)} | הוצאות ${fmt(current.exp)} | יתרה ${fmt(current.bal)} (${savingsRate}%)\n`;
         }
+        if (hasPortfolioData) {
+            const pl = portfolio.total - portfolio.totalCost;
+            response += `**תיק השקעות**: ${fmt(portfolio.total)} (${pl >= 0 ? '+' : ''}${fmt(pl)})\n`;
+        }
+
+        response += '\n**אני יכול לעזור עם:**\n';
+        response += '• "סכם לי את החודש"\n';
+        response += '• "טיפים לחיסכון" - המלצות פרקטיות\n';
+        response += '• "מצב תקציב" - עמידה ביעדים\n';
+        response += '• "נתח הוצאות" - פירוט קטגוריות\n';
+        response += '• "מצב תיק ההשקעות"\n';
+        response += '• "כמה הוצאתי על [קטגוריה]?"\n';
+        response += '• "השוואה לחודש קודם"\n';
+        response += '• כל שאלה חופשית על הכספים שלך\n\n';
+        response += 'לשאלות מורכבות יותר, הגדר מפתח Claude API ב-⚙️';
 
         return response;
     }
@@ -1365,14 +1504,21 @@ class SmartInsightsWidget {
         return { inc, exp, bal: inc - exp, catSpend, incomeSources, txCount: monthTx.length };
     }
 
-    generateInsights() {
+    generateInsights(overrideMonth) {
         const data = this.getFinanceData();
         const budgets = data.budgets || {};
 
-        const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const prevDate = new Date(now.getFullYear(), now.getMonth() - 1);
+        let currentMonth;
+        if (overrideMonth) {
+            currentMonth = overrideMonth;
+        } else {
+            const now = new Date();
+            currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        }
+        const [cy, cm] = currentMonth.split('-').map(Number);
+        const prevDate = new Date(cy, cm - 2);
         const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        const monthLabel = new Date(cy, cm - 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 
         const current = this._getMonthData(currentMonth);
         const prev = this._getMonthData(prevMonth);
@@ -1451,7 +1597,7 @@ class SmartInsightsWidget {
             type: 'health-score',
             score: healthScore,
             breakdown: scoreBreakdown,
-            title: 'ציון בריאות פיננסית',
+            title: `ציון בריאות פיננסית - ${monthLabel}`,
             description: healthDesc,
             color: healthScore >= 80 ? '#22c55e' : healthScore >= 65 ? '#eab308' : healthScore >= 45 ? '#f97316' : '#ef4444'
         });
@@ -1516,11 +1662,11 @@ class SmartInsightsWidget {
         return insights;
     }
 
-    render(targetEl) {
+    render(targetEl, month) {
         const el = targetEl || this.container;
         if (!el) return;
 
-        const insights = this.generateInsights();
+        const insights = this.generateInsights(month);
         if (insights.length === 0) {
             el.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 20px;">אין מספיק נתונים לתובנות</p>';
             return;
