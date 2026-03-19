@@ -595,17 +595,24 @@ class FinancialAIAssistant {
         const financeData = this.getFinanceData();
         const portfolioData = this.getPortfolioData();
 
-        const systemPrompt = `אתה עוזר פיננסי אישי חכם. אתה מנתח נתונים פיננסיים ומספק תובנות בעברית.
-הנה הנתונים הפיננסיים של המשתמש:
+        const systemPrompt = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי. יש לך גישה מלאה לנתונים הפיננסיים של המשתמש - הם מועברים אליך ישירות מהמערכת.
 
-עסקאות: ${JSON.stringify((financeData.transactions || []).slice(-50))}
+חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש מתוך האפליקציה. אל תגיד שאין לך גישה לנתונים - הם כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+
+=== נתוני המשתמש ===
+עסקאות אחרונות (עד 50): ${JSON.stringify((financeData.transactions || []).slice(-50))}
 תקציבים: ${JSON.stringify(financeData.budgets || {})}
 קטגוריות הכנסה: ${JSON.stringify(financeData.incomeCategories || [])}
 קטגוריות הוצאה: ${JSON.stringify(financeData.expenseCategories || [])}
 הכנסות קבועות: ${JSON.stringify(financeData.fixedIncomes || [])}
 הוצאות קבועות: ${JSON.stringify(financeData.fixedExpenses || [])}
+=== סוף נתונים ===
 
-תגיב בצורה קצרה וברורה. השתמש במספרים מדויקים מהנתונים. הצע פעולות קונקרטיות.`;
+הנחיות:
+- תגיב בעברית, בצורה קצרה וברורה
+- השתמש במספרים מדויקים מהנתונים למעלה
+- הצע פעולות קונקרטיות לשיפור המצב הפיננסי
+- אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים`;
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
