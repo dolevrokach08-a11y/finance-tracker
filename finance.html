@@ -5255,16 +5255,14 @@
             // Expose widget so updateOverview() can call it directly
             window.__insightsWidget = insightsWidget;
 
-            // Render insights on first load after data is ready
-            setTimeout(() => {
-                try {
-                    const el = document.getElementById('smart-insights-content');
-                    const y = document.getElementById('overview-year');
-                    const m = document.getElementById('overview-month-num');
-                    const month = (y && m) ? `${y.value}-${m.value}` : null;
-                    if (el) insightsWidget.render(el, month);
-                } catch(e) {}
-            }, 2000);
+            // Render insights immediately now that widget is ready
+            try {
+                const el = document.getElementById('smart-insights-content');
+                const y = document.getElementById('overview-year');
+                const m = document.getElementById('overview-month-num');
+                const month = (y && m) ? `${y.value}-${m.value}` : null;
+                if (el) insightsWidget.render(el, month);
+            } catch(e) {}
 
             // 3. Command Palette
             const cmdPalette = new CommandPalette({
@@ -5301,9 +5299,9 @@
 
         // Initialize after the page loads
         if (document.readyState === 'complete') {
-            setTimeout(initAIFeatures, 500);
+            initAIFeatures();
         } else {
-            window.addEventListener('load', () => setTimeout(initAIFeatures, 500));
+            window.addEventListener('load', initAIFeatures);
         }
     })();
     </script>
