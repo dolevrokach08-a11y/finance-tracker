@@ -595,23 +595,57 @@ class FinancialAIAssistant {
         const financeData = this.getFinanceData();
         const portfolioData = this.getPortfolioData();
 
-        const systemPrompt = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי. יש לך גישה מלאה לנתונים הפיננסיים של המשתמש - הם מועברים אליך ישירות מהמערכת.
+        const hasFinance = (financeData.transactions && financeData.transactions.length > 0) ||
+                           (financeData.fixedIncomes && financeData.fixedIncomes.length > 0);
+        const hasPortfolio = (portfolioData.holdings && portfolioData.holdings.length > 0) ||
+                             (portfolioData.bonds && portfolioData.bonds.length > 0);
 
-חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש מתוך האפליקציה. אל תגיד שאין לך גישה לנתונים - הם כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+        let dataSection = '';
 
-=== נתוני המשתמש ===
+        if (hasFinance) {
+            dataSection += `
+=== נתוני מעקב כספי ===
 עסקאות אחרונות (עד 50): ${JSON.stringify((financeData.transactions || []).slice(-50))}
 תקציבים: ${JSON.stringify(financeData.budgets || {})}
 קטגוריות הכנסה: ${JSON.stringify(financeData.incomeCategories || [])}
 קטגוריות הוצאה: ${JSON.stringify(financeData.expenseCategories || [])}
 הכנסות קבועות: ${JSON.stringify(financeData.fixedIncomes || [])}
 הוצאות קבועות: ${JSON.stringify(financeData.fixedExpenses || [])}
-=== סוף נתונים ===
+=== סוף נתוני מעקב כספי ===`;
+        }
+
+        if (hasPortfolio) {
+            dataSection += `
+=== נתוני תיק השקעות ===
+אחזקות מניות: ${JSON.stringify(portfolioData.holdings || [])}
+אגרות חוב: ${JSON.stringify(portfolioData.bonds || [])}
+מזומן בתיק: ${JSON.stringify(portfolioData.cash || {})}
+שערי מט"ח: ${JSON.stringify(portfolioData.rates || {})}
+פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
+רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
+מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}
+תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12))}
+=== סוף נתוני השקעות ===`;
+        }
+
+        if (!hasFinance && !hasPortfolio) {
+            dataSection = `
+=== אין נתונים ===
+לא נמצאו נתונים בדף הנוכחי. ייתכן שהנתונים טרם נטענו או שהמשתמש בדף שלא מכיל נתונים.
+=== סוף ===`;
+        }
+
+        const systemPrompt = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי ותיק השקעות.
+יש לך גישה מלאה לנתונים של המשתמש - הם מועברים אליך ישירות מהאפליקציה.
+
+חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש. אל תגיד שאין לך גישה - הנתונים כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+${dataSection}
 
 הנחיות:
 - תגיב בעברית, בצורה קצרה וברורה
 - השתמש במספרים מדויקים מהנתונים למעלה
 - הצע פעולות קונקרטיות לשיפור המצב הפיננסי
+- אם יש נתוני השקעות, נתח ביצועים, הקצאה, וחשיפה למט"ח
 - אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים`;
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
