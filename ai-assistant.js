@@ -1508,11 +1508,17 @@ class SmartInsightsWidget {
         const data = this.getFinanceData();
         const budgets = data.budgets || {};
 
+        const now = new Date();
         let currentMonth;
         if (overrideMonth) {
-            currentMonth = overrideMonth;
+            // Validate overrideMonth format "YYYY-MM"
+            const parts = overrideMonth.split('-').map(Number);
+            if (parts.length === 2 && parts[0] > 1900 && parts[1] >= 1 && parts[1] <= 12) {
+                currentMonth = overrideMonth;
+            } else {
+                currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            }
         } else {
-            const now = new Date();
             currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         }
         const [cy, cm] = currentMonth.split('-').map(Number);
