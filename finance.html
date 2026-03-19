@@ -5255,14 +5255,16 @@
             // Expose widget so updateOverview() can call it directly
             window.__insightsWidget = insightsWidget;
 
-            // Render insights immediately now that widget is ready
-            try {
-                const el = document.getElementById('smart-insights-content');
-                const y = document.getElementById('overview-year');
-                const m = document.getElementById('overview-month-num');
-                const month = (y && m) ? `${y.value}-${m.value}` : null;
-                if (el) insightsWidget.render(el, month);
-            } catch(e) {}
+            // Render insights only if data is already loaded (otherwise updateOverview will trigger it)
+            if (window.__financeData) {
+                try {
+                    const el = document.getElementById('smart-insights-content');
+                    const y = document.getElementById('overview-year');
+                    const m = document.getElementById('overview-month-num');
+                    const month = (y && m && y.value && m.value) ? `${y.value}-${m.value}` : null;
+                    if (el) insightsWidget.render(el, month);
+                } catch(e) {}
+            }
 
             // 3. Command Palette
             const cmdPalette = new CommandPalette({
