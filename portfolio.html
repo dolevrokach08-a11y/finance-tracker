@@ -6651,10 +6651,11 @@ function calculateTWRv3() {
                     migrateOldData();
                     
                     console.log('✅ Data loaded from Firebase');
-                    
+
                     // Also save to localStorage as backup
                     localStorage.setItem('portfolio', JSON.stringify(portfolio));
-                    
+                    window.portfolio = portfolio;
+
                     return true;
                 } else {
                     console.log('No Firebase data, trying localStorage...');
@@ -6718,6 +6719,7 @@ function calculateTWRv3() {
                     
                     console.log('✅ Data loaded from localStorage');
                     console.log('📊 Holdings loaded:', portfolio.holdings.length);
+                    window.portfolio = portfolio;
                     return true;
                 } else {
                     console.log('ℹ️ No saved data, using defaults');
