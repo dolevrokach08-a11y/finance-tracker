@@ -3364,6 +3364,14 @@
                 ).join('') : '<div class="text-gray-500 text-center py-8">אין רשומות</div>';
             
             generateAITips(month);
+
+            // Update smart insights widget with selected month
+            try {
+                const insightsEl = document.getElementById('smart-insights-content');
+                if (insightsEl && window.__insightsWidget) {
+                    window.__insightsWidget.render(insightsEl, month);
+                }
+            } catch(e) {}
         }
 
         
@@ -5239,30 +5247,22 @@
                 getPortfolioData: () => ({})
             });
 
-            // 2. Smart Insights Widget
+            // 2. Smart Insights Widget (exposed to window for updateOverview integration)
             const insightsWidget = new SmartInsightsWidget({
                 getFinanceData: getFinanceData
             });
 
-            // Render insights when overview updates - pass selected month
-            const origUpdateOverview = window.updateOverview;
-            if (origUpdateOverview) {
-                window.updateOverview = function() {
-                    origUpdateOverview.apply(this, arguments);
-                    try {
-                        const el = document.getElementById('smart-insights-content');
-                        const selectedMonth = typeof getOverviewMonth === 'function' ? getOverviewMonth() : null;
-                        if (el) insightsWidget.render(el, selectedMonth);
-                    } catch(e) { console.warn('Insights error:', e); }
-                };
-            }
+            // Expose widget so updateOverview() can call it directly
+            window.__insightsWidget = insightsWidget;
 
-            // Also render on first load after short delay
+            // Render insights on first load after data is ready
             setTimeout(() => {
                 try {
                     const el = document.getElementById('smart-insights-content');
-                    const selectedMonth = typeof getOverviewMonth === 'function' ? getOverviewMonth() : null;
-                    if (el) insightsWidget.render(el, selectedMonth);
+                    const y = document.getElementById('overview-year');
+                    const m = document.getElementById('overview-month-num');
+                    const month = (y && m) ? `${y.value}-${m.value}` : null;
+                    if (el) insightsWidget.render(el, month);
                 } catch(e) {}
             }, 2000);
 
