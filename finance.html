@@ -952,6 +952,24 @@
                 </div>
             </div>
 
+            <!-- Category Detail Modal (from pie chart click) -->
+            <div id="categoryDetailModal" class="edit-modal-overlay" style="display: none;">
+                <div class="edit-modal" style="max-width: 700px; max-height: 85vh; display: flex; flex-direction: column;">
+                    <div class="edit-modal-header">
+                        <h3 id="categoryDetailTitle">פירוט קטגוריה</h3>
+                        <button onclick="document.getElementById('categoryDetailModal').style.display='none'" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+                    </div>
+                    <div style="padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <label style="font-size: 0.85rem; color: var(--text-muted);">סינון חודש:</label>
+                        <select id="categoryDetailMonthFilter" onchange="filterCategoryDetail()" style="padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary); font-size: 0.85rem;">
+                            <option value="all">כל התקופה</option>
+                        </select>
+                        <span id="categoryDetailSummary" style="margin-right: auto; font-size: 0.85rem; color: var(--text-muted);"></span>
+                    </div>
+                    <div id="categoryDetailContent" style="padding: 16px 20px; overflow-y: auto; flex: 1;"></div>
+                </div>
+            </div>
+
             <!-- Edit Transaction Modal -->
             <div id="editModal" class="edit-modal-overlay" style="display: none;">
                 <div class="edit-modal">
@@ -4630,6 +4648,7 @@
             }
 
             const total = values.reduce((s,v) => s+v, 0);
+            const monthCount = months.length;
             charts.expPie = new Chart(canvas, {
                 type: 'doughnut',
                 data: {
@@ -4648,6 +4667,13 @@
                     maintainAspectRatio: false,
                     animation: { animateRotate: true, duration: 1200, easing: 'easeOutQuart' },
                     cutout: '60%',
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const idx = elements[0].index;
+                            const category = labels[idx];
+                            showCategoryDetail(category, 'expense', months);
+                        }
+                    },
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -4668,9 +4694,10 @@
                                     const budget = data.budgets[ctx.label];
                                     let text = `${ctx.label}: ₪${val.toLocaleString()} (${pct}%)`;
                                     if (budget) {
-                                        const usage = ((val / budget) * 100).toFixed(0);
-                                        text += `\nתקציב: ₪${budget.toLocaleString()} | ניצול: ${usage}%`;
-                                        if (val > budget) text += ' ⚠️ חריגה!';
+                                        const periodBudget = budget * monthCount;
+                                        const usage = ((val / periodBudget) * 100).toFixed(0);
+                                        text += `\nתקציב לתקופה: ₪${periodBudget.toLocaleString()} (${monthCount} חודשים) | ניצול: ${usage}%`;
+                                        if (val > periodBudget) text += ' ⚠️ חריגה!';
                                     }
                                     return text;
                                 }
@@ -4739,6 +4766,13 @@
                     maintainAspectRatio: false,
                     animation: { animateRotate: true, duration: 1200, easing: 'easeOutQuart' },
                     cutout: '60%',
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const idx = elements[0].index;
+                            const category = labels[idx];
+                            showCategoryDetail(category, 'income', months);
+                        }
+                    },
                     plugins: {
                         legend: {
                             position: 'bottom',
@@ -4763,6 +4797,97 @@
                     }
                 }
             });
+        }
+
+        // ========== Category Detail Modal (pie chart drill-down) ==========
+        let _categoryDetailState = {};
+
+        function showCategoryDetail(category, type, months) {
+            _categoryDetailState = { category, type, months };
+
+            const modal = document.getElementById('categoryDetailModal');
+            const title = document.getElementById('categoryDetailTitle');
+            const typeLabel = type === 'expense' ? 'הוצאות' : 'הכנסות';
+            title.textContent = `${typeLabel}: ${category}`;
+
+            // Populate month filter
+            const filter = document.getElementById('categoryDetailMonthFilter');
+            filter.innerHTML = '<option value="all">כל התקופה</option>';
+            months.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.key;
+                opt.textContent = m.name;
+                filter.appendChild(opt);
+            });
+
+            filterCategoryDetail();
+            modal.style.display = 'flex';
+        }
+
+        function filterCategoryDetail() {
+            const { category, type, months } = _categoryDetailState;
+            const selectedMonth = document.getElementById('categoryDetailMonthFilter').value;
+            const content = document.getElementById('categoryDetailContent');
+            const summary = document.getElementById('categoryDetailSummary');
+
+            const filteredMonths = selectedMonth === 'all' ? months : months.filter(m => m.key === selectedMonth);
+
+            // Gather transactions and fixed items grouped by month
+            const monthGroups = [];
+            let grandTotal = 0;
+
+            filteredMonths.forEach(m => {
+                const txItems = data.transactions
+                    .filter(t => t.month === m.key && t.type === type && (t.cat === category || (!t.cat && category === 'אחר')))
+                    .map(t => ({ desc: t.desc || '-', amt: t.amt, date: t.date || m.key, fixed: false }));
+
+                // Fixed items
+                const fixedList = type === 'expense' ? (data.fixedExpenses || []) : (data.fixedIncomes || []);
+                const today = new Date();
+                const [y, mn] = m.key.split('-').map(Number);
+                const monthDate = new Date(y, mn - 1);
+
+                if (monthDate <= today) {
+                    fixedList.forEach(f => {
+                        const fCat = f.category || 'אחר';
+                        if (fCat === category && f.start && f.end && m.key >= f.start && m.key <= f.end) {
+                            txItems.push({ desc: f.description || f.name || 'קבוע', amt: f.amount, date: m.key, fixed: true });
+                        }
+                    });
+                }
+
+                if (txItems.length > 0) {
+                    const monthTotal = txItems.reduce((s, t) => s + t.amt, 0);
+                    grandTotal += monthTotal;
+                    const monthLabel = new Date(y, mn - 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+                    monthGroups.push({ label: monthLabel, key: m.key, items: txItems, total: monthTotal });
+                }
+            });
+
+            summary.textContent = `סה"כ: ₪${Math.round(grandTotal).toLocaleString()} | ${monthGroups.reduce((s, g) => s + g.items.length, 0)} רשומות`;
+
+            if (monthGroups.length === 0) {
+                content.innerHTML = '<p style="text-align:center; color: var(--text-muted); padding: 40px 0;">אין נתונים לתקופה זו</p>';
+                return;
+            }
+
+            content.innerHTML = monthGroups.map(g => `
+                <div style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--bg-elevated); border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border);">
+                        <span style="font-weight: 600; font-size: 0.9rem;">${g.label}</span>
+                        <span style="font-weight: 600; color: ${type === 'expense' ? '#ef4444' : '#10b981'};">₪${Math.round(g.total).toLocaleString()}</span>
+                    </div>
+                    ${g.items.map(item => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
+                            <span style="color: var(--text-primary);">
+                                ${item.desc}
+                                ${item.fixed ? '<span style="font-size:0.7rem; background:var(--border); padding:2px 6px; border-radius:4px; margin-right:6px;">קבוע</span>' : ''}
+                            </span>
+                            <span style="font-weight: 500; color: ${type === 'expense' ? '#ef4444' : '#10b981'}; font-family: \'JetBrains Mono\', monospace; font-size: 0.8rem;">₪${item.amt.toLocaleString()}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
         }
 
         // ========== גרפים חדשים - מתוקנים! ==========
@@ -5209,11 +5334,13 @@
         document.addEventListener('click', function(e) {
             if (e.target === document.getElementById('editModal')) closeEditModal();
             if (e.target === document.getElementById('catModal')) closeCatModal();
+            if (e.target === document.getElementById('categoryDetailModal')) document.getElementById('categoryDetailModal').style.display = 'none';
         });
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeEditModal();
                 closeCatModal();
+                document.getElementById('categoryDetailModal').style.display = 'none';
             }
         });
 
