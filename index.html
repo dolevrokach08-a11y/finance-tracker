@@ -88,7 +88,7 @@
 
         .buttons-container {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
         }
 
@@ -147,6 +147,14 @@
 
         .tax-button {
             border-color: hsla(38, 80%, 50%, 0.2);
+        }
+
+        .mortgage-button::before {
+            background: radial-gradient(ellipse at bottom right, hsl(280, 70%, 55%), transparent 70%);
+        }
+
+        .mortgage-button {
+            border-color: hsla(280, 70%, 55%, 0.2);
         }
 
         .icon {
@@ -300,6 +308,14 @@
                     <div class="button-description">נקודות זיכוי • מענקים • רווחי הון</div>
                 </div>
             </a>
+
+            <a href="mortgage.html" class="app-button mortgage-button">
+                <div class="icon">🏠</div>
+                <div class="button-content">
+                    <div class="button-title">מחשבון משכנתא</div>
+                    <div class="button-description">תמהיל • שיטות החזר • מבחן לחץ</div>
+                </div>
+            </a>
         </div>
 
         <div class="footer" style="margin-bottom: 12px;">
@@ -395,6 +411,7 @@
                     { title: 'מעקב כספי', description: 'הכנסות, הוצאות, מעשרות', icon: '💵', keywords: ['finance', 'כספי', 'הכנסות', 'הוצאות'], action: () => { window.location.href = 'finance.html'; } },
                     { title: 'תיק השקעות', description: 'מניות, אג"ח, מדדים', icon: '📈', keywords: ['portfolio', 'מניות', 'השקעות', 'תיק'], action: () => { window.location.href = 'portfolio.html'; } },
                     { title: 'אופטימיזציית מס', description: 'נקודות זיכוי, מענקים, רווחי הון', icon: '🧮', keywords: ['tax', 'מס', 'זיכוי', 'מענק'], action: () => { window.location.href = 'tax-optimizer.html'; } },
+                    { title: 'מחשבון משכנתא', description: 'תמהיל, שיטות החזר, מבחן לחץ', icon: '🏠', keywords: ['mortgage', 'משכנתא', 'הלוואה', 'תמהיל', 'שפיצר'], action: () => { window.location.href = 'mortgage.html'; } },
                 ]
             });
 
