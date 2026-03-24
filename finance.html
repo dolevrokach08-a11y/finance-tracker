@@ -5978,28 +5978,31 @@
                 const isToday = d===today;
                 const totalForDay = hasBills ? hasBills.reduce((s,b)=>s+b.amount,0) : 0;
                 const isPast = isCurrentMonth && d < now.getDate();
-                html+=`<div onclick="${hasBills?`showDayBills(${year},${month},${d})`:''}" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:${hasBills?'pointer':'default'};
+                html+=`<div onclick="onCalendarDayClick(${year},${month},${d})" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:pointer;transition:all 0.15s;
                     ${isToday?'border:2px solid var(--accent);':'border:1px solid var(--border,rgba(0,0,0,0.1));'}
                     ${hasBills?'background:rgba(239,68,68,0.1);':''}
                     ${isPast&&!hasBills?'opacity:0.4;':''}
-                    " ${hasBills?`title="${hasBills.map(b=>b.name+' ₪'+b.amount).join('\n')}"`:''}
+                    " ${hasBills?`title="${hasBills.map(b=>b.name+' ₪'+b.amount).join('\n')}"`:`title="לחץ להוספת חיוב ביום ${d}"`}
+                    onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.12)';"
+                    onmouseout="this.style.transform='';this.style.boxShadow='';"
                 >
                     <div style="font-weight:${isToday?'800':'500'};${isToday?'color:var(--accent);':''}">${d}</div>
                     ${hasBills?`<div style="font-size:0.65rem;color:var(--loss,#ef4444);font-weight:700;">₪${totalForDay.toLocaleString()}</div>
-                    <div style="display:flex;justify-content:center;gap:2px;margin-top:2px;">${hasBills.map(b=>`<span style="width:6px;height:6px;border-radius:50%;background:var(--loss,#ef4444);display:inline-block;"></span>`).join('')}</div>`:''}
+                    <div style="display:flex;justify-content:center;gap:2px;margin-top:2px;">${hasBills.map(b=>`<span style="width:6px;height:6px;border-radius:50%;background:var(--loss,#ef4444);display:inline-block;"></span>`).join('')}</div>`
+                    :`<div style="font-size:0.6rem;color:var(--text-muted,#aaa);margin-top:2px;">+</div>`}
                 </div>`;
             }
             cal.innerHTML = html;
         }
 
-        // Show bills for a specific day (when clicking on a calendar date)
-        function showDayBills(year, month, day) {
+        // Handle calendar day click — show bills or prefill form for new bill
+        function onCalendarDayClick(year, month, day) {
             const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-            const bills = (data.bills||[]).filter(b=>{
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const billsForDay = (data.bills||[]).filter(b=>{
                 if(b.active===false) return false;
-                const bDay = Math.min(b.billingDay||1, new Date(year,month+1,0).getDate());
+                const bDay = Math.min(b.billingDay||1, daysInMonth);
                 if(bDay!==day) return false;
-                // Check frequency
                 const startDate = new Date(b.startDate||'2024-01');
                 if(b.frequency==='monthly'||b.frequency==='weekly') return true;
                 if(b.frequency==='bimonthly') return ((month-startDate.getMonth()+120)%2)===0;
@@ -6007,12 +6010,63 @@
                 if(b.frequency==='yearly') return month===startDate.getMonth();
                 return true;
             });
-            if(!bills.length) return;
-            const total = bills.reduce((s,b)=>s+b.amount,0);
-            const msg = `📅 ${day} ${monthNames[month]} ${year}\n\n` +
-                bills.map(b=>`${BILL_CAT_ICONS[b.category]||'📦'} ${b.name} — ₪${b.amount.toLocaleString()}`).join('\n') +
-                `\n\nסה"כ: ₪${total.toLocaleString()}`;
-            alert(msg);
+
+            if(billsForDay.length > 0) {
+                // Show existing bills for this day in a styled modal
+                const total = billsForDay.reduce((s,b)=>s+b.amount,0);
+                const billsList = billsForDay.map(b=>
+                    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(239,68,68,0.06);border-radius:8px;margin:4px 0;">
+                        <span>${BILL_CAT_ICONS[b.category]||'📦'} ${b.name}</span>
+                        <span style="font-weight:700;color:var(--loss,#ef4444);">₪${b.amount.toLocaleString()}</span>
+                    </div>`
+                ).join('');
+
+                // Create modal overlay
+                const overlay = document.createElement('div');
+                overlay.id = 'day-bills-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+                overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
+                overlay.innerHTML = `
+                    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);direction:rtl;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <h3 style="margin:0;font-size:1.1rem;">📅 ${day} ${monthNames[month]} ${year}</h3>
+                            <button onclick="this.closest('#day-bills-modal').remove()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;opacity:0.5;">✕</button>
+                        </div>
+                        ${billsList}
+                        <div style="display:flex;justify-content:space-between;padding:12px;margin-top:8px;border-top:1px solid var(--border,#eee);font-weight:700;">
+                            <span>סה"כ</span>
+                            <span style="color:var(--loss,#ef4444);">₪${total.toLocaleString()}</span>
+                        </div>
+                        <button onclick="this.closest('#day-bills-modal').remove();prefillBillDay(${day},'${year}-${String(month+1).padStart(2,'0')}')"
+                            style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px dashed var(--accent,#10b981);background:rgba(16,185,129,0.06);color:var(--accent,#10b981);cursor:pointer;font-weight:600;">
+                            + הוסף חיוב נוסף ביום ${day}
+                        </button>
+                    </div>`;
+                document.body.appendChild(overlay);
+            } else {
+                // No bills — prefill the form with this day
+                prefillBillDay(day, `${year}-${String(month+1).padStart(2,'0')}`);
+            }
+        }
+
+        // Prefill the add-bill form with selected day and scroll to it
+        function prefillBillDay(day, yearMonth) {
+            const dayInput = document.getElementById('bill-day');
+            const startInput = document.getElementById('bill-start');
+            if(dayInput) dayInput.value = day;
+            if(startInput) startInput.value = yearMonth + '-' + String(day).padStart(2,'0');
+
+            // Scroll to the form and highlight it briefly
+            const form = document.getElementById('bill-day')?.closest('.bg-white, [class*="rounded"]');
+            if(form) {
+                form.scrollIntoView({ behavior:'smooth', block:'center' });
+                form.style.transition = 'box-shadow 0.3s';
+                form.style.boxShadow = '0 0 0 3px var(--accent, #10b981)';
+                setTimeout(()=>{ form.style.boxShadow=''; }, 2000);
+            }
+            // Focus on the name field
+            const nameInput = document.getElementById('bill-name');
+            if(nameInput) setTimeout(()=>nameInput.focus(), 400);
         }
 
         // Expose Net Worth & Bills functions to window for onclick handlers
@@ -6027,7 +6081,8 @@
         window.sortBills = sortBills;
         window.renderBills = renderBills;
         window.changeCalendarMonth = changeCalendarMonth;
-        window.showDayBills = showDayBills;
+        window.onCalendarDayClick = onCalendarDayClick;
+        window.prefillBillDay = prefillBillDay;
         window.migrateBillFromFixed = migrateBillFromFixed;
 
         // Load theme immediately
