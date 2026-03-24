@@ -3050,7 +3050,8 @@
             document.getElementById('inc-cat').innerHTML = ic;
             document.getElementById('exp-cat').innerHTML = ec;
             document.getElementById('fix-inc-cat').innerHTML = ic;
-            document.getElementById('fix-exp-cat').innerHTML = ec;
+            const fixExpCat = document.getElementById('fix-exp-cat');
+            if(fixExpCat) fixExpCat.innerHTML = ec;
         }
 
         function renderCategories() {
@@ -3255,18 +3256,15 @@
 
             document.getElementById('fix-exp-list').innerHTML = data.fixedExpenses.map(f=>{
                 const mc = getMonthsInRange(f.start,f.end).length;
+                const linkedLabel = f.linkedBillId ? ' <span class="text-xs bg-green-100 text-green-700 px-1 rounded">מסונכרן</span>' : '';
                 return `<div class="item-expense p-3 rounded-lg">
                     <div class="flex justify-between items-start">
-                        <div class="flex-1"><div class="font-medium">${f.description}</div>
+                        <div class="flex-1"><div class="font-medium">${f.description}${linkedLabel}</div>
                         <div class="text-sm text-gray-600">${f.category} • ₪${f.amount.toLocaleString()}/חודש</div>
                         <div class="text-xs text-gray-500">${getMonthName(f.start)} - ${getMonthName(f.end)} (${mc} חודשים)</div></div>
-                        <div class="flex gap-2">
-                            <button onclick="editFixExp(${f.id})" class="text-blue-500 hover:text-blue-700 px-2 text-sm">ערוך</button>
-                            <button onclick="delFixExp(${f.id})" class="text-red-500 hover:text-red-700 px-2 text-sm">מחק</button>
-                        </div>
                     </div>
                 </div>`;
-            }).join('') || '<div class="text-gray-500 text-center py-4">אין הוצאות קבועות</div>';
+            }).join('') || '<div class="text-gray-500 text-center py-4">אין הוצאות קבועות — הוסף בטאב חיובים ומנויים</div>';
         }
 
         function addFixedIncome() {
