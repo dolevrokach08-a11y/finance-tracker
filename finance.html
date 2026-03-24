@@ -803,6 +803,8 @@
                     <button onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
                     <button onclick="showTab('tithe')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
                     <button onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
+                    <button onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
+                    <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
                 </div>
                 <a href="portfolio.html" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.9rem;">
                     📈 תיק השקעות
@@ -1380,6 +1382,210 @@
                     <button onclick="resetAll()" class="btn btn-danger text-white py-3 px-8 rounded-lg font-medium">אפס הכל</button>
                 </div>
             </div>
+
+            <!-- ═══════════════ NET WORTH TAB ═══════════════ -->
+            <div id="tab-networth" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ נכסים</div>
+                        <div id="nw-assets" class="text-2xl font-bold" style="color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ התחייבויות</div>
+                        <div id="nw-liabilities" class="text-2xl font-bold" style="color: var(--loss, #ef4444);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">שווי נקי</div>
+                        <div id="nw-total" class="text-2xl font-bold" style="color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">שינוי חודשי</div>
+                        <div id="nw-change" class="text-2xl font-bold">—</div>
+                    </div>
+                </div>
+
+                <!-- Net Worth Chart -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">📈 שווי נקי לאורך זמן</h3>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="nw-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Assets & Liabilities Management -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Assets -->
+                    <div class="glass p-6">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--accent);">💰 נכסים</h3>
+                        <div class="grid grid-cols-1 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">שם הנכס</label>
+                                <input type="text" id="nw-asset-name" placeholder="דירה, חיסכון, מניות..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">שווי (₪)</label>
+                                    <input type="number" id="nw-asset-value" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                                    <select id="nw-asset-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                        <option value="cash">מזומן / עו"ש</option>
+                                        <option value="savings">חיסכון / פיקדון</option>
+                                        <option value="investments">השקעות / מניות</option>
+                                        <option value="pension">פנסיה / קופ"ג</option>
+                                        <option value="realestate">נדל"ן</option>
+                                        <option value="vehicle">רכב</option>
+                                        <option value="other">אחר</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="addNetWorthItem('asset')" class="btn btn-primary w-full text-white py-2 rounded-lg font-medium">+ הוסף נכס</button>
+                        <div id="nw-assets-list" class="mt-4 space-y-2"></div>
+                    </div>
+
+                    <!-- Liabilities -->
+                    <div class="glass p-6">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--loss, #ef4444);">📉 התחייבויות</h3>
+                        <div class="grid grid-cols-1 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">שם ההתחייבות</label>
+                                <input type="text" id="nw-liab-name" placeholder="משכנתא, הלוואה, כרטיס אשראי..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">יתרת חוב (₪)</label>
+                                    <input type="number" id="nw-liab-value" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                                    <select id="nw-liab-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                        <option value="mortgage">משכנתא</option>
+                                        <option value="loan">הלוואה</option>
+                                        <option value="creditcard">כרטיס אשראי</option>
+                                        <option value="carloan">הלוואת רכב</option>
+                                        <option value="studentloan">הלוואת סטודנטים</option>
+                                        <option value="other">אחר</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">ריבית שנתית %</label>
+                                    <input type="number" id="nw-liab-rate" step="0.1" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">החזר חודשי (₪)</label>
+                                    <input type="number" id="nw-liab-payment" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="addNetWorthItem('liability')" class="btn btn-primary w-full text-white py-2 rounded-lg font-medium" style="background: var(--loss, #ef4444) !important;">+ הוסף התחייבות</button>
+                        <div id="nw-liabilities-list" class="mt-4 space-y-2"></div>
+                    </div>
+                </div>
+
+                <!-- Breakdown Pie -->
+                <div class="glass p-6">
+                    <h3 class="text-lg font-semibold mb-4">📊 פילוח נכסים והתחייבויות</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div style="position: relative; height: 250px;"><canvas id="nw-assets-pie"></canvas></div>
+                        <div style="position: relative; height: 250px;"><canvas id="nw-liab-pie"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ BILLS & SUBSCRIPTIONS TAB ═══════════════ -->
+            <div id="tab-bills" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ חיובים חודשיים</div>
+                        <div id="bills-total" class="text-2xl font-bold" style="color: var(--loss, #ef4444);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">מנויים פעילים</div>
+                        <div id="bills-count" class="text-2xl font-bold" style="color: var(--accent);">0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">חיוב הבא</div>
+                        <div id="bills-next" class="text-lg font-bold">—</div>
+                    </div>
+                </div>
+
+                <!-- Add Bill/Subscription -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">➕ הוספת חיוב / מנוי</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">שם השירות</label>
+                            <input type="text" id="bill-name" placeholder="נטפליקס, חשמל, ביטוח..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">סכום (₪)</label>
+                            <input type="number" id="bill-amount" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">תדירות</label>
+                            <select id="bill-freq" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                <option value="monthly">חודשי</option>
+                                <option value="bimonthly">דו-חודשי</option>
+                                <option value="quarterly">רבעוני</option>
+                                <option value="yearly">שנתי</option>
+                                <option value="weekly">שבועי</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                            <select id="bill-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                <option value="streaming">סטרימינג ובידור</option>
+                                <option value="utilities">חשמל/מים/גז</option>
+                                <option value="insurance">ביטוח</option>
+                                <option value="telecom">תקשורת</option>
+                                <option value="software">תוכנה/אפליקציות</option>
+                                <option value="gym">ספורט/חדר כושר</option>
+                                <option value="education">חינוך/לימודים</option>
+                                <option value="transport">תחבורה</option>
+                                <option value="other">אחר</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">יום חיוב בחודש</label>
+                            <input type="number" id="bill-day" min="1" max="31" value="1" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">תאריך התחלה</label>
+                            <input type="month" id="bill-start" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">הערות (אופציונלי)</label>
+                            <input type="text" id="bill-notes" placeholder="פרטים נוספים..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                    </div>
+                    <button onclick="addBill()" class="btn btn-primary text-white py-2 px-6 rounded-lg font-medium">+ הוסף חיוב</button>
+                </div>
+
+                <!-- Calendar View -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">📅 לוח שנה — חיובים קרובים</h3>
+                    <div id="bills-calendar" class="grid grid-cols-7 gap-1" style="font-size: 0.85rem;"></div>
+                </div>
+
+                <!-- Bills List -->
+                <div class="glass p-6">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 class="text-lg font-semibold">📋 כל החיובים והמנויים</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="sortBills('date')" class="text-sm px-3 py-1 rounded-lg" style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary, #999);">לפי תאריך</button>
+                            <button onclick="sortBills('amount')" class="text-sm px-3 py-1 rounded-lg" style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary, #999);">לפי סכום</button>
+                        </div>
+                    </div>
+                    <div id="bills-list" class="space-y-2"></div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -1498,7 +1704,11 @@
             incomeCategories: ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'],
             expenseCategories: ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'],
             categoryRules: [],
-            budgets: {}
+            budgets: {},
+            netWorthAssets: [],
+            netWorthLiabilities: [],
+            netWorthHistory: [],
+            bills: []
         };
         let editingFixed = null;
         
@@ -1647,6 +1857,8 @@
             if(tab==='analysis') { updateAnalysis(); }
             if(tab==='tithe') { updateTithe(); renderDonations(); }
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
+            if(tab==='networth') { renderNetWorth(); }
+            if(tab==='bills') { renderBills(); }
         }
 
         // טאבים פנימיים בדוחות
@@ -5325,6 +5537,358 @@
         // Expose toggleTheme to window
         window.toggleTheme = toggleTheme;
         
+        // ═══════════════════════════ NET WORTH ═══════════════════════════
+        const NW_CAT_LABELS = {
+            cash:'מזומן/עו"ש', savings:'חיסכון/פיקדון', investments:'השקעות/מניות',
+            pension:'פנסיה/קופ"ג', realestate:'נדל"ן', vehicle:'רכב', other:'אחר',
+            mortgage:'משכנתא', loan:'הלוואה', creditcard:'כרטיס אשראי',
+            carloan:'הלוואת רכב', studentloan:'הלוואת סטודנטים'
+        };
+        const NW_CAT_COLORS = {
+            cash:'#2dd87a', savings:'#4f7cff', investments:'#a78bfa',
+            pension:'#38d4c8', realestate:'#f5a623', vehicle:'#e8915c', other:'#8892a4',
+            mortgage:'#ef4444', loan:'#dc2626', creditcard:'#f97316',
+            carloan:'#d97706', studentloan:'#ec4899'
+        };
+
+        let nwChart=null, nwAssetsPie=null, nwLiabPie=null;
+
+        function addNetWorthItem(type) {
+            if(type==='asset') {
+                const name = document.getElementById('nw-asset-name').value.trim();
+                const value = +document.getElementById('nw-asset-value').value;
+                const cat = document.getElementById('nw-asset-cat').value;
+                if(!name||!value) { notify('נא למלא שם וסכום'); return; }
+                if(!data.netWorthAssets) data.netWorthAssets=[];
+                data.netWorthAssets.push({id:Date.now(), name, value, category:cat});
+                document.getElementById('nw-asset-name').value='';
+                document.getElementById('nw-asset-value').value='';
+            } else {
+                const name = document.getElementById('nw-liab-name').value.trim();
+                const value = +document.getElementById('nw-liab-value').value;
+                const cat = document.getElementById('nw-liab-cat').value;
+                const rate = +document.getElementById('nw-liab-rate').value||0;
+                const payment = +document.getElementById('nw-liab-payment').value||0;
+                if(!name||!value) { notify('נא למלא שם וסכום'); return; }
+                if(!data.netWorthLiabilities) data.netWorthLiabilities=[];
+                data.netWorthLiabilities.push({id:Date.now(), name, value, category:cat, rate, monthlyPayment:payment});
+                document.getElementById('nw-liab-name').value='';
+                document.getElementById('nw-liab-value').value='';
+                document.getElementById('nw-liab-rate').value='';
+                document.getElementById('nw-liab-payment').value='';
+            }
+            recordNetWorthSnapshot();
+            saveData();
+            renderNetWorth();
+            notify(type==='asset'?'נכס נוסף בהצלחה':'התחייבות נוספה בהצלחה');
+        }
+
+        function removeNetWorthItem(type, id) {
+            if(type==='asset') data.netWorthAssets = (data.netWorthAssets||[]).filter(a=>a.id!==id);
+            else data.netWorthLiabilities = (data.netWorthLiabilities||[]).filter(l=>l.id!==id);
+            recordNetWorthSnapshot();
+            saveData();
+            renderNetWorth();
+        }
+
+        function updateNetWorthItemValue(type, id, newVal) {
+            const list = type==='asset' ? data.netWorthAssets : data.netWorthLiabilities;
+            const item = (list||[]).find(x=>x.id===id);
+            if(item) { item.value = +newVal; recordNetWorthSnapshot(); saveData(); renderNetWorth(); }
+        }
+
+        function recordNetWorthSnapshot() {
+            if(!data.netWorthHistory) data.netWorthHistory=[];
+            const today = new Date().toISOString().slice(0,7);
+            const assets = (data.netWorthAssets||[]).reduce((s,a)=>s+a.value,0);
+            const liabilities = (data.netWorthLiabilities||[]).reduce((s,l)=>s+l.value,0);
+            const existing = data.netWorthHistory.find(h=>h.month===today);
+            if(existing) { existing.assets=assets; existing.liabilities=liabilities; existing.netWorth=assets-liabilities; }
+            else data.netWorthHistory.push({month:today, assets, liabilities, netWorth:assets-liabilities});
+            data.netWorthHistory.sort((a,b)=>a.month.localeCompare(b.month));
+        }
+
+        function renderNetWorth() {
+            const assets = data.netWorthAssets||[];
+            const liabilities = data.netWorthLiabilities||[];
+            const totalAssets = assets.reduce((s,a)=>s+a.value,0);
+            const totalLiab = liabilities.reduce((s,l)=>s+l.value,0);
+            const netWorth = totalAssets - totalLiab;
+            const history = data.netWorthHistory||[];
+            const prevMonth = history.length>=2 ? history[history.length-2].netWorth : null;
+            const change = prevMonth!==null ? netWorth - prevMonth : null;
+
+            document.getElementById('nw-assets').textContent = '₪'+totalAssets.toLocaleString('he-IL');
+            document.getElementById('nw-liabilities').textContent = '₪'+totalLiab.toLocaleString('he-IL');
+            document.getElementById('nw-total').textContent = '₪'+netWorth.toLocaleString('he-IL');
+            document.getElementById('nw-total').style.color = netWorth>=0?'var(--accent)':'var(--loss, #ef4444)';
+
+            if(change!==null) {
+                const pct = prevMonth?((change/Math.abs(prevMonth))*100).toFixed(1):'0';
+                document.getElementById('nw-change').textContent = (change>=0?'+':'')+'₪'+Math.abs(change).toLocaleString('he-IL')+` (${change>=0?'+':''}${pct}%)`;
+                document.getElementById('nw-change').style.color = change>=0?'var(--accent)':'var(--loss, #ef4444)';
+            } else {
+                document.getElementById('nw-change').textContent = '—';
+            }
+
+            // Assets list
+            document.getElementById('nw-assets-list').innerHTML = assets.map(a=>`
+                <div class="glass p-3" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-weight:600;">${a.name}</span>
+                        <span style="font-size:0.75rem;opacity:0.6;margin-right:8px;">${NW_CAT_LABELS[a.category]||a.category}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="number" value="${a.value}" onchange="updateNetWorthItemValue('asset',${a.id},this.value)" style="width:120px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:inherit;text-align:left;font-size:0.9rem;" />
+                        <button onclick="removeNetWorthItem('asset',${a.id})" style="color:var(--loss,#ef4444);cursor:pointer;border:none;background:none;font-size:1.1rem;">✕</button>
+                    </div>
+                </div>`).join('');
+
+            // Liabilities list
+            document.getElementById('nw-liabilities-list').innerHTML = liabilities.map(l=>`
+                <div class="glass p-3" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-weight:600;">${l.name}</span>
+                        <span style="font-size:0.75rem;opacity:0.6;margin-right:8px;">${NW_CAT_LABELS[l.category]||l.category}</span>
+                        ${l.rate?`<span style="font-size:0.7rem;color:var(--loss,#ef4444);margin-right:4px;">${l.rate}%</span>`:''}
+                        ${l.monthlyPayment?`<span style="font-size:0.7rem;opacity:0.5;margin-right:4px;">₪${l.monthlyPayment.toLocaleString()}/חד'</span>`:''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="number" value="${l.value}" onchange="updateNetWorthItemValue('liability',${l.id},this.value)" style="width:120px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:inherit;text-align:left;font-size:0.9rem;" />
+                        <button onclick="removeNetWorthItem('liability',${l.id})" style="color:var(--loss,#ef4444);cursor:pointer;border:none;background:none;font-size:1.1rem;">✕</button>
+                    </div>
+                </div>`).join('');
+
+            // Net Worth history chart
+            renderNWChart(history);
+            renderNWPies(assets, liabilities);
+        }
+
+        function renderNWChart(history) {
+            const ctx = document.getElementById('nw-chart');
+            if(!ctx) return;
+            if(nwChart) nwChart.destroy();
+            const isDark = document.documentElement.getAttribute('data-theme')!=='light';
+            const labels = history.map(h=>h.month);
+            nwChart = new Chart(ctx, {
+                type:'line',
+                data:{
+                    labels,
+                    datasets:[
+                        {label:'נכסים',data:history.map(h=>h.assets),borderColor:'#2dd87a',backgroundColor:'rgba(45,216,122,0.1)',fill:true,tension:0.3,pointRadius:3,borderWidth:2},
+                        {label:'התחייבויות',data:history.map(h=>h.liabilities),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.1)',fill:true,tension:0.3,pointRadius:3,borderWidth:2},
+                        {label:'שווי נקי',data:history.map(h=>h.netWorth),borderColor:'#4f7cff',backgroundColor:'rgba(79,124,255,0.1)',fill:false,tension:0.3,pointRadius:4,borderWidth:3}
+                    ]
+                },
+                options:{
+                    responsive:true, maintainAspectRatio:false,
+                    plugins:{legend:{labels:{color:isDark?'#999':'#666',font:{family:'Heebo'}}},
+                        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}`}}},
+                    scales:{
+                        x:{ticks:{color:isDark?'#666':'#999'},grid:{color:isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.06)'}},
+                        y:{ticks:{color:isDark?'#666':'#999',callback:v=>'₪'+(v/1000).toFixed(0)+'K'},grid:{color:isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.06)'}}
+                    }
+                }
+            });
+        }
+
+        function renderNWPies(assets, liabilities) {
+            const isDark = document.documentElement.getAttribute('data-theme')!=='light';
+            // Assets pie
+            const ctx1 = document.getElementById('nw-assets-pie');
+            if(ctx1) {
+                if(nwAssetsPie) nwAssetsPie.destroy();
+                const grouped = {};
+                assets.forEach(a=>{ grouped[a.category] = (grouped[a.category]||0)+a.value; });
+                const cats = Object.keys(grouped);
+                nwAssetsPie = new Chart(ctx1, {
+                    type:'doughnut',
+                    data:{ labels:cats.map(c=>NW_CAT_LABELS[c]||c), datasets:[{data:cats.map(c=>grouped[c]),backgroundColor:cats.map(c=>NW_CAT_COLORS[c]||'#8892a4'),borderWidth:0}] },
+                    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:isDark?'#999':'#666',font:{family:'Heebo',size:11},padding:8}},title:{display:true,text:'נכסים',color:isDark?'#e2e8f0':'#333',font:{family:'Heebo',size:14}}}}
+                });
+            }
+            // Liabilities pie
+            const ctx2 = document.getElementById('nw-liab-pie');
+            if(ctx2) {
+                if(nwLiabPie) nwLiabPie.destroy();
+                const grouped = {};
+                liabilities.forEach(l=>{ grouped[l.category] = (grouped[l.category]||0)+l.value; });
+                const cats = Object.keys(grouped);
+                nwLiabPie = new Chart(ctx2, {
+                    type:'doughnut',
+                    data:{ labels:cats.map(c=>NW_CAT_LABELS[c]||c), datasets:[{data:cats.map(c=>grouped[c]),backgroundColor:cats.map(c=>NW_CAT_COLORS[c]||'#8892a4'),borderWidth:0}] },
+                    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:isDark?'#999':'#666',font:{family:'Heebo',size:11},padding:8}},title:{display:true,text:'התחייבויות',color:isDark?'#e2e8f0':'#333',font:{family:'Heebo',size:14}}}}
+                });
+            }
+        }
+
+        // ═══════════════════════════ BILLS & SUBSCRIPTIONS ═══════════════════════════
+        const BILL_CAT_LABELS = {
+            streaming:'סטרימינג/בידור', utilities:'חשמל/מים/גז', insurance:'ביטוח',
+            telecom:'תקשורת', software:'תוכנה/אפליקציות', gym:'ספורט/חדר כושר',
+            education:'חינוך/לימודים', transport:'תחבורה', other:'אחר'
+        };
+        const BILL_CAT_ICONS = {
+            streaming:'🎬', utilities:'💡', insurance:'🛡️', telecom:'📱',
+            software:'💻', gym:'🏋️', education:'📚', transport:'🚗', other:'📦'
+        };
+        const FREQ_LABELS = {monthly:'חודשי', bimonthly:'דו-חודשי', quarterly:'רבעוני', yearly:'שנתי', weekly:'שבועי'};
+        const FREQ_MONTHLY = {monthly:1, bimonthly:2, quarterly:3, yearly:12, weekly:0.25};
+
+        function addBill() {
+            const name = document.getElementById('bill-name').value.trim();
+            const amount = +document.getElementById('bill-amount').value;
+            const freq = document.getElementById('bill-freq').value;
+            const cat = document.getElementById('bill-cat').value;
+            const day = +document.getElementById('bill-day').value||1;
+            const start = document.getElementById('bill-start').value||new Date().toISOString().slice(0,7);
+            const notes = document.getElementById('bill-notes').value.trim();
+            if(!name||!amount) { notify('נא למלא שם וסכום'); return; }
+            if(!data.bills) data.bills=[];
+            data.bills.push({id:Date.now(), name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true});
+            document.getElementById('bill-name').value='';
+            document.getElementById('bill-amount').value='';
+            document.getElementById('bill-notes').value='';
+            saveData();
+            renderBills();
+            notify('חיוב נוסף בהצלחה');
+        }
+
+        function removeBill(id) {
+            data.bills = (data.bills||[]).filter(b=>b.id!==id);
+            saveData(); renderBills();
+        }
+
+        function toggleBill(id) {
+            const bill = (data.bills||[]).find(b=>b.id===id);
+            if(bill) { bill.active = !bill.active; saveData(); renderBills(); }
+        }
+
+        let billSortMode = 'date';
+        function sortBills(mode) { billSortMode = mode; renderBills(); }
+
+        function getMonthlyEquivalent(amount, freq) {
+            return amount / (FREQ_MONTHLY[freq]||1);
+        }
+
+        function getNextBillingDate(bill) {
+            const now = new Date();
+            const day = Math.min(bill.billingDay||1, 28);
+            let next = new Date(now.getFullYear(), now.getMonth(), day);
+            if(next <= now) next.setMonth(next.getMonth()+1);
+            // Adjust for frequency
+            if(bill.frequency==='bimonthly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                const diff = (next.getMonth() - startMonth + 12) % 2;
+                if(diff!==0) next.setMonth(next.getMonth()+1);
+            } else if(bill.frequency==='quarterly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                const diff = (next.getMonth() - startMonth + 12) % 3;
+                if(diff!==0) next.setMonth(next.getMonth()+(3-diff));
+            } else if(bill.frequency==='yearly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                next = new Date(now.getFullYear(), startMonth, day);
+                if(next <= now) next.setFullYear(next.getFullYear()+1);
+            }
+            return next;
+        }
+
+        function renderBills() {
+            const bills = (data.bills||[]).filter(b=>b.active!==false);
+            const allBills = data.bills||[];
+            const totalMonthly = bills.reduce((s,b)=>s+getMonthlyEquivalent(b.amount, b.frequency),0);
+            document.getElementById('bills-total').textContent = '₪'+Math.round(totalMonthly).toLocaleString('he-IL');
+            document.getElementById('bills-count').textContent = bills.length;
+
+            // Next bill
+            if(bills.length) {
+                const sorted = bills.map(b=>({...b, nextDate:getNextBillingDate(b)})).sort((a,b)=>a.nextDate-b.nextDate);
+                const next = sorted[0];
+                const daysUntil = Math.ceil((next.nextDate - new Date())/(1000*60*60*24));
+                document.getElementById('bills-next').innerHTML = `${next.name} — ₪${next.amount.toLocaleString()} <span style="font-size:0.8rem;opacity:0.7;">בעוד ${daysUntil} ימים</span>`;
+            }
+
+            // Calendar
+            renderBillsCalendar(bills);
+
+            // List
+            let sortedBills = [...allBills];
+            if(billSortMode==='amount') sortedBills.sort((a,b)=>b.amount-a.amount);
+            else sortedBills.sort((a,b)=>getNextBillingDate(a)-getNextBillingDate(b));
+
+            document.getElementById('bills-list').innerHTML = sortedBills.map(b=>{
+                const nextDate = getNextBillingDate(b);
+                const daysUntil = Math.ceil((nextDate - new Date())/(1000*60*60*24));
+                const monthlyEq = getMonthlyEquivalent(b.amount, b.frequency);
+                const isInactive = b.active===false;
+                return `
+                <div class="glass p-4" style="display:flex;justify-content:space-between;align-items:center;${isInactive?'opacity:0.4;':''}">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:1.5rem;">${BILL_CAT_ICONS[b.category]||'📦'}</span>
+                        <div>
+                            <div style="font-weight:600;">${b.name}</div>
+                            <div style="font-size:0.8rem;opacity:0.6;">${BILL_CAT_LABELS[b.category]||b.category} • ${FREQ_LABELS[b.frequency]||b.frequency} • יום ${b.billingDay||1}${b.notes?' • '+b.notes:''}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:16px;">
+                        <div style="text-align:left;">
+                            <div style="font-weight:700;font-size:1.1rem;">₪${b.amount.toLocaleString()}</div>
+                            ${b.frequency!=='monthly'?`<div style="font-size:0.75rem;opacity:0.5;">₪${Math.round(monthlyEq).toLocaleString()}/חד'</div>`:''}
+                        </div>
+                        <div style="text-align:center;min-width:60px;">
+                            <div style="font-size:0.8rem;font-weight:600;${daysUntil<=3?'color:var(--loss,#ef4444);':daysUntil<=7?'color:#f5a623;':''}">${isInactive?'מושהה':daysUntil<=0?'היום!':'בעוד '+daysUntil+' ימים'}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            <button onclick="toggleBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;" title="${isInactive?'הפעל':'השהה'}">${isInactive?'▶️':'⏸️'}</button>
+                            <button onclick="removeBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;color:var(--loss,#ef4444);" title="מחק">🗑️</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderBillsCalendar(bills) {
+            const cal = document.getElementById('bills-calendar');
+            if(!cal) return;
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth();
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const firstDay = new Date(year, month, 1).getDay();
+            const dayNames = ['א','ב','ג','ד','ה','ו','ש'];
+            const today = now.getDate();
+
+            // Map bills to days
+            const billsByDay = {};
+            bills.forEach(b=>{
+                const next = getNextBillingDate(b);
+                if(next.getMonth()===month && next.getFullYear()===year) {
+                    const d = next.getDate();
+                    if(!billsByDay[d]) billsByDay[d]=[];
+                    billsByDay[d].push(b);
+                }
+            });
+
+            let html = dayNames.map(d=>`<div style="text-align:center;font-weight:700;padding:8px 4px;font-size:0.8rem;opacity:0.5;">${d}</div>`).join('');
+            // Adjust for Hebrew calendar (Sunday=0 first)
+            for(let i=0;i<firstDay;i++) html+=`<div></div>`;
+            for(let d=1;d<=daysInMonth;d++) {
+                const hasBills = billsByDay[d];
+                const isToday = d===today;
+                const totalForDay = hasBills ? hasBills.reduce((s,b)=>s+b.amount,0) : 0;
+                html+=`<div style="text-align:center;padding:6px 2px;border-radius:8px;cursor:${hasBills?'pointer':'default'};
+                    ${isToday?'border:2px solid var(--accent);':'border:1px solid var(--border,rgba(0,0,0,0.1));'}
+                    ${hasBills?'background:rgba(239,68,68,0.1);':''}
+                    " ${hasBills?`title="${hasBills.map(b=>b.name+' ₪'+b.amount).join('\n')}"`:''}
+                >
+                    <div style="font-weight:${isToday?'800':'500'};${isToday?'color:var(--accent);':''}">${d}</div>
+                    ${hasBills?`<div style="font-size:0.65rem;color:var(--loss,#ef4444);font-weight:700;">₪${totalForDay.toLocaleString()}</div>
+                    <div style="display:flex;justify-content:center;gap:2px;margin-top:2px;">${hasBills.map(b=>`<span style="width:6px;height:6px;border-radius:50%;background:var(--loss,#ef4444);display:inline-block;"></span>`).join('')}</div>`:''}
+                </div>`;
+            }
+            cal.innerHTML = html;
+        }
+
         // Load theme immediately
         loadTheme();
 
