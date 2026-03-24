@@ -28,6 +28,8 @@
         #tab-analysis:not(.hidden) { display: block !important; }
         #tab-tithe:not(.hidden) { display: block !important; }
         #tab-settings:not(.hidden) { display: block !important; }
+        #tab-networth:not(.hidden) { display: block !important; }
+        #tab-bills:not(.hidden) { display: block !important; }
         
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1359,20 +1361,9 @@
 
                     <div class="glass p-6">
                         <h3 class="text-xl font-semibold mb-2 text-red-700">הוצאות קבועות</h3>
-                        <p class="text-sm text-gray-600 mb-4">הוצאה קבועה תתווסף לחודש שבו הכסף בפועל יוצא</p>
-                        <input type="text" id="fix-exp-desc" placeholder="תיאור" class="w-full p-3 border rounded-lg mb-3">
-                        <input type="number" id="fix-exp-amt" placeholder="סכום חודשי" class="w-full p-3 border rounded-lg mb-3">
-                        <select id="fix-exp-cat" class="w-full p-3 border rounded-lg mb-3"></select>
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <div><label class="text-xs text-gray-600 block mb-1">מחודש</label><select id="fix-exp-start" class="w-full p-3 border rounded-lg"></select></div>
-                            <div><label class="text-xs text-gray-600 block mb-1">עד חודש</label><select id="fix-exp-end" class="w-full p-3 border rounded-lg"></select></div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button id="fix-exp-add" onclick="addFixedExpense()" class="btn btn-danger flex-1 text-white py-3 rounded-lg font-medium">הוסף</button>
-                            <button id="fix-exp-upd" onclick="updateFixedExpense()" class="btn btn-primary flex-1 text-white py-3 rounded-lg font-medium hidden">עדכן</button>
-                            <button id="fix-exp-can" onclick="cancelEditFixedExpense()" class="btn bg-gray-500 flex-1 text-white py-3 rounded-lg font-medium hidden">ביטול</button>
-                        </div>
-                        <div id="fix-exp-list" class="mt-4 space-y-2"></div>
+                        <p class="text-sm text-gray-600 mb-2">הוצאות קבועות מנוהלות בטאב "חיובים ומנויים"</p>
+                        <button onclick="showTab('bills')" class="btn btn-primary text-white py-2 px-6 rounded-lg font-medium mb-4" style="font-size:0.9rem;">📋 עבור לניהול חיובים ומנויים ←</button>
+                        <div id="fix-exp-list" class="mt-2 space-y-2"></div>
                     </div>
                 </div>
 
@@ -1569,8 +1560,15 @@
 
                 <!-- Calendar View -->
                 <div class="glass p-6 mb-6">
-                    <h3 class="text-lg font-semibold mb-4">📅 לוח שנה — חיובים קרובים</h3>
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <button onclick="changeCalendarMonth(-1)" class="px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;font-size:1.1rem;">→</button>
+                        <h3 id="bills-cal-title" class="text-lg font-semibold">📅 לוח שנה — חיובים</h3>
+                        <button onclick="changeCalendarMonth(1)" class="px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;font-size:1.1rem;">←</button>
+                    </div>
                     <div id="bills-calendar" class="grid grid-cols-7 gap-1" style="font-size: 0.85rem;"></div>
+                    <div style="text-align:center;margin-top:8px;">
+                        <button onclick="changeCalendarMonth(0)" class="text-sm px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;color:var(--text-secondary,#999);">חזור להיום</button>
+                    </div>
                 </div>
 
                 <!-- Bills List -->
@@ -5578,7 +5576,7 @@
                 document.getElementById('nw-liab-payment').value='';
             }
             recordNetWorthSnapshot();
-            saveData();
+            saveToFirebase();
             renderNetWorth();
             notify(type==='asset'?'נכס נוסף בהצלחה':'התחייבות נוספה בהצלחה');
         }
@@ -5587,14 +5585,14 @@
             if(type==='asset') data.netWorthAssets = (data.netWorthAssets||[]).filter(a=>a.id!==id);
             else data.netWorthLiabilities = (data.netWorthLiabilities||[]).filter(l=>l.id!==id);
             recordNetWorthSnapshot();
-            saveData();
+            saveToFirebase();
             renderNetWorth();
         }
 
         function updateNetWorthItemValue(type, id, newVal) {
             const list = type==='asset' ? data.netWorthAssets : data.netWorthLiabilities;
             const item = (list||[]).find(x=>x.id===id);
-            if(item) { item.value = +newVal; recordNetWorthSnapshot(); saveData(); renderNetWorth(); }
+            if(item) { item.value = +newVal; recordNetWorthSnapshot(); saveToFirebase(); renderNetWorth(); }
         }
 
         function recordNetWorthSnapshot() {
@@ -5745,27 +5743,61 @@
             const notes = document.getElementById('bill-notes').value.trim();
             if(!name||!amount) { notify('נא למלא שם וסכום'); return; }
             if(!data.bills) data.bills=[];
-            data.bills.push({id:Date.now(), name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true});
+            const billId = Date.now();
+            data.bills.push({id:billId, name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true});
+
+            // Sync to fixedExpenses so budget/reports calculations include this bill
+            const monthlyAmt = getMonthlyEquivalent(amount, freq);
+            const expCat = mapBillCatToExpenseCat(cat);
+            const endDate = new Date(); endDate.setFullYear(endDate.getFullYear()+5);
+            const endMonth = endDate.toISOString().slice(0,7);
+            data.fixedExpenses.push({id:billId, description:name, amount:monthlyAmt, category:expCat, start:start, end:endMonth, linkedBillId:billId});
+
             document.getElementById('bill-name').value='';
             document.getElementById('bill-amount').value='';
             document.getElementById('bill-notes').value='';
-            saveData();
+            saveToFirebase();
             renderBills();
+            renderFixedItems();
             notify('חיוב נוסף בהצלחה');
+        }
+
+        // Map bill categories to expense categories for fixedExpenses sync
+        function mapBillCatToExpenseCat(billCat) {
+            const map = {
+                streaming:'בילוי ופנאי', utilities:'חשבונות', insurance:'ביטוח',
+                telecom:'תקשורת', software:'תקשורת', gym:'בילוי ופנאי',
+                education:'חינוך', transport:'תחבורה', other:'אחר'
+            };
+            // Find matching category from data.expenseCategories or return first available
+            const mapped = map[billCat] || 'אחר';
+            if(data.expenseCategories && data.expenseCategories.includes(mapped)) return mapped;
+            // Try to find similar
+            const found = (data.expenseCategories||[]).find(c => c.includes(mapped) || mapped.includes(c));
+            return found || (data.expenseCategories && data.expenseCategories[0]) || mapped;
         }
 
         function removeBill(id) {
             data.bills = (data.bills||[]).filter(b=>b.id!==id);
-            saveData(); renderBills();
+            // Also remove linked fixedExpense
+            data.fixedExpenses = data.fixedExpenses.filter(f=>f.linkedBillId!==id && f.id!==id);
+            saveToFirebase(); renderBills(); renderFixedItems();
         }
 
         function toggleBill(id) {
             const bill = (data.bills||[]).find(b=>b.id===id);
-            if(bill) { bill.active = !bill.active; saveData(); renderBills(); }
+            if(bill) { bill.active = !bill.active; saveToFirebase(); renderBills(); }
         }
 
         let billSortMode = 'date';
+        let billsCalendarOffset = 0; // 0 = current month, -1 = prev, +1 = next
         function sortBills(mode) { billSortMode = mode; renderBills(); }
+
+        function changeCalendarMonth(dir) {
+            if(dir===0) billsCalendarOffset=0; // reset to today
+            else billsCalendarOffset += dir;
+            renderBills();
+        }
 
         function getMonthlyEquivalent(amount, freq) {
             return amount / (FREQ_MONTHLY[freq]||1);
@@ -5796,23 +5828,40 @@
         function renderBills() {
             const bills = (data.bills||[]).filter(b=>b.active!==false);
             const allBills = data.bills||[];
-            const totalMonthly = bills.reduce((s,b)=>s+getMonthlyEquivalent(b.amount, b.frequency),0);
+
+            // Get unlinked fixedExpenses (added before bills feature existed)
+            const linkedIds = new Set((data.bills||[]).map(b=>b.id));
+            const unlinkedFixed = (data.fixedExpenses||[]).filter(f => !f.linkedBillId && !linkedIds.has(f.id));
+
+            // Convert unlinked fixedExpenses to bill-like objects for display
+            const fixedAsBills = unlinkedFixed.map(f => ({
+                id: f.id, name: f.description, amount: f.amount, frequency:'monthly',
+                category:'other', billingDay:1, startDate:f.start, notes:'מהגדרות קבועות',
+                active:true, _isLegacyFixed: true
+            }));
+
+            const combinedActive = [...bills, ...fixedAsBills.filter(f=>f.active)];
+            const combinedAll = [...allBills, ...fixedAsBills];
+
+            const totalMonthly = combinedActive.reduce((s,b)=>s+getMonthlyEquivalent(b.amount, b.frequency),0);
             document.getElementById('bills-total').textContent = '₪'+Math.round(totalMonthly).toLocaleString('he-IL');
-            document.getElementById('bills-count').textContent = bills.length;
+            document.getElementById('bills-count').textContent = combinedActive.length;
 
             // Next bill
-            if(bills.length) {
-                const sorted = bills.map(b=>({...b, nextDate:getNextBillingDate(b)})).sort((a,b)=>a.nextDate-b.nextDate);
+            if(combinedActive.length) {
+                const sorted = combinedActive.map(b=>({...b, nextDate:getNextBillingDate(b)})).sort((a,b)=>a.nextDate-b.nextDate);
                 const next = sorted[0];
                 const daysUntil = Math.ceil((next.nextDate - new Date())/(1000*60*60*24));
                 document.getElementById('bills-next').innerHTML = `${next.name} — ₪${next.amount.toLocaleString()} <span style="font-size:0.8rem;opacity:0.7;">בעוד ${daysUntil} ימים</span>`;
+            } else {
+                document.getElementById('bills-next').innerHTML = '—';
             }
 
             // Calendar
-            renderBillsCalendar(bills);
+            renderBillsCalendar(combinedActive);
 
             // List
-            let sortedBills = [...allBills];
+            let sortedBills = [...combinedAll];
             if(billSortMode==='amount') sortedBills.sort((a,b)=>b.amount-a.amount);
             else sortedBills.sort((a,b)=>getNextBillingDate(a)-getNextBillingDate(b));
 
@@ -5821,12 +5870,13 @@
                 const daysUntil = Math.ceil((nextDate - new Date())/(1000*60*60*24));
                 const monthlyEq = getMonthlyEquivalent(b.amount, b.frequency);
                 const isInactive = b.active===false;
+                const isLegacy = b._isLegacyFixed;
                 return `
                 <div class="glass p-4" style="display:flex;justify-content:space-between;align-items:center;${isInactive?'opacity:0.4;':''}">
                     <div style="display:flex;align-items:center;gap:12px;">
                         <span style="font-size:1.5rem;">${BILL_CAT_ICONS[b.category]||'📦'}</span>
                         <div>
-                            <div style="font-weight:600;">${b.name}</div>
+                            <div style="font-weight:600;">${b.name}${isLegacy?' <span style="font-size:0.7rem;background:var(--bg-elevated);border:1px solid var(--border);padding:2px 6px;border-radius:4px;opacity:0.7;">מהגדרות</span>':''}</div>
                             <div style="font-size:0.8rem;opacity:0.6;">${BILL_CAT_LABELS[b.category]||b.category} • ${FREQ_LABELS[b.frequency]||b.frequency} • יום ${b.billingDay||1}${b.notes?' • '+b.notes:''}</div>
                         </div>
                     </div>
@@ -5839,46 +5889,101 @@
                             <div style="font-size:0.8rem;font-weight:600;${daysUntil<=3?'color:var(--loss,#ef4444);':daysUntil<=7?'color:#f5a623;':''}">${isInactive?'מושהה':daysUntil<=0?'היום!':'בעוד '+daysUntil+' ימים'}</div>
                         </div>
                         <div style="display:flex;gap:6px;">
+                            ${isLegacy?`<button onclick="migrateBillFromFixed(${b.id})" style="cursor:pointer;border:none;background:none;font-size:0.8rem;color:var(--accent);text-decoration:underline;" title="העבר לחיובים">העבר</button>`:`
                             <button onclick="toggleBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;" title="${isInactive?'הפעל':'השהה'}">${isInactive?'▶️':'⏸️'}</button>
-                            <button onclick="removeBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;color:var(--loss,#ef4444);" title="מחק">🗑️</button>
+                            <button onclick="removeBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;color:var(--loss,#ef4444);" title="מחק">🗑️</button>`}
                         </div>
                     </div>
                 </div>`;
-            }).join('');
+            }).join('') || '<div style="text-align:center;padding:24px;opacity:0.5;">אין חיובים. הוסף חיוב חדש למעלה.</div>';
+        }
+
+        // Migrate a legacy fixedExpense into the bills system
+        function migrateBillFromFixed(fixedId) {
+            const f = data.fixedExpenses.find(x=>x.id===fixedId);
+            if(!f) return;
+            if(!data.bills) data.bills=[];
+            const billId = Date.now();
+            data.bills.push({
+                id:billId, name:f.description, amount:f.amount, frequency:'monthly',
+                category:'other', billingDay:1, startDate:f.start, notes:'', active:true
+            });
+            // Link the fixedExpense to the new bill
+            f.linkedBillId = billId;
+            saveToFirebase();
+            renderBills();
+            renderFixedItems();
+            notify('חיוב הועבר בהצלחה');
         }
 
         function renderBillsCalendar(bills) {
             const cal = document.getElementById('bills-calendar');
             if(!cal) return;
             const now = new Date();
-            const year = now.getFullYear();
-            const month = now.getMonth();
+            const viewDate = new Date(now.getFullYear(), now.getMonth() + billsCalendarOffset, 1);
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
             const daysInMonth = new Date(year, month+1, 0).getDate();
             const firstDay = new Date(year, month, 1).getDay();
             const dayNames = ['א','ב','ג','ד','ה','ו','ש'];
-            const today = now.getDate();
+            const isCurrentMonth = (year===now.getFullYear() && month===now.getMonth());
+            const today = isCurrentMonth ? now.getDate() : -1;
 
-            // Map bills to days
+            // Update calendar title
+            const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const titleEl = document.getElementById('bills-cal-title');
+            if(titleEl) titleEl.textContent = `📅 ${monthNames[month]} ${year}`;
+
+            // Map bills to days for this month
             const billsByDay = {};
             bills.forEach(b=>{
-                const next = getNextBillingDate(b);
-                if(next.getMonth()===month && next.getFullYear()===year) {
-                    const d = next.getDate();
-                    if(!billsByDay[d]) billsByDay[d]=[];
-                    billsByDay[d].push(b);
+                // For each bill, check if it falls in the viewed month
+                const day = Math.min(b.billingDay||1, daysInMonth);
+                // Check if bill is active in this month based on frequency
+                const startDate = new Date(b.startDate || '2024-01');
+                if(viewDate < startDate && month < startDate.getMonth() && year <= startDate.getFullYear()) return;
+
+                let showInMonth = false;
+                if(b.frequency==='monthly' || b.frequency==='weekly') showInMonth = true;
+                else if(b.frequency==='bimonthly') {
+                    const startM = startDate.getMonth();
+                    showInMonth = ((month - startM + 120) % 2) === 0;
+                } else if(b.frequency==='quarterly') {
+                    const startM = startDate.getMonth();
+                    showInMonth = ((month - startM + 120) % 3) === 0;
+                } else if(b.frequency==='yearly') {
+                    showInMonth = (month === startDate.getMonth());
+                }
+
+                if(showInMonth) {
+                    if(!billsByDay[day]) billsByDay[day]=[];
+                    billsByDay[day].push(b);
+                }
+
+                // Weekly bills appear multiple times
+                if(b.frequency==='weekly') {
+                    for(let wd=day+7; wd<=daysInMonth; wd+=7) {
+                        if(!billsByDay[wd]) billsByDay[wd]=[];
+                        billsByDay[wd].push(b);
+                    }
+                    for(let wd=day-7; wd>=1; wd-=7) {
+                        if(!billsByDay[wd]) billsByDay[wd]=[];
+                        billsByDay[wd].push(b);
+                    }
                 }
             });
 
             let html = dayNames.map(d=>`<div style="text-align:center;font-weight:700;padding:8px 4px;font-size:0.8rem;opacity:0.5;">${d}</div>`).join('');
-            // Adjust for Hebrew calendar (Sunday=0 first)
             for(let i=0;i<firstDay;i++) html+=`<div></div>`;
             for(let d=1;d<=daysInMonth;d++) {
                 const hasBills = billsByDay[d];
                 const isToday = d===today;
                 const totalForDay = hasBills ? hasBills.reduce((s,b)=>s+b.amount,0) : 0;
-                html+=`<div style="text-align:center;padding:6px 2px;border-radius:8px;cursor:${hasBills?'pointer':'default'};
+                const isPast = isCurrentMonth && d < now.getDate();
+                html+=`<div onclick="${hasBills?`showDayBills(${year},${month},${d})`:''}" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:${hasBills?'pointer':'default'};
                     ${isToday?'border:2px solid var(--accent);':'border:1px solid var(--border,rgba(0,0,0,0.1));'}
                     ${hasBills?'background:rgba(239,68,68,0.1);':''}
+                    ${isPast&&!hasBills?'opacity:0.4;':''}
                     " ${hasBills?`title="${hasBills.map(b=>b.name+' ₪'+b.amount).join('\n')}"`:''}
                 >
                     <div style="font-weight:${isToday?'800':'500'};${isToday?'color:var(--accent);':''}">${d}</div>
@@ -5888,6 +5993,44 @@
             }
             cal.innerHTML = html;
         }
+
+        // Show bills for a specific day (when clicking on a calendar date)
+        function showDayBills(year, month, day) {
+            const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const bills = (data.bills||[]).filter(b=>{
+                if(b.active===false) return false;
+                const bDay = Math.min(b.billingDay||1, new Date(year,month+1,0).getDate());
+                if(bDay!==day) return false;
+                // Check frequency
+                const startDate = new Date(b.startDate||'2024-01');
+                if(b.frequency==='monthly'||b.frequency==='weekly') return true;
+                if(b.frequency==='bimonthly') return ((month-startDate.getMonth()+120)%2)===0;
+                if(b.frequency==='quarterly') return ((month-startDate.getMonth()+120)%3)===0;
+                if(b.frequency==='yearly') return month===startDate.getMonth();
+                return true;
+            });
+            if(!bills.length) return;
+            const total = bills.reduce((s,b)=>s+b.amount,0);
+            const msg = `📅 ${day} ${monthNames[month]} ${year}\n\n` +
+                bills.map(b=>`${BILL_CAT_ICONS[b.category]||'📦'} ${b.name} — ₪${b.amount.toLocaleString()}`).join('\n') +
+                `\n\nסה"כ: ₪${total.toLocaleString()}`;
+            alert(msg);
+        }
+
+        // Expose Net Worth & Bills functions to window for onclick handlers
+        window.addNetWorthItem = addNetWorthItem;
+        window.removeNetWorthItem = removeNetWorthItem;
+        window.updateNetWorthItemValue = updateNetWorthItemValue;
+        window.recordNetWorthSnapshot = recordNetWorthSnapshot;
+        window.renderNetWorth = renderNetWorth;
+        window.addBill = addBill;
+        window.removeBill = removeBill;
+        window.toggleBill = toggleBill;
+        window.sortBills = sortBills;
+        window.renderBills = renderBills;
+        window.changeCalendarMonth = changeCalendarMonth;
+        window.showDayBills = showDayBills;
+        window.migrateBillFromFixed = migrateBillFromFixed;
 
         // Load theme immediately
         loadTheme();
