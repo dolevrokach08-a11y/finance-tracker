@@ -807,6 +807,8 @@
                     <button onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
                     <button onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
                     <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
+                    <button onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
+                    <button onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
                 </div>
                 <a href="portfolio.html" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.9rem;">
                     📈 תיק השקעות
@@ -1584,6 +1586,163 @@
                 </div>
             </div>
 
+            <!-- ═══════════════ CASH FLOW FORECAST TAB ═══════════════ -->
+            <div id="tab-cashflow" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יתרה צפויה (סוף חודש)</div>
+                        <div id="cf-end-month" class="text-2xl font-bold text-green-600 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יתרה צפויה (3 חודשים)</div>
+                        <div id="cf-3months" class="text-2xl font-bold text-blue-600 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">חיסכון חודשי ממוצע</div>
+                        <div id="cf-avg-saving" class="text-2xl font-bold mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">חודשי קושי (שלילי)</div>
+                        <div id="cf-negative-months" class="text-2xl font-bold text-red-600 mt-1">0</div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div>
+                            <label class="text-sm text-gray-500">יתרה נוכחית (עו"ש)</label>
+                            <input type="number" id="cf-current-balance" placeholder="0" class="w-full p-2 rounded-lg border" onchange="renderCashFlow()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תקופת תחזית</label>
+                            <select id="cf-period" class="p-2 rounded-lg border" onchange="renderCashFlow()">
+                                <option value="6">6 חודשים</option>
+                                <option value="12" selected>12 חודשים</option>
+                                <option value="24">24 חודשים</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תרחיש</label>
+                            <select id="cf-scenario" class="p-2 rounded-lg border" onchange="renderCashFlow()">
+                                <option value="expected">צפוי</option>
+                                <option value="optimistic">אופטימי (+10%)</option>
+                                <option value="pessimistic">שמרני (-15%)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📈 תחזית תזרים מזומנים</h3>
+                    <canvas id="cf-chart" height="300"></canvas>
+                </div>
+
+                <!-- Monthly breakdown table -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">📊 פירוט חודשי</h3>
+                    <div style="overflow-x:auto;">
+                        <table id="cf-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--border,#e5e7eb);">
+                                    <th style="padding:8px;text-align:right;">חודש</th>
+                                    <th style="padding:8px;text-align:right;">הכנסות צפויות</th>
+                                    <th style="padding:8px;text-align:right;">הוצאות צפויות</th>
+                                    <th style="padding:8px;text-align:right;">חיסכון/גירעון</th>
+                                    <th style="padding:8px;text-align:right;">יתרה מצטברת</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cf-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ FIRE CALCULATOR TAB ═══════════════ -->
+            <div id="tab-fire" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">שנים לעצמאות כלכלית</div>
+                        <div id="fire-years" class="text-2xl font-bold text-green-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">גיל פרישה צפוי</div>
+                        <div id="fire-age" class="text-2xl font-bold text-blue-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יעד FIRE</div>
+                        <div id="fire-target" class="text-2xl font-bold mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">אחוז השגת היעד</div>
+                        <div id="fire-progress" class="text-2xl font-bold text-orange-500 mt-1">0%</div>
+                    </div>
+                </div>
+
+                <!-- FIRE Inputs -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">📋 פרטים אישיים</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-sm text-gray-500">גיל נוכחי</label>
+                                <input type="number" id="fire-current-age" value="30" min="18" max="80" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">הוצאות חודשיות רצויות בפרישה</label>
+                                <input type="number" id="fire-monthly-expense" placeholder="15000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">חיסכון חודשי נוכחי</label>
+                                <input type="number" id="fire-monthly-saving" placeholder="5000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">סה"כ חסכונות + השקעות נוכחיים</label>
+                                <input type="number" id="fire-current-savings" placeholder="200000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">⚙️ הנחות</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-sm text-gray-500">תשואה שנתית צפויה (%)</label>
+                                <input type="number" id="fire-return-rate" value="7" step="0.5" min="0" max="20" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">אינפלציה שנתית (%)</label>
+                                <input type="number" id="fire-inflation" value="2.5" step="0.5" min="0" max="10" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">שיטת חישוב</label>
+                                <select id="fire-method" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                                    <option value="25">כלל 25 (4% withdrawal)</option>
+                                    <option value="30">כלל 30 (3.33% — שמרני)</option>
+                                    <option value="20">כלל 20 (5% — אגרסיבי)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">גידול שנתי בחיסכון (%)</label>
+                                <input type="number" id="fire-saving-growth" value="2" step="0.5" min="0" max="20" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FIRE Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📈 מסלול לעצמאות כלכלית</h3>
+                    <canvas id="fire-chart" height="300"></canvas>
+                </div>
+
+                <!-- FIRE Milestones -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">🏁 אבני דרך</h3>
+                    <div id="fire-milestones" class="space-y-2"></div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -1857,6 +2016,8 @@
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
             if(tab==='networth') { renderNetWorth(); }
             if(tab==='bills') { renderBills(); }
+            if(tab==='cashflow') { renderCashFlow(); }
+            if(tab==='fire') { renderFIRE(); }
         }
 
         // טאבים פנימיים בדוחות
@@ -6084,6 +6245,241 @@
         window.onCalendarDayClick = onCalendarDayClick;
         window.prefillBillDay = prefillBillDay;
         window.migrateBillFromFixed = migrateBillFromFixed;
+        window.renderCashFlow = renderCashFlow;
+        window.renderFIRE = renderFIRE;
+
+        // ═══════════════ CASH FLOW FORECAST ═══════════════
+        let cfChart = null;
+        function renderCashFlow() {
+            const balance = parseFloat(document.getElementById('cf-current-balance')?.value) || 0;
+            const period = parseInt(document.getElementById('cf-period')?.value) || 12;
+            const scenario = document.getElementById('cf-scenario')?.value || 'expected';
+
+            // Calculate average monthly income/expense from last 6 months
+            const now = new Date();
+            const months = [];
+            for(let i=1; i<=6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+                months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+            }
+
+            let totalIncome=0, totalExpense=0, monthsWithData=0;
+            months.forEach(m => {
+                const summary = getMonthSummary(m);
+                if(summary.income > 0 || summary.expense > 0) {
+                    totalIncome += summary.income;
+                    totalExpense += summary.expense;
+                    monthsWithData++;
+                }
+            });
+
+            let avgIncome = monthsWithData > 0 ? totalIncome / monthsWithData : 0;
+            let avgExpense = monthsWithData > 0 ? totalExpense / monthsWithData : 0;
+
+            // Add fixed incomes/expenses
+            const activeFixed = (data.fixedIncomes||[]).filter(f => {
+                const end = f.end || '2099-12';
+                const nowKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                return nowKey >= f.start && nowKey <= end;
+            });
+            const fixedIncome = activeFixed.reduce((s,f)=>s+f.amount, 0);
+
+            const activeFixedExp = (data.fixedExpenses||[]).filter(f => {
+                const end = f.end || '2099-12';
+                const nowKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                return nowKey >= f.start && nowKey <= end;
+            });
+            const fixedExpense = activeFixedExp.reduce((s,f)=>s+f.amount, 0);
+
+            // Add bills
+            const billsMonthly = (data.bills||[]).filter(b=>b.active!==false).reduce((s,b) => s + getMonthlyEquivalent(b.amount, b.frequency), 0);
+
+            // Use max of calculated vs fixed
+            if(avgIncome === 0) avgIncome = fixedIncome;
+            if(avgExpense === 0) avgExpense = fixedExpense + billsMonthly;
+
+            // Scenario adjustments
+            let incMod=1, expMod=1;
+            if(scenario==='optimistic') { incMod=1.1; expMod=0.95; }
+            else if(scenario==='pessimistic') { incMod=0.9; expMod=1.15; }
+
+            // Build forecast
+            const labels=[], incomes=[], expenses=[], balances=[], savings=[];
+            const monthNames=['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+            let runningBalance = balance;
+            let negMonths = 0;
+
+            for(let i=0; i<period; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()+i+1, 1);
+                labels.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+                const inc = avgIncome * incMod;
+                const exp = avgExpense * expMod;
+                const saving = inc - exp;
+                runningBalance += saving;
+                incomes.push(Math.round(inc));
+                expenses.push(Math.round(exp));
+                savings.push(Math.round(saving));
+                balances.push(Math.round(runningBalance));
+                if(saving < 0) negMonths++;
+            }
+
+            // Update summary cards
+            const endMonth = document.getElementById('cf-end-month');
+            if(endMonth) { endMonth.textContent = `₪${balances[0]?.toLocaleString('he-IL')}`; endMonth.style.color = balances[0]>=0?'#16a34a':'#ef4444'; }
+            const m3 = document.getElementById('cf-3months');
+            if(m3) { const v=balances[Math.min(2,balances.length-1)]; m3.textContent = `₪${v?.toLocaleString('he-IL')}`; m3.style.color=v>=0?'#2563eb':'#ef4444'; }
+            const avgSave = document.getElementById('cf-avg-saving');
+            if(avgSave) { const v=Math.round(savings.reduce((a,b)=>a+b,0)/savings.length); avgSave.textContent=`₪${v.toLocaleString('he-IL')}`; avgSave.style.color=v>=0?'#16a34a':'#ef4444'; }
+            const negEl = document.getElementById('cf-negative-months');
+            if(negEl) negEl.textContent = negMonths;
+
+            // Chart
+            const ctx = document.getElementById('cf-chart');
+            if(ctx) {
+                if(cfChart) cfChart.destroy();
+                cfChart = new Chart(ctx.getContext('2d'), {
+                    type:'bar',
+                    data:{
+                        labels,
+                        datasets:[
+                            { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
+                            { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
+                            { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
+                        ]
+                    },
+                    options:{
+                        responsive:true, maintainAspectRatio:false,
+                        plugins:{legend:{position:'top',rtl:true}},
+                        scales:{
+                            y:{position:'right', title:{display:true,text:'₪ חודשי'}},
+                            y1:{position:'left', title:{display:true,text:'₪ יתרה'}, grid:{drawOnChartArea:false}}
+                        }
+                    }
+                });
+            }
+
+            // Table
+            const tbody = document.getElementById('cf-table-body');
+            if(tbody) {
+                tbody.innerHTML = labels.map((l,i)=>`<tr style="border-bottom:1px solid var(--border,#e5e7eb);${savings[i]<0?'background:rgba(239,68,68,0.05);':''}">
+                    <td style="padding:8px;font-weight:600;">${l}</td>
+                    <td style="padding:8px;color:#16a34a;">₪${incomes[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;color:#ef4444;">₪${expenses[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;font-weight:700;color:${savings[i]>=0?'#16a34a':'#ef4444'};">₪${savings[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;font-weight:700;color:${balances[i]>=0?'#3b82f6':'#ef4444'};">₪${balances[i].toLocaleString('he-IL')}</td>
+                </tr>`).join('');
+            }
+        }
+
+        // ═══════════════ FIRE CALCULATOR ═══════════════
+        let fireChart = null;
+        function renderFIRE() {
+            const currentAge = parseInt(document.getElementById('fire-current-age')?.value) || 30;
+            const monthlyExpense = parseFloat(document.getElementById('fire-monthly-expense')?.value) || 0;
+            const monthlySaving = parseFloat(document.getElementById('fire-monthly-saving')?.value) || 0;
+            const currentSavings = parseFloat(document.getElementById('fire-current-savings')?.value) || 0;
+            const returnRate = parseFloat(document.getElementById('fire-return-rate')?.value) || 7;
+            const inflation = parseFloat(document.getElementById('fire-inflation')?.value) || 2.5;
+            const method = parseInt(document.getElementById('fire-method')?.value) || 25;
+            const savingGrowth = parseFloat(document.getElementById('fire-saving-growth')?.value) || 2;
+
+            const realReturn = (returnRate - inflation) / 100;
+            const annualExpense = monthlyExpense * 12;
+            const fireTarget = annualExpense * method; // e.g. 25x annual expenses
+
+            // Simulate year by year
+            let portfolio = currentSavings;
+            let annualSaving = monthlySaving * 12;
+            const years=[], portfolioValues=[], targetLine=[];
+            let fireYear = -1;
+            const milestones = [];
+            const pctMilestones = [25, 50, 75, 100];
+            const hitMilestones = new Set();
+
+            for(let y=0; y<=50; y++) {
+                const age = currentAge + y;
+                years.push(age);
+                portfolioValues.push(Math.round(portfolio));
+                targetLine.push(Math.round(fireTarget));
+
+                // Check milestones
+                const pct = fireTarget > 0 ? (portfolio / fireTarget) * 100 : 0;
+                pctMilestones.forEach(m => {
+                    if(pct >= m && !hitMilestones.has(m)) {
+                        hitMilestones.add(m);
+                        milestones.push({ pct:m, age, year: new Date().getFullYear()+y, value: Math.round(portfolio) });
+                    }
+                });
+
+                if(portfolio >= fireTarget && fireYear === -1) {
+                    fireYear = y;
+                }
+
+                // Grow portfolio
+                portfolio = portfolio * (1 + realReturn) + annualSaving;
+                annualSaving *= (1 + savingGrowth/100); // savings grow each year
+            }
+
+            // Update cards
+            const yearsEl = document.getElementById('fire-years');
+            if(yearsEl) yearsEl.textContent = fireYear >= 0 ? `${fireYear} שנים` : 'לא ניתן';
+            const ageEl = document.getElementById('fire-age');
+            if(ageEl) ageEl.textContent = fireYear >= 0 ? `${currentAge + fireYear}` : '—';
+            const targetEl = document.getElementById('fire-target');
+            if(targetEl) targetEl.textContent = `₪${Math.round(fireTarget).toLocaleString('he-IL')}`;
+            const progressEl = document.getElementById('fire-progress');
+            if(progressEl) {
+                const pct = fireTarget > 0 ? Math.min(100, (currentSavings/fireTarget)*100) : 0;
+                progressEl.textContent = `${pct.toFixed(1)}%`;
+                progressEl.style.color = pct >= 100 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            }
+
+            // Chart
+            const ctx = document.getElementById('fire-chart');
+            if(ctx) {
+                if(fireChart) fireChart.destroy();
+                const maxYear = fireYear >= 0 ? Math.min(fireYear + 10, 50) : 50;
+                fireChart = new Chart(ctx.getContext('2d'), {
+                    type:'line',
+                    data:{
+                        labels: years.slice(0, maxYear+1),
+                        datasets:[
+                            { label:'שווי תיק', data:portfolioValues.slice(0,maxYear+1), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:2 },
+                            { label:'יעד FIRE', data:targetLine.slice(0,maxYear+1), borderColor:'#ef4444', borderDash:[8,4], pointRadius:0, fill:false }
+                        ]
+                    },
+                    options:{
+                        responsive:true, maintainAspectRatio:false,
+                        plugins:{
+                            legend:{position:'top',rtl:true},
+                            annotation: fireYear >= 0 ? {
+                                annotations: {
+                                    fireLine: { type:'line', xMin:fireYear, xMax:fireYear, borderColor:'#16a34a', borderWidth:2, label:{display:true, content:`FIRE! גיל ${currentAge+fireYear}`, position:'start'} }
+                                }
+                            } : {}
+                        },
+                        scales:{
+                            x:{title:{display:true,text:'גיל'}},
+                            y:{position:'right', title:{display:true,text:'₪'}, ticks:{callback:v=>`₪${(v/1000000).toFixed(1)}M`}}
+                        }
+                    }
+                });
+            }
+
+            // Milestones
+            const msEl = document.getElementById('fire-milestones');
+            if(msEl) {
+                if(monthlyExpense === 0 || monthlySaving === 0) {
+                    msEl.innerHTML = '<div style="text-align:center;padding:16px;opacity:0.6;">הזן הוצאות חודשיות וחיסכון חודשי כדי לראות אבני דרך</div>';
+                } else {
+                    msEl.innerHTML = milestones.map(m => `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:${m.pct>=100?'rgba(34,197,94,0.1)':'rgba(59,130,246,0.05)'};border-radius:8px;border-right:4px solid ${m.pct>=100?'#16a34a':m.pct>=75?'#f59e0b':'#3b82f6'};">
+                        <span style="font-weight:700;">${m.pct}% מהיעד</span>
+                        <span>גיל ${m.age} (${m.year})</span>
+                        <span style="font-weight:600;">₪${m.value.toLocaleString('he-IL')}</span>
+                    </div>`).join('');
+                }
+            }
+        }
 
         // Load theme immediately
         loadTheme();
