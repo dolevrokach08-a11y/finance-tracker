@@ -2083,6 +2083,14 @@
                     <i data-lucide="clock"></i>
                     <span>היסטוריה</span>
                 </button>
+                <button class="nav-item" onclick="showTab('dividends')">
+                    <i data-lucide="banknote"></i>
+                    <span>דיבידנדים</span>
+                </button>
+                <button class="nav-item" onclick="showTab('fees')">
+                    <i data-lucide="percent"></i>
+                    <span>עמלות</span>
+                </button>
                 <button class="nav-item" onclick="showTab('settings')">
                     <i data-lucide="settings"></i>
                     <span>הגדרות</span>
@@ -2960,6 +2968,135 @@
             </div>
 
             <!-- Performance Tab -->
+
+            <!-- ═══════════════ DIVIDENDS TAB ═══════════════ -->
+            <div id="tab-dividends" class="tab-content">
+                <h3 style="margin-bottom: 20px;">💰 מעקב דיבידנדים</h3>
+
+                <!-- Summary Cards -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">סה"כ דיבידנדים שנתיים</div>
+                        <div id="div-annual" style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">דיבידנד חודשי ממוצע</div>
+                        <div id="div-monthly" style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">תשואת דיבידנד (Yield)</div>
+                        <div id="div-yield" style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0%</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">Yield on Cost</div>
+                        <div id="div-yoc" style="font-size: 1.5rem; font-weight: 800; color: var(--accent);">0%</div>
+                    </div>
+                </div>
+
+                <!-- Add Dividend -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">➕ רישום דיבידנד</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 12px;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">נייר ערך</label>
+                            <select id="div-holding" class="input-field" style="width: 100%;"></select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">סכום ברוטו</label>
+                            <input type="number" id="div-amount" placeholder="0" class="input-field" style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">מטבע</label>
+                            <select id="div-currency" class="input-field" style="width: 100%;">
+                                <option value="ILS">₪ ILS</option>
+                                <option value="USD">$ USD</option>
+                                <option value="EUR">€ EUR</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">מס ניכוי במקור %</label>
+                            <input type="number" id="div-tax" value="25" step="1" class="input-field" style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">תאריך Ex-Div</label>
+                            <input type="date" id="div-exdate" class="input-field" style="width: 100%;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">תאריך תשלום</label>
+                            <input type="date" id="div-paydate" class="input-field" style="width: 100%;">
+                        </div>
+                    </div>
+                    <button onclick="addDividend()" class="btn btn-success">+ הוסף דיבידנד</button>
+                </div>
+
+                <!-- Charts -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+                    <div class="glass">
+                        <h4 style="margin-bottom: 12px;">📊 דיבידנדים לפי חודש</h4>
+                        <div style="position: relative; height: 250px;"><canvas id="div-monthly-chart"></canvas></div>
+                    </div>
+                    <div class="glass">
+                        <h4 style="margin-bottom: 12px;">🎯 דיבידנדים לפי נייר ערך</h4>
+                        <div style="position: relative; height: 250px;"><canvas id="div-by-holding-chart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- Calendar -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">📅 לוח שנה — דיבידנדים קרובים</h4>
+                    <div id="div-calendar" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
+                </div>
+
+                <!-- Dividend History -->
+                <div class="glass">
+                    <h4 style="margin-bottom: 12px;">📋 היסטוריית דיבידנדים</h4>
+                    <div id="div-history" style="max-height: 400px; overflow-y: auto;"></div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ FEES TAB ═══════════════ -->
+            <div id="tab-fees" class="tab-content">
+                <h3 style="margin-bottom: 20px;">📊 ניתוח עמלות ודמי ניהול</h3>
+
+                <!-- Summary -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">עמלות שנתיות משוערות</div>
+                        <div id="fee-annual" style="font-size: 1.5rem; font-weight: 800; color: var(--loss);">₪0</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">TER ממוצע משוקלל</div>
+                        <div id="fee-avg-ter" style="font-size: 1.5rem; font-weight: 800; color: var(--loss);">0%</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">גרירת עמלות ב-10 שנים</div>
+                        <div id="fee-10yr" style="font-size: 1.5rem; font-weight: 800; color: var(--loss);">₪0</div>
+                    </div>
+                    <div class="glass" style="text-align: center;">
+                        <div style="font-size: 0.85rem; opacity: 0.7; margin-bottom: 4px;">גרירת עמלות ב-30 שנים</div>
+                        <div id="fee-30yr" style="font-size: 1.5rem; font-weight: 800; color: var(--loss);">₪0</div>
+                    </div>
+                </div>
+
+                <!-- Set TER per Holding -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">⚙️ הגדרת דמי ניהול (TER) לכל אחזקה</h4>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px;">הזן את אחוז דמי הניהול השנתיים (Total Expense Ratio) עבור כל קרן/ETF. מניות בודדות — הזן 0.</p>
+                    <div id="fee-ter-list" style="display: grid; gap: 8px;"></div>
+                </div>
+
+                <!-- Fee Impact Chart -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">📉 השפעת עמלות על הצמיחה (20 שנה)</h4>
+                    <div style="position: relative; height: 300px;"><canvas id="fee-impact-chart"></canvas></div>
+                </div>
+
+                <!-- Fee Breakdown -->
+                <div class="glass">
+                    <h4 style="margin-bottom: 12px;">📋 פירוט עמלות לפי אחזקה</h4>
+                    <div id="fee-breakdown"></div>
+                </div>
+            </div>
 
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-content">
@@ -6270,6 +6407,8 @@ function calculateTWRv3() {
                 default: 'calculator'
             },
             'history': { subTabs: null },
+            'dividends': { subTabs: null },
+            'fees': { subTabs: null },
             'settings': { subTabs: null }
         };
         
@@ -6431,6 +6570,12 @@ function calculateTWRv3() {
                 case 'recommendations':
                     renderRecommendations();
                     break;
+                case 'dividends':
+                    renderDividendsTab();
+                    break;
+                case 'fees':
+                    renderFeesTab();
+                    break;
             }
         }
         
@@ -6569,9 +6714,11 @@ function calculateTWRv3() {
                     bondsSales: portfolio.bondsSales || [],
                     portfolioSnapshots: portfolio.portfolioSnapshots || [],
                     cashFlows: portfolio.cashFlows || [],
+                    dividends: portfolio.dividends || [],
+                    holdingFees: portfolio.holdingFees || {},
                     lastModified: new Date().toISOString()
                 };
-                
+
                 // Save to Firebase
                 const userDocRef = doc(db, 'users', currentUser.uid, 'portfolio', 'data');
                 await setDoc(userDocRef, dataToSave);
@@ -12724,6 +12871,362 @@ ${msg}`, 'warning');
         window.addEventListener('DOMContentLoaded', () => {
             initTheme();
         });
+
+        // ═══════════════════════════ DIVIDENDS TAB ═══════════════════════════
+        let divMonthlyChart = null, divByHoldingChart = null;
+
+        function renderDividendsTab() {
+            if(!portfolio.dividends) portfolio.dividends = [];
+            const dividends = portfolio.dividends;
+            const holdings = portfolio.holdings || [];
+
+            // Populate holdings dropdown
+            const sel = document.getElementById('div-holding');
+            if(sel && sel.options.length <= 1) {
+                sel.innerHTML = '<option value="">בחר נייר ערך</option>' +
+                    holdings.map(h => `<option value="${h.symbol}">${h.symbol}</option>`).join('');
+            }
+
+            // Calculate metrics
+            const totalValue = holdings.reduce((s, h) => {
+                const price = h.currentPrice || 0;
+                const rate = h.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : h.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                return s + (h.shares * price * rate);
+            }, 0);
+            const totalCost = holdings.reduce((s, h) => s + (h.costBasis || 0), 0);
+
+            const now = new Date();
+            const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+            const yearDivs = dividends.filter(d => new Date(d.payDate || d.date) >= oneYearAgo);
+            const annualGross = yearDivs.reduce((s, d) => {
+                const rate = d.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : d.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                return s + (d.amount * rate);
+            }, 0);
+            const annualNet = yearDivs.reduce((s, d) => {
+                const rate = d.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : d.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                const tax = d.taxPercent || 25;
+                return s + (d.amount * (1 - tax / 100) * rate);
+            }, 0);
+
+            document.getElementById('div-annual').textContent = '₪' + Math.round(annualNet).toLocaleString('he-IL');
+            document.getElementById('div-monthly').textContent = '₪' + Math.round(annualNet / 12).toLocaleString('he-IL');
+            document.getElementById('div-yield').textContent = totalValue > 0 ? (annualGross / totalValue * 100).toFixed(2) + '%' : '0%';
+            document.getElementById('div-yoc').textContent = totalCost > 0 ? (annualGross / totalCost * 100).toFixed(2) + '%' : '0%';
+
+            // Monthly chart
+            renderDivMonthlyChart(dividends);
+            renderDivByHoldingChart(dividends);
+            renderDivCalendar(dividends);
+            renderDivHistory(dividends);
+        }
+
+        function addDividend() {
+            const symbol = document.getElementById('div-holding').value;
+            const amount = +document.getElementById('div-amount').value;
+            const currency = document.getElementById('div-currency').value;
+            const taxPercent = +document.getElementById('div-tax').value || 25;
+            const exDate = document.getElementById('div-exdate').value;
+            const payDate = document.getElementById('div-paydate').value;
+            if (!symbol || !amount) { notify('נא לבחור נייר ערך ולהזין סכום', 'warning'); return; }
+            if (!portfolio.dividends) portfolio.dividends = [];
+            portfolio.dividends.push({
+                id: Date.now(), symbol, amount, currency, taxPercent,
+                exDate: exDate || null, payDate: payDate || new Date().toISOString().slice(0, 10),
+                date: new Date().toISOString().slice(0, 10)
+            });
+            document.getElementById('div-amount').value = '';
+            document.getElementById('div-exdate').value = '';
+            document.getElementById('div-paydate').value = '';
+            saveData();
+            renderDividendsTab();
+            notify('דיבידנד נרשם בהצלחה!', 'success');
+        }
+
+        function removeDividend(id) {
+            portfolio.dividends = (portfolio.dividends || []).filter(d => d.id !== id);
+            saveData();
+            renderDividendsTab();
+        }
+
+        function renderDivMonthlyChart(dividends) {
+            const ctx = document.getElementById('div-monthly-chart');
+            if (!ctx) return;
+            if (divMonthlyChart) divMonthlyChart.destroy();
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            // Group by month (last 12 months)
+            const months = {};
+            const now = new Date();
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                const key = d.toISOString().slice(0, 7);
+                months[key] = 0;
+            }
+            dividends.forEach(d => {
+                const month = (d.payDate || d.date || '').slice(0, 7);
+                if (months.hasOwnProperty(month)) {
+                    const rate = d.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : d.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                    const net = d.amount * (1 - (d.taxPercent || 25) / 100) * rate;
+                    months[month] += net;
+                }
+            });
+
+            divMonthlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(months).map(m => m.slice(5)),
+                    datasets: [{
+                        label: 'דיבידנד נטו (₪)',
+                        data: Object.values(months).map(v => Math.round(v)),
+                        backgroundColor: 'rgba(45, 216, 122, 0.6)',
+                        borderColor: '#2dd87a',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '₪' + c.raw.toLocaleString('he-IL') } } },
+                    scales: {
+                        x: { ticks: { color: isDark ? '#666' : '#999' }, grid: { display: false } },
+                        y: { ticks: { color: isDark ? '#666' : '#999', callback: v => '₪' + v }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' } }
+                    }
+                }
+            });
+        }
+
+        function renderDivByHoldingChart(dividends) {
+            const ctx = document.getElementById('div-by-holding-chart');
+            if (!ctx) return;
+            if (divByHoldingChart) divByHoldingChart.destroy();
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            const byHolding = {};
+            dividends.forEach(d => {
+                const rate = d.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : d.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                byHolding[d.symbol] = (byHolding[d.symbol] || 0) + d.amount * rate;
+            });
+            const labels = Object.keys(byHolding);
+            const colors = ['#2dd87a', '#4f7cff', '#a78bfa', '#f5a623', '#38d4c8', '#ef4444', '#e8915c', '#ec4899'];
+
+            divByHoldingChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels,
+                    datasets: [{ data: labels.map(l => Math.round(byHolding[l])), backgroundColor: colors.slice(0, labels.length), borderWidth: 0 }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '55%',
+                    plugins: { legend: { position: 'bottom', labels: { color: isDark ? '#999' : '#666', font: { family: 'Heebo', size: 11 } } } }
+                }
+            });
+        }
+
+        function renderDivCalendar(dividends) {
+            const cal = document.getElementById('div-calendar');
+            if (!cal) return;
+            const now = new Date();
+            const months = [];
+            for (let i = 0; i < 4; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+                months.push({ month: d.getMonth(), year: d.getFullYear(), label: d.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }) });
+            }
+
+            cal.innerHTML = months.map(m => {
+                const monthDivs = dividends.filter(d => {
+                    const pd = new Date(d.payDate || d.exDate || d.date);
+                    return pd.getMonth() === m.month && pd.getFullYear() === m.year;
+                });
+                const total = monthDivs.reduce((s, d) => {
+                    const rate = d.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : d.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                    return s + d.amount * rate;
+                }, 0);
+                return `<div class="glass" style="padding: 12px; text-align: center;">
+                    <div style="font-weight: 700; margin-bottom: 6px;">${m.label}</div>
+                    <div style="font-size: 1.3rem; font-weight: 800; color: ${total > 0 ? 'var(--accent)' : 'var(--text-secondary)'};">₪${Math.round(total).toLocaleString('he-IL')}</div>
+                    <div style="font-size: 0.8rem; opacity: 0.6;">${monthDivs.length} דיבידנדים</div>
+                    ${monthDivs.map(d => `<div style="font-size:0.75rem;margin-top:4px;padding:2px 6px;background:var(--accent-dim);border-radius:4px;">${d.symbol} — ${d.currency === 'ILS' ? '₪' : d.currency === 'USD' ? '$' : '€'}${d.amount}</div>`).join('')}
+                </div>`;
+            }).join('');
+        }
+
+        function renderDivHistory(dividends) {
+            const el = document.getElementById('div-history');
+            if (!el) return;
+            const sorted = [...dividends].sort((a, b) => (b.payDate || b.date || '').localeCompare(a.payDate || a.date || ''));
+            if (!sorted.length) { el.innerHTML = '<p style="opacity:0.5;text-align:center;">עדיין לא נרשמו דיבידנדים</p>'; return; }
+            el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                <thead><tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:right;padding:8px;">נייר ערך</th>
+                    <th style="text-align:right;padding:8px;">סכום ברוטו</th>
+                    <th style="text-align:right;padding:8px;">מס</th>
+                    <th style="text-align:right;padding:8px;">נטו</th>
+                    <th style="text-align:right;padding:8px;">Ex-Date</th>
+                    <th style="text-align:right;padding:8px;">תשלום</th>
+                    <th style="padding:8px;"></th>
+                </tr></thead>
+                <tbody>${sorted.map(d => {
+                    const sym = d.currency === 'ILS' ? '₪' : d.currency === 'USD' ? '$' : '€';
+                    const net = d.amount * (1 - (d.taxPercent || 25) / 100);
+                    return `<tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:8px;font-weight:600;">${d.symbol}</td>
+                        <td style="padding:8px;">${sym}${d.amount.toFixed(2)}</td>
+                        <td style="padding:8px;opacity:0.6;">${d.taxPercent || 25}%</td>
+                        <td style="padding:8px;color:var(--accent);font-weight:600;">${sym}${net.toFixed(2)}</td>
+                        <td style="padding:8px;font-size:0.85rem;">${d.exDate || '—'}</td>
+                        <td style="padding:8px;font-size:0.85rem;">${d.payDate || d.date || '—'}</td>
+                        <td style="padding:8px;"><button onclick="removeDividend(${d.id})" style="cursor:pointer;border:none;background:none;color:var(--loss);">🗑️</button></td>
+                    </tr>`;
+                }).join('')}</tbody></table>`;
+        }
+
+        // ═══════════════════════════ FEES TAB ═══════════════════════════
+        let feeImpactChart = null;
+
+        function renderFeesTab() {
+            const holdings = portfolio.holdings || [];
+            const bonds = portfolio.bonds || [];
+            if (!portfolio.holdingFees) portfolio.holdingFees = {};
+            const fees = portfolio.holdingFees;
+
+            // Render TER inputs
+            const allItems = [...holdings.map(h => ({ symbol: h.symbol, type: 'stock', value: h.shares * (h.currentPrice || 0), currency: h.currency })),
+                ...bonds.map(b => ({ symbol: b.name || b.symbol || 'Bond', type: 'bond', value: b.units * (b.currentPrice || 0), currency: 'ILS' }))];
+
+            const terList = document.getElementById('fee-ter-list');
+            if (terList) {
+                terList.innerHTML = allItems.map(item => {
+                    const ter = fees[item.symbol] || 0;
+                    const rate = item.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : item.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                    const valueILS = item.value * rate;
+                    const annualFee = valueILS * ter / 100;
+                    return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg-elevated,rgba(0,0,0,0.1));border-radius:8px;">
+                        <span style="font-weight:600;min-width:100px;">${item.symbol}</span>
+                        <span style="font-size:0.85rem;opacity:0.6;min-width:100px;">₪${Math.round(valueILS).toLocaleString('he-IL')}</span>
+                        <input type="number" step="0.01" min="0" max="5" value="${ter}"
+                            onchange="updateHoldingFee('${item.symbol}',this.value)"
+                            style="width:80px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-surface,#1a1a2e);color:inherit;text-align:center;" />
+                        <span style="font-size:0.85rem;opacity:0.6;">% TER</span>
+                        <span style="font-size:0.85rem;color:var(--loss);min-width:80px;">₪${Math.round(annualFee).toLocaleString('he-IL')}/שנה</span>
+                    </div>`;
+                }).join('');
+            }
+
+            // Calculate totals
+            let totalValue = 0;
+            let weightedTER = 0;
+            allItems.forEach(item => {
+                const rate = item.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : item.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                const valueILS = item.value * rate;
+                const ter = fees[item.symbol] || 0;
+                totalValue += valueILS;
+                weightedTER += valueILS * ter;
+            });
+            const avgTER = totalValue > 0 ? weightedTER / totalValue : 0;
+            const annualFees = totalValue * avgTER / 100;
+
+            // Fee drag calculation (compound effect)
+            const assumedReturn = 0.08; // 8% annual return
+            function calcGrowth(years, withFee) {
+                const rate = assumedReturn - (withFee ? avgTER / 100 : 0);
+                return totalValue * Math.pow(1 + rate, years);
+            }
+            const drag10 = calcGrowth(10, false) - calcGrowth(10, true);
+            const drag30 = calcGrowth(30, false) - calcGrowth(30, true);
+
+            document.getElementById('fee-annual').textContent = '₪' + Math.round(annualFees).toLocaleString('he-IL');
+            document.getElementById('fee-avg-ter').textContent = avgTER.toFixed(3) + '%';
+            document.getElementById('fee-10yr').textContent = '₪' + Math.round(drag10).toLocaleString('he-IL');
+            document.getElementById('fee-30yr').textContent = '₪' + Math.round(drag30).toLocaleString('he-IL');
+
+            // Impact chart
+            renderFeeImpactChart(totalValue, avgTER);
+
+            // Breakdown
+            renderFeeBreakdown(allItems, fees);
+        }
+
+        function updateHoldingFee(symbol, value) {
+            if (!portfolio.holdingFees) portfolio.holdingFees = {};
+            portfolio.holdingFees[symbol] = +value || 0;
+            saveData();
+            renderFeesTab();
+        }
+
+        function renderFeeImpactChart(totalValue, avgTER) {
+            const ctx = document.getElementById('fee-impact-chart');
+            if (!ctx) return;
+            if (feeImpactChart) feeImpactChart.destroy();
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const assumedReturn = 0.08;
+            const years = 20;
+            const labels = [];
+            const withoutFee = [];
+            const withFee = [];
+            const feeDrag = [];
+
+            for (let y = 0; y <= years; y++) {
+                labels.push('שנה ' + y);
+                const noFee = totalValue * Math.pow(1 + assumedReturn, y);
+                const yesFee = totalValue * Math.pow(1 + assumedReturn - avgTER / 100, y);
+                withoutFee.push(Math.round(noFee));
+                withFee.push(Math.round(yesFee));
+                feeDrag.push(Math.round(noFee - yesFee));
+            }
+
+            feeImpactChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'ללא עמלות', data: withoutFee, borderColor: '#2dd87a', backgroundColor: 'rgba(45,216,122,0.1)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 },
+                        { label: 'עם עמלות (' + avgTER.toFixed(2) + '%)', data: withFee, borderColor: '#4f7cff', backgroundColor: 'rgba(79,124,255,0.1)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2 },
+                        { label: 'גרירת עמלות', data: feeDrag, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 2, borderDash: [5, 5] }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { labels: { color: isDark ? '#999' : '#666', font: { family: 'Heebo' } } },
+                        tooltip: { callbacks: { label: c => `${c.dataset.label}: ₪${c.raw.toLocaleString('he-IL')}` } }
+                    },
+                    scales: {
+                        x: { ticks: { color: isDark ? '#666' : '#999', maxTicksLimit: 10 }, grid: { display: false } },
+                        y: { ticks: { color: isDark ? '#666' : '#999', callback: v => '₪' + (v / 1000).toFixed(0) + 'K' }, grid: { color: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)' } }
+                    }
+                }
+            });
+        }
+
+        function renderFeeBreakdown(items, fees) {
+            const el = document.getElementById('fee-breakdown');
+            if (!el) return;
+            const sorted = items.map(item => {
+                const rate = item.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : item.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                const valueILS = item.value * rate;
+                const ter = fees[item.symbol] || 0;
+                return { ...item, valueILS, ter, annualFee: valueILS * ter / 100 };
+            }).sort((a, b) => b.annualFee - a.annualFee);
+
+            el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                <thead><tr style="border-bottom:1px solid var(--border);">
+                    <th style="text-align:right;padding:8px;">נייר ערך</th>
+                    <th style="text-align:right;padding:8px;">שווי</th>
+                    <th style="text-align:right;padding:8px;">TER</th>
+                    <th style="text-align:right;padding:8px;">עמלה שנתית</th>
+                    <th style="text-align:right;padding:8px;">גרירה ב-10 שנים</th>
+                </tr></thead>
+                <tbody>${sorted.map(s => {
+                    const drag10 = s.valueILS * (Math.pow(1.08, 10) - Math.pow(1.08 - s.ter / 100, 10));
+                    return `<tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:8px;font-weight:600;">${s.symbol}</td>
+                        <td style="padding:8px;">₪${Math.round(s.valueILS).toLocaleString('he-IL')}</td>
+                        <td style="padding:8px;color:${s.ter > 0.5 ? 'var(--loss)' : s.ter > 0.2 ? '#f5a623' : 'var(--accent)'};">${s.ter.toFixed(2)}%</td>
+                        <td style="padding:8px;color:var(--loss);">₪${Math.round(s.annualFee).toLocaleString('he-IL')}</td>
+                        <td style="padding:8px;color:var(--loss);">₪${Math.round(drag10).toLocaleString('he-IL')}</td>
+                    </tr>`;
+                }).join('')}</tbody></table>`;
+        }
 
         // Register Service Worker for PWA
         if ('serviceWorker' in navigator) {
