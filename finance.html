@@ -32,6 +32,7 @@
         #tab-bills:not(.hidden) { display: block !important; }
         #tab-cashflow:not(.hidden) { display: block !important; }
         #tab-fire:not(.hidden) { display: block !important; }
+        #tab-debt:not(.hidden) { display: block !important; }
 
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -811,6 +812,7 @@
                     <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
                     <button onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
                     <button onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
+                    <button onclick="showTab('debt')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">סימולטור חוב</button>
                 </div>
                 <a href="portfolio.html" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.9rem;">
                     📈 תיק השקעות
@@ -1745,6 +1747,114 @@
                 </div>
             </div>
 
+            <!-- Debt Simulator Tab -->
+            <div id="tab-debt" class="tab-content hidden">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">סה"כ חוב</div>
+                        <div id="debt-total" class="text-2xl font-bold text-red-500 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">תשלומים חודשיים</div>
+                        <div id="debt-monthly" class="text-2xl font-bold text-orange-500 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">תאריך סילוק צפוי</div>
+                        <div id="debt-payoff-date" class="text-2xl font-bold text-blue-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">סה"כ ריבית</div>
+                        <div id="debt-total-interest" class="text-2xl font-bold text-purple-500 mt-1">₪0</div>
+                    </div>
+                </div>
+
+                <!-- Add Debt Form -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">➕ הוסף חוב</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                            <label class="text-sm text-gray-500">שם החוב</label>
+                            <input type="text" id="debt-name" placeholder="לדוגמה: משכנתא" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">יתרה (₪)</label>
+                            <input type="number" id="debt-balance" placeholder="0" min="0" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">ריבית שנתית (%)</label>
+                            <input type="number" id="debt-rate" placeholder="0" min="0" step="0.1" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תשלום מינימלי (₪)</label>
+                            <input type="number" id="debt-min-payment" placeholder="0" min="0" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">סוג</label>
+                            <select id="debt-type" class="w-full p-2 rounded-lg border">
+                                <option value="credit-card">כרטיס אשראי</option>
+                                <option value="loan">הלוואה</option>
+                                <option value="mortgage">משכנתא</option>
+                                <option value="other">אחר</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="addDebt()" class="mt-3 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium">הוסף חוב</button>
+                </div>
+
+                <!-- Existing Debts List -->
+                <div id="debt-list" class="glass p-4 rounded-xl mb-6" style="display:none;">
+                    <h3 class="font-bold text-lg mb-4">📋 חובות קיימים</h3>
+                    <div id="debt-list-items"></div>
+                </div>
+
+                <!-- Strategy & Extra Payment -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">🎯 אסטרטגיית פירעון</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100" style="transition: background 0.2s;">
+                                <input type="radio" name="debt-strategy" value="avalanche" checked onchange="renderDebtSimulator()">
+                                <div>
+                                    <div class="font-medium">מפולת (Avalanche)</div>
+                                    <div class="text-sm text-gray-500">ריבית גבוהה קודם - חוסך הכי הרבה כסף</div>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100" style="transition: background 0.2s;">
+                                <input type="radio" name="debt-strategy" value="snowball" onchange="renderDebtSimulator()">
+                                <div>
+                                    <div class="font-medium">כדור שלג (Snowball)</div>
+                                    <div class="text-sm text-gray-500">יתרה נמוכה קודם - מוטיבציה מהירה יותר</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">💰 תשלום נוסף חודשי</h3>
+                        <p class="text-sm text-gray-500 mb-3">סכום מעבר למינימום שתשלם בכל חודש</p>
+                        <input type="number" id="debt-extra-payment" value="0" min="0" class="w-full p-3 rounded-lg border text-lg" onchange="renderDebtSimulator()">
+                    </div>
+                </div>
+
+                <!-- Strategy Comparison -->
+                <div id="debt-comparison" class="glass p-4 rounded-xl mb-6" style="display:none;">
+                    <h3 class="font-bold text-lg mb-4">⚖️ השוואת אסטרטגיות</h3>
+                    <div id="debt-comparison-content" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+
+                <!-- Payoff Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📉 גרף סילוק חובות</h3>
+                    <div style="position:relative;height:300px;"><canvas id="debt-payoff-chart"></canvas></div>
+                </div>
+
+                <!-- Payoff Schedule -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">📅 לוח סילוק חודשי</h3>
+                    <div id="debt-schedule" style="max-height:400px;overflow-y:auto;"></div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -1867,7 +1977,8 @@
             netWorthAssets: [],
             netWorthLiabilities: [],
             netWorthHistory: [],
-            bills: []
+            bills: [],
+            debts: []
         };
         let editingFixed = null;
         
@@ -2022,6 +2133,7 @@
             if(tab==='bills') { renderBills(); }
             if(tab==='cashflow') { renderCashFlow(); }
             if(tab==='fire') { renderFIRE(); }
+            if(tab==='debt') { renderDebtSimulator(); }
         }
 
         // טאבים פנימיים בדוחות
@@ -6282,6 +6394,299 @@
         window.migrateBillFromFixed = migrateBillFromFixed;
         window.renderCashFlow = renderCashFlow;
         window.renderFIRE = renderFIRE;
+
+        // ═══════════════ DEBT SIMULATOR ═══════════════
+        let debtChart = null;
+
+        function addDebt() {
+            const name = document.getElementById('debt-name').value.trim();
+            const balance = parseFloat(document.getElementById('debt-balance').value) || 0;
+            const rate = parseFloat(document.getElementById('debt-rate').value) || 0;
+            const minPayment = parseFloat(document.getElementById('debt-min-payment').value) || 0;
+            const type = document.getElementById('debt-type').value;
+
+            if (!name || balance <= 0 || minPayment <= 0) {
+                notify('נא למלא שם, יתרה ותשלום מינימלי');
+                return;
+            }
+
+            if (!data.debts) data.debts = [];
+            data.debts.push({
+                id: Date.now().toString(),
+                name, balance, rate, minPayment, type
+            });
+
+            document.getElementById('debt-name').value = '';
+            document.getElementById('debt-balance').value = '';
+            document.getElementById('debt-rate').value = '';
+            document.getElementById('debt-min-payment').value = '';
+
+            saveToFirebase();
+            renderDebtSimulator();
+        }
+
+        function removeDebt(id) {
+            if (!data.debts) return;
+            data.debts = data.debts.filter(d => d.id !== id);
+            saveToFirebase();
+            renderDebtSimulator();
+        }
+
+        function calculatePayoff(debts, strategy, extraPayment) {
+            if (!debts || debts.length === 0) return { schedule: [], totalInterest: 0, months: 0 };
+
+            let remaining = debts.map(d => ({
+                ...d,
+                balance: d.balance,
+                monthlyRate: (d.rate / 100) / 12
+            }));
+
+            if (strategy === 'snowball') {
+                remaining.sort((a, b) => a.balance - b.balance);
+            } else {
+                remaining.sort((a, b) => b.rate - a.rate);
+            }
+
+            const schedule = [];
+            let totalInterest = 0;
+            let month = 0;
+            const MAX_MONTHS = 600;
+
+            while (remaining.some(d => d.balance > 0.01) && month < MAX_MONTHS) {
+                month++;
+                let extra = extraPayment;
+                const entry = { month, debts: {}, totalBalance: 0, interestPaid: 0, principalPaid: 0 };
+
+                for (const d of remaining) {
+                    if (d.balance <= 0.01) {
+                        d.balance = 0;
+                        entry.debts[d.id] = 0;
+                        continue;
+                    }
+                    const interest = d.balance * d.monthlyRate;
+                    let payment = Math.min(d.minPayment, d.balance + interest);
+                    const principal = payment - interest;
+                    d.balance = Math.max(0, d.balance - principal);
+                    totalInterest += interest;
+                    entry.interestPaid += interest;
+                    entry.principalPaid += principal;
+                    entry.debts[d.id] = d.balance;
+                }
+
+                // Apply extra payment to priority debt
+                for (const d of remaining) {
+                    if (d.balance <= 0.01 || extra <= 0) continue;
+                    const pay = Math.min(extra, d.balance);
+                    d.balance = Math.max(0, d.balance - pay);
+                    extra -= pay;
+                    entry.principalPaid += pay;
+                    entry.debts[d.id] = d.balance;
+                    if (d.balance <= 0.01) {
+                        // Freed-up minimum goes to next debt as extra
+                        extra += d.minPayment;
+                    }
+                }
+
+                // Also cascade freed-up minimums from debts paid off in regular payments
+                for (const d of remaining) {
+                    if (d.balance <= 0.01 && entry.debts[d.id] === 0) continue;
+                    entry.debts[d.id] = d.balance;
+                }
+
+                entry.totalBalance = remaining.reduce((s, d) => s + d.balance, 0);
+                schedule.push(entry);
+            }
+
+            return { schedule, totalInterest, months: month };
+        }
+
+        function renderDebtChart(avalancheResult, snowballResult, strategy) {
+            const canvas = document.getElementById('debt-payoff-chart');
+            if (!canvas) return;
+            if (debtChart) { debtChart.destroy(); debtChart = null; }
+
+            const result = strategy === 'avalanche' ? avalancheResult : snowballResult;
+            if (!result || result.schedule.length === 0) return;
+
+            const debts = data.debts || [];
+            const labels = result.schedule.map(s => s.month);
+            const datasets = debts.map((d, i) => {
+                const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+                return {
+                    label: d.name,
+                    data: result.schedule.map(s => (s.debts[d.id] || 0).toFixed(0)),
+                    borderColor: colors[i % colors.length],
+                    backgroundColor: colors[i % colors.length] + '20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                };
+            });
+
+            debtChart = new Chart(canvas, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } },
+                        tooltip: {
+                            rtl: true,
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ₪${parseFloat(ctx.raw).toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'חודש', font: { family: 'Heebo' } } },
+                        y: {
+                            title: { display: true, text: 'יתרה (₪)', font: { family: 'Heebo' } },
+                            ticks: { callback: v => '₪' + v.toLocaleString() }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDebtSchedule(result) {
+            const el = document.getElementById('debt-schedule');
+            if (!el) return;
+            if (!result || result.schedule.length === 0) {
+                el.innerHTML = '<p class="text-gray-500 text-center py-4">הוסף חובות כדי לראות את לוח הסילוק</p>';
+                return;
+            }
+
+            const debts = data.debts || [];
+            // Show every 3rd month + last month for readability
+            const filtered = result.schedule.filter((s, i) => i % 3 === 0 || i === result.schedule.length - 1);
+
+            let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+            html += '<thead><tr style="border-bottom:2px solid var(--border-color,#e5e7eb);">';
+            html += '<th style="padding:8px;text-align:right;">חודש</th>';
+            debts.forEach(d => { html += `<th style="padding:8px;text-align:right;">${d.name}</th>`; });
+            html += '<th style="padding:8px;text-align:right;">סה"כ יתרה</th>';
+            html += '<th style="padding:8px;text-align:right;">ריבית</th>';
+            html += '<th style="padding:8px;text-align:right;">קרן</th>';
+            html += '</tr></thead><tbody>';
+
+            filtered.forEach(s => {
+                html += '<tr style="border-bottom:1px solid var(--border-color,#f3f4f6);">';
+                html += `<td style="padding:6px 8px;">${s.month}</td>`;
+                debts.forEach(d => {
+                    const val = s.debts[d.id] || 0;
+                    html += `<td style="padding:6px 8px;">₪${Math.round(val).toLocaleString()}</td>`;
+                });
+                html += `<td style="padding:6px 8px;font-weight:600;">₪${Math.round(s.totalBalance).toLocaleString()}</td>`;
+                html += `<td style="padding:6px 8px;color:#ef4444;">₪${Math.round(s.interestPaid).toLocaleString()}</td>`;
+                html += `<td style="padding:6px 8px;color:#22c55e;">₪${Math.round(s.principalPaid).toLocaleString()}</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            el.innerHTML = html;
+        }
+
+        function renderDebtSimulator() {
+            if (!data.debts) data.debts = [];
+            const debts = data.debts;
+            const extra = parseFloat(document.getElementById('debt-extra-payment')?.value) || 0;
+            const strategyEl = document.querySelector('input[name="debt-strategy"]:checked');
+            const strategy = strategyEl ? strategyEl.value : 'avalanche';
+
+            // Render debt list
+            const listEl = document.getElementById('debt-list');
+            const listItems = document.getElementById('debt-list-items');
+            if (listEl && listItems) {
+                if (debts.length === 0) {
+                    listEl.style.display = 'none';
+                } else {
+                    listEl.style.display = 'block';
+                    const typeLabels = { 'credit-card': 'כרטיס אשראי', 'loan': 'הלוואה', 'mortgage': 'משכנתא', 'other': 'אחר' };
+                    listItems.innerHTML = debts.map(d => `
+                        <div class="flex items-center justify-between p-3 rounded-lg mb-2" style="background:var(--card-bg,#f9fafb);border:1px solid var(--border-color,#e5e7eb);">
+                            <div>
+                                <span class="font-medium">${d.name}</span>
+                                <span class="text-sm text-gray-500 mr-2">(${typeLabels[d.type] || d.type})</span>
+                                <div class="text-sm text-gray-500">יתרה: ₪${d.balance.toLocaleString()} | ריבית: ${d.rate}% | מינימום: ₪${d.minPayment.toLocaleString()}</div>
+                            </div>
+                            <button onclick="removeDebt('${d.id}')" class="text-red-500 hover:text-red-700 px-3 py-1 rounded" title="מחק">✕</button>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Calculate both strategies
+            const avalancheResult = calculatePayoff(debts, 'avalanche', extra);
+            const snowballResult = calculatePayoff(debts, 'snowball', extra);
+            const activeResult = strategy === 'avalanche' ? avalancheResult : snowballResult;
+
+            // Update summary cards
+            const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
+            const totalMonthly = debts.reduce((s, d) => s + d.minPayment, 0) + extra;
+            document.getElementById('debt-total').textContent = '₪' + Math.round(totalDebt).toLocaleString();
+            document.getElementById('debt-monthly').textContent = '₪' + Math.round(totalMonthly).toLocaleString();
+
+            if (activeResult.months > 0) {
+                const payoffDate = new Date();
+                payoffDate.setMonth(payoffDate.getMonth() + activeResult.months);
+                document.getElementById('debt-payoff-date').textContent = payoffDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'long' });
+                document.getElementById('debt-total-interest').textContent = '₪' + Math.round(activeResult.totalInterest).toLocaleString();
+            } else {
+                document.getElementById('debt-payoff-date').textContent = '—';
+                document.getElementById('debt-total-interest').textContent = '₪0';
+            }
+
+            // Render comparison
+            const compEl = document.getElementById('debt-comparison');
+            const compContent = document.getElementById('debt-comparison-content');
+            if (compEl && compContent && debts.length > 0) {
+                compEl.style.display = 'block';
+                const avDate = new Date(); avDate.setMonth(avDate.getMonth() + avalancheResult.months);
+                const snDate = new Date(); snDate.setMonth(snDate.getMonth() + snowballResult.months);
+                const interestDiff = Math.abs(snowballResult.totalInterest - avalancheResult.totalInterest);
+                const monthDiff = Math.abs(snowballResult.months - avalancheResult.months);
+
+                compContent.innerHTML = `
+                    <div class="p-4 rounded-lg ${strategy === 'avalanche' ? 'ring-2 ring-blue-400' : ''}" style="background:var(--card-bg,#f0f9ff);border:1px solid var(--border-color,#e5e7eb);">
+                        <div class="font-bold text-blue-600 mb-2">🏔️ מפולת (Avalanche)</div>
+                        <div class="text-sm space-y-1">
+                            <div>חודשים לסילוק: <strong>${avalancheResult.months}</strong></div>
+                            <div>סילוק צפוי: <strong>${avDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'short' })}</strong></div>
+                            <div>סה"כ ריבית: <strong class="text-red-500">₪${Math.round(avalancheResult.totalInterest).toLocaleString()}</strong></div>
+                        </div>
+                    </div>
+                    <div class="p-4 rounded-lg ${strategy === 'snowball' ? 'ring-2 ring-green-400' : ''}" style="background:var(--card-bg,#f0fdf4);border:1px solid var(--border-color,#e5e7eb);">
+                        <div class="font-bold text-green-600 mb-2">⛄ כדור שלג (Snowball)</div>
+                        <div class="text-sm space-y-1">
+                            <div>חודשים לסילוק: <strong>${snowballResult.months}</strong></div>
+                            <div>סילוק צפוי: <strong>${snDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'short' })}</strong></div>
+                            <div>סה"כ ריבית: <strong class="text-red-500">₪${Math.round(snowballResult.totalInterest).toLocaleString()}</strong></div>
+                        </div>
+                    </div>
+                `;
+                if (interestDiff > 0 || monthDiff > 0) {
+                    const winner = avalancheResult.totalInterest <= snowballResult.totalInterest ? 'מפולת' : 'כדור שלג';
+                    compContent.innerHTML += `
+                        <div class="md:col-span-2 text-center p-3 rounded-lg" style="background:var(--card-bg,#fefce8);border:1px solid var(--border-color,#e5e7eb);">
+                            💡 אסטרטגיית <strong>${winner}</strong> חוסכת <strong>₪${Math.round(interestDiff).toLocaleString()}</strong> בריבית
+                            ${monthDiff > 0 ? `ו-<strong>${monthDiff}</strong> חודשים` : ''}
+                        </div>
+                    `;
+                }
+            } else if (compEl) {
+                compEl.style.display = 'none';
+            }
+
+            // Render chart and schedule
+            renderDebtChart(avalancheResult, snowballResult, strategy);
+            renderDebtSchedule(activeResult);
+        }
+
+        window.addDebt = addDebt;
+        window.removeDebt = removeDebt;
+        window.renderDebtSimulator = renderDebtSimulator;
 
         // ═══════════════ CASH FLOW FORECAST ═══════════════
         let cfChart = null;
