@@ -439,8 +439,8 @@
         }
 
         function loadDashboard() {
-            const financeRaw = localStorage.getItem('financeData');
-            const portfolioRaw = localStorage.getItem('portfolioData');
+            const financeRaw = localStorage.getItem('financeTrackerData');
+            const portfolioRaw = localStorage.getItem('portfolio');
 
             if (!financeRaw && !portfolioRaw) return;
 
@@ -543,21 +543,23 @@
                 };
 
                 // Collect from localStorage
-                const financeKeys = ['financeData', 'financeData_backup'];
+                const financeKeys = ['financeTrackerData', 'financeData', 'financeData_backup'];
                 for (const key of financeKeys) {
                     const d = localStorage.getItem(key);
                     if (d) { exportData.finance = JSON.parse(d); break; }
                 }
 
-                const portfolioKeys = ['portfolioData', 'portfolioData_backup'];
+                const portfolioKeys = ['portfolio', 'portfolioData', 'portfolioData_backup'];
                 for (const key of portfolioKeys) {
                     const d = localStorage.getItem(key);
                     if (d) { exportData.portfolio = JSON.parse(d); break; }
                 }
 
-                const mortgageKey = 'mortgageData';
-                const md = localStorage.getItem(mortgageKey);
-                if (md) exportData.mortgage = JSON.parse(md);
+                const mortgageKeys = ['mortgageData', 'mortgage'];
+                for (const key of mortgageKeys) {
+                    const d = localStorage.getItem(key);
+                    if (d) { exportData.mortgage = JSON.parse(d); break; }
+                }
 
                 const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
@@ -598,10 +600,10 @@
                     if (!confirm(confirmMsg)) return;
 
                     if (importData.finance) {
-                        localStorage.setItem('financeData', JSON.stringify(importData.finance));
+                        localStorage.setItem('financeTrackerData', JSON.stringify(importData.finance));
                     }
                     if (importData.portfolio) {
-                        localStorage.setItem('portfolioData', JSON.stringify(importData.portfolio));
+                        localStorage.setItem('portfolio', JSON.stringify(importData.portfolio));
                     }
                     if (importData.mortgage) {
                         localStorage.setItem('mortgageData', JSON.stringify(importData.mortgage));
