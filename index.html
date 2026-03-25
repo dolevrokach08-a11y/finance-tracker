@@ -248,7 +248,45 @@
             font-size: 1.2rem;
         }
 
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .dash-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+        }
+
+        .dash-card .dash-icon {
+            font-size: 1.4rem;
+            margin-bottom: 6px;
+        }
+
+        .dash-card .dash-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .dash-card .dash-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            direction: ltr;
+        }
+
         @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
             .buttons-container {
                 grid-template-columns: 1fr;
             }
@@ -318,6 +356,49 @@
             </a>
         </div>
 
+        <!-- Dashboard Summary -->
+        <div id="dashboardSection" style="margin-top: 24px; display: none;">
+            <h2 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 600; margin-bottom: 4px; text-align: right;">📊 סיכום פיננסי</h2>
+            <div class="dashboard-grid">
+                <div class="dash-card">
+                    <div class="dash-icon">💎</div>
+                    <div class="dash-label">שווי נקי כולל</div>
+                    <div class="dash-value" id="dashNetWorth">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">📈</div>
+                    <div class="dash-label">תיק השקעות</div>
+                    <div class="dash-value" id="dashPortfolio">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">🏦</div>
+                    <div class="dash-label">חיסכון חודשי</div>
+                    <div class="dash-value" id="dashSavings">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">📋</div>
+                    <div class="dash-label">חיובים חודשיים</div>
+                    <div class="dash-value" id="dashBills">—</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Unified Export/Import -->
+        <div style="margin-top: 32px; padding: 20px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border);">
+            <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
+                <button id="exportAllBtn" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.85rem; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px;">
+                    📥 ייצוא כל הנתונים
+                </button>
+                <button id="importAllBtn" style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: inherit; font-size: 0.85rem; font-weight: 500; transition: all 0.2s ease; display: flex; align-items: center; gap: 6px;">
+                    📤 ייבוא נתונים
+                </button>
+                <input type="file" id="importFile" accept=".json" style="display:none;">
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.72rem; margin-top: 8px; text-align: center;">
+                ייצוא וייבוא של כל הנתונים (מעקב כספי + תיק השקעות + משכנתא) כקובץ אחד
+            </div>
+        </div>
+
         <div class="footer" style="margin-bottom: 12px;">
             💡 הנתונים מסונכרנים בענן בין כל המכשירים שלך
         </div>
@@ -342,6 +423,72 @@
             userName.textContent = user.displayName || user.email;
             loadingScreen.style.display = 'none';
             mainContainer.style.display = 'block';
+            loadDashboard();
+        }
+
+        function formatCurrency(value) {
+            const formatted = Math.abs(value).toLocaleString('he-IL', { maximumFractionDigits: 0 });
+            return (value < 0 ? '-' : '') + '₪' + formatted;
+        }
+
+        function setDashValue(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = formatCurrency(value);
+            el.style.color = value > 0 ? 'var(--profit)' : value < 0 ? 'var(--loss)' : 'var(--text-primary)';
+        }
+
+        function loadDashboard() {
+            const financeRaw = localStorage.getItem('financeTrackerData');
+            const portfolioRaw = localStorage.getItem('portfolio');
+
+            if (!financeRaw && !portfolioRaw) return;
+
+            document.getElementById('dashboardSection').style.display = 'block';
+
+            const finance = financeRaw ? JSON.parse(financeRaw) : null;
+            const portfolio = portfolioRaw ? JSON.parse(portfolioRaw) : null;
+
+            let totalIncome = 0;
+            let totalExpenses = 0;
+            let totalBills = 0;
+            let assetsTotal = 0;
+            let liabilitiesTotal = 0;
+            let portfolioValue = 0;
+
+            if (finance) {
+                if (Array.isArray(finance.fixedIncomes)) {
+                    totalIncome = finance.fixedIncomes.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (Array.isArray(finance.fixedExpenses)) {
+                    totalExpenses = finance.fixedExpenses.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (Array.isArray(finance.bills)) {
+                    totalBills = finance.bills.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (finance.netWorthAssets) {
+                    assetsTotal = Object.values(finance.netWorthAssets).reduce((s, v) => s + (Number(v) || 0), 0);
+                }
+                if (finance.netWorthLiabilities) {
+                    liabilitiesTotal = Object.values(finance.netWorthLiabilities).reduce((s, v) => s + (Number(v) || 0), 0);
+                }
+            }
+
+            if (portfolio) {
+                if (Array.isArray(portfolio.holdings)) {
+                    portfolioValue = portfolio.holdings.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
+                } else if (Array.isArray(portfolio)) {
+                    portfolioValue = portfolio.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
+                }
+            }
+
+            const netWorth = assetsTotal - liabilitiesTotal + portfolioValue;
+            const monthlySavings = totalIncome - totalExpenses;
+
+            setDashValue('dashNetWorth', netWorth);
+            setDashValue('dashPortfolio', portfolioValue);
+            setDashValue('dashSavings', monthlySavings);
+            setDashValue('dashBills', totalBills > 0 ? -totalBills : 0);
         }
 
         // Check demo mode first
@@ -382,6 +529,95 @@
                 console.error('Sign out error:', error);
                 alert('שגיאה בהתנתקות. נסה שוב.');
             }
+        });
+
+        // Unified Export/Import
+        document.getElementById('exportAllBtn').addEventListener('click', () => {
+            try {
+                const exportData = {
+                    version: '1.0',
+                    exportDate: new Date().toISOString(),
+                    finance: null,
+                    portfolio: null,
+                    mortgage: null
+                };
+
+                // Collect from localStorage
+                const financeKeys = ['financeTrackerData', 'financeData', 'financeData_backup'];
+                for (const key of financeKeys) {
+                    const d = localStorage.getItem(key);
+                    if (d) { exportData.finance = JSON.parse(d); break; }
+                }
+
+                const portfolioKeys = ['portfolio', 'portfolioData', 'portfolioData_backup'];
+                for (const key of portfolioKeys) {
+                    const d = localStorage.getItem(key);
+                    if (d) { exportData.portfolio = JSON.parse(d); break; }
+                }
+
+                const mortgageKeys = ['mortgageData', 'mortgage'];
+                for (const key of mortgageKeys) {
+                    const d = localStorage.getItem(key);
+                    if (d) { exportData.mortgage = JSON.parse(d); break; }
+                }
+
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `finance-backup-${new Date().toISOString().slice(0,10)}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                alert('✅ הנתונים יוצאו בהצלחה!');
+            } catch(e) {
+                console.error('Export error:', e);
+                alert('❌ שגיאה בייצוא: ' + e.message);
+            }
+        });
+
+        document.getElementById('importAllBtn').addEventListener('click', () => {
+            document.getElementById('importFile').click();
+        });
+
+        document.getElementById('importFile').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                try {
+                    const importData = JSON.parse(ev.target.result);
+                    if (!importData.version || !importData.exportDate) {
+                        alert('❌ קובץ לא תקין — חסר מזהה גרסה');
+                        return;
+                    }
+
+                    const confirmMsg = `ייבוא נתונים מתאריך ${new Date(importData.exportDate).toLocaleDateString('he-IL')}\n\n` +
+                        `📊 מעקב כספי: ${importData.finance ? '✅' : '❌'}\n` +
+                        `📈 תיק השקעות: ${importData.portfolio ? '✅' : '❌'}\n` +
+                        `🏠 משכנתא: ${importData.mortgage ? '✅' : '❌'}\n\n` +
+                        `⚠️ פעולה זו תחליף את הנתונים המקומיים. להמשיך?`;
+
+                    if (!confirm(confirmMsg)) return;
+
+                    if (importData.finance) {
+                        localStorage.setItem('financeTrackerData', JSON.stringify(importData.finance));
+                    }
+                    if (importData.portfolio) {
+                        localStorage.setItem('portfolio', JSON.stringify(importData.portfolio));
+                    }
+                    if (importData.mortgage) {
+                        localStorage.setItem('mortgageData', JSON.stringify(importData.mortgage));
+                    }
+
+                    alert('✅ הנתונים יובאו בהצלחה! הדף יטען מחדש.');
+                    window.location.reload();
+                } catch(err) {
+                    console.error('Import error:', err);
+                    alert('❌ שגיאה בייבוא: ' + err.message);
+                }
+            };
+            reader.readAsText(file);
+            e.target.value = '';
         });
 
         // Register Service Worker

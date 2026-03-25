@@ -28,7 +28,12 @@
         #tab-analysis:not(.hidden) { display: block !important; }
         #tab-tithe:not(.hidden) { display: block !important; }
         #tab-settings:not(.hidden) { display: block !important; }
-        
+        #tab-networth:not(.hidden) { display: block !important; }
+        #tab-bills:not(.hidden) { display: block !important; }
+        #tab-cashflow:not(.hidden) { display: block !important; }
+        #tab-fire:not(.hidden) { display: block !important; }
+        #tab-debt:not(.hidden) { display: block !important; }
+
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
@@ -50,7 +55,7 @@
         
         /* Display */
         .flex { display: flex; } .flex-1 { flex: 1; } .flex-wrap { flex-wrap: wrap; }
-        .grid { display: grid; } .grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
+        .grid { display: grid; } .grid-cols-1 { grid-template-columns: repeat(1, 1fr); } .grid-cols-7 { grid-template-columns: repeat(7, 1fr); }
         .items-center { align-items: center; } .items-start { align-items: flex-start; }
         .justify-between { justify-content: space-between; }
         .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; } .gap-4 { gap: 1rem; } .gap-6 { gap: 1.5rem; }
@@ -803,6 +808,11 @@
                     <button onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
                     <button onclick="showTab('tithe')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
                     <button onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
+                    <button onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
+                    <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
+                    <button onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
+                    <button onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
+                    <button onclick="showTab('debt')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">סימולטור חוב</button>
                 </div>
                 <a href="portfolio.html" style="display: flex; align-items: center; gap: 6px; padding: 8px 16px; background: var(--accent-dim); color: var(--accent); border: 1px solid var(--accent); border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 0.9rem;">
                     📈 תיק השקעות
@@ -1357,20 +1367,9 @@
 
                     <div class="glass p-6">
                         <h3 class="text-xl font-semibold mb-2 text-red-700">הוצאות קבועות</h3>
-                        <p class="text-sm text-gray-600 mb-4">הוצאה קבועה תתווסף לחודש שבו הכסף בפועל יוצא</p>
-                        <input type="text" id="fix-exp-desc" placeholder="תיאור" class="w-full p-3 border rounded-lg mb-3">
-                        <input type="number" id="fix-exp-amt" placeholder="סכום חודשי" class="w-full p-3 border rounded-lg mb-3">
-                        <select id="fix-exp-cat" class="w-full p-3 border rounded-lg mb-3"></select>
-                        <div class="grid grid-cols-2 gap-2 mb-3">
-                            <div><label class="text-xs text-gray-600 block mb-1">מחודש</label><select id="fix-exp-start" class="w-full p-3 border rounded-lg"></select></div>
-                            <div><label class="text-xs text-gray-600 block mb-1">עד חודש</label><select id="fix-exp-end" class="w-full p-3 border rounded-lg"></select></div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button id="fix-exp-add" onclick="addFixedExpense()" class="btn btn-danger flex-1 text-white py-3 rounded-lg font-medium">הוסף</button>
-                            <button id="fix-exp-upd" onclick="updateFixedExpense()" class="btn btn-primary flex-1 text-white py-3 rounded-lg font-medium hidden">עדכן</button>
-                            <button id="fix-exp-can" onclick="cancelEditFixedExpense()" class="btn bg-gray-500 flex-1 text-white py-3 rounded-lg font-medium hidden">ביטול</button>
-                        </div>
-                        <div id="fix-exp-list" class="mt-4 space-y-2"></div>
+                        <p class="text-sm text-gray-600 mb-2">הוצאות קבועות מנוהלות בטאב "חיובים ומנויים"</p>
+                        <button onclick="showTab('bills')" class="btn btn-primary text-white py-2 px-6 rounded-lg font-medium mb-4" style="font-size:0.9rem;">📋 עבור לניהול חיובים ומנויים ←</button>
+                        <div id="fix-exp-list" class="mt-2 space-y-2"></div>
                     </div>
                 </div>
 
@@ -1380,6 +1379,493 @@
                     <button onclick="resetAll()" class="btn btn-danger text-white py-3 px-8 rounded-lg font-medium">אפס הכל</button>
                 </div>
             </div>
+
+            <!-- ═══════════════ NET WORTH TAB ═══════════════ -->
+            <div id="tab-networth" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ נכסים</div>
+                        <div id="nw-assets" class="text-2xl font-bold" style="color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ התחייבויות</div>
+                        <div id="nw-liabilities" class="text-2xl font-bold" style="color: var(--loss, #ef4444);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">שווי נקי</div>
+                        <div id="nw-total" class="text-2xl font-bold" style="color: var(--accent);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">שינוי חודשי</div>
+                        <div id="nw-change" class="text-2xl font-bold">—</div>
+                    </div>
+                </div>
+
+                <!-- Sync Buttons -->
+                <div class="glass p-4 mb-6" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;">
+                    <button onclick="syncMortgageToNetWorth()" class="px-4 py-2 rounded-lg font-medium text-sm" style="background:var(--bg-elevated,#f3f4f6);border:1px solid var(--border,#e5e7eb);cursor:pointer;color:inherit;display:flex;align-items:center;gap:6px;">
+                        🏠 סנכרן נתוני משכנתא
+                    </button>
+                    <button onclick="syncPortfolioToNetWorth()" class="px-4 py-2 rounded-lg font-medium text-sm" style="background:var(--bg-elevated,#f3f4f6);border:1px solid var(--border,#e5e7eb);cursor:pointer;color:inherit;display:flex;align-items:center;gap:6px;">
+                        📈 סנכרן שווי תיק השקעות
+                    </button>
+                    <span style="font-size:0.72rem;opacity:0.5;">מושך נתונים ממחשבון המשכנתא ומתיק ההשקעות</span>
+                </div>
+
+                <!-- Net Worth Chart -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">📈 שווי נקי לאורך זמן</h3>
+                    <div style="position: relative; height: 300px;">
+                        <canvas id="nw-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Assets & Liabilities Management -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <!-- Assets -->
+                    <div class="glass p-6">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--accent);">💰 נכסים</h3>
+                        <div class="grid grid-cols-1 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">שם הנכס</label>
+                                <input type="text" id="nw-asset-name" placeholder="דירה, חיסכון, מניות..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">שווי (₪)</label>
+                                    <input type="number" id="nw-asset-value" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                                    <select id="nw-asset-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                        <option value="cash">מזומן / עו"ש</option>
+                                        <option value="savings">חיסכון / פיקדון</option>
+                                        <option value="investments">השקעות / מניות</option>
+                                        <option value="pension">פנסיה / קופ"ג</option>
+                                        <option value="realestate">נדל"ן</option>
+                                        <option value="vehicle">רכב</option>
+                                        <option value="other">אחר</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="addNetWorthItem('asset')" class="btn btn-primary w-full text-white py-2 rounded-lg font-medium">+ הוסף נכס</button>
+                        <div id="nw-assets-list" class="mt-4 space-y-2"></div>
+                    </div>
+
+                    <!-- Liabilities -->
+                    <div class="glass p-6">
+                        <h3 class="text-lg font-semibold mb-4" style="color: var(--loss, #ef4444);">📉 התחייבויות</h3>
+                        <div class="grid grid-cols-1 gap-3 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium mb-1">שם ההתחייבות</label>
+                                <input type="text" id="nw-liab-name" placeholder="משכנתא, הלוואה, כרטיס אשראי..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">יתרת חוב (₪)</label>
+                                    <input type="number" id="nw-liab-value" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                                    <select id="nw-liab-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                        <option value="mortgage">משכנתא</option>
+                                        <option value="loan">הלוואה</option>
+                                        <option value="creditcard">כרטיס אשראי</option>
+                                        <option value="carloan">הלוואת רכב</option>
+                                        <option value="studentloan">הלוואת סטודנטים</option>
+                                        <option value="other">אחר</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">ריבית שנתית %</label>
+                                    <input type="number" id="nw-liab-rate" step="0.1" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium mb-1">החזר חודשי (₪)</label>
+                                    <input type="number" id="nw-liab-payment" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="addNetWorthItem('liability')" class="btn btn-primary w-full text-white py-2 rounded-lg font-medium" style="background: var(--loss, #ef4444) !important;">+ הוסף התחייבות</button>
+                        <div id="nw-liabilities-list" class="mt-4 space-y-2"></div>
+                    </div>
+                </div>
+
+                <!-- Breakdown Pie -->
+                <div class="glass p-6">
+                    <h3 class="text-lg font-semibold mb-4">📊 פילוח נכסים והתחייבויות</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div style="position: relative; height: 250px;"><canvas id="nw-assets-pie"></canvas></div>
+                        <div style="position: relative; height: 250px;"><canvas id="nw-liab-pie"></canvas></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ BILLS & SUBSCRIPTIONS TAB ═══════════════ -->
+            <div id="tab-bills" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">סה"כ חיובים חודשיים</div>
+                        <div id="bills-total" class="text-2xl font-bold" style="color: var(--loss, #ef4444);">₪0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">מנויים פעילים</div>
+                        <div id="bills-count" class="text-2xl font-bold" style="color: var(--accent);">0</div>
+                    </div>
+                    <div class="glass p-4 text-center">
+                        <div class="text-sm opacity-70 mb-1">חיוב הבא</div>
+                        <div id="bills-next" class="text-lg font-bold">—</div>
+                    </div>
+                </div>
+
+                <!-- Add Bill/Subscription -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-lg font-semibold mb-4">➕ הוספת חיוב / מנוי</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">שם השירות</label>
+                            <input type="text" id="bill-name" placeholder="נטפליקס, חשמל, ביטוח..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">סכום (₪)</label>
+                            <input type="number" id="bill-amount" placeholder="0" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">תדירות</label>
+                            <select id="bill-freq" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                <option value="monthly">חודשי</option>
+                                <option value="bimonthly">דו-חודשי</option>
+                                <option value="quarterly">רבעוני</option>
+                                <option value="yearly">שנתי</option>
+                                <option value="weekly">שבועי</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">קטגוריה</label>
+                            <select id="bill-cat" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                                <option value="streaming">סטרימינג ובידור</option>
+                                <option value="utilities">חשמל/מים/גז</option>
+                                <option value="insurance">ביטוח</option>
+                                <option value="telecom">תקשורת</option>
+                                <option value="software">תוכנה/אפליקציות</option>
+                                <option value="gym">ספורט/חדר כושר</option>
+                                <option value="education">חינוך/לימודים</option>
+                                <option value="transport">תחבורה</option>
+                                <option value="other">אחר</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-1">יום חיוב בחודש</label>
+                            <input type="number" id="bill-day" min="1" max="31" value="1" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">תאריך התחלה</label>
+                            <input type="month" id="bill-start" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">הערות (אופציונלי)</label>
+                            <input type="text" id="bill-notes" placeholder="פרטים נוספים..." class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                    </div>
+                    <button onclick="addBill()" class="btn btn-primary text-white py-2 px-6 rounded-lg font-medium">+ הוסף חיוב</button>
+                </div>
+
+                <!-- Calendar View -->
+                <div class="glass p-6 mb-6">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                        <button onclick="changeCalendarMonth(-1)" class="px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;font-size:1.1rem;">→</button>
+                        <h3 id="bills-cal-title" class="text-lg font-semibold">📅 לוח שנה — חיובים</h3>
+                        <button onclick="changeCalendarMonth(1)" class="px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;font-size:1.1rem;">←</button>
+                    </div>
+                    <div id="bills-calendar" class="grid grid-cols-7 gap-1" style="font-size: 0.85rem; direction: rtl;"></div>
+                    <div style="text-align:center;margin-top:8px;">
+                        <button onclick="changeCalendarMonth(0)" class="text-sm px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;color:var(--text-secondary,#999);">חזור להיום</button>
+                    </div>
+                </div>
+
+                <!-- Bills List -->
+                <div class="glass p-6">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 class="text-lg font-semibold">📋 כל החיובים והמנויים</h3>
+                        <div style="display: flex; gap: 8px;">
+                            <button onclick="sortBills('date')" class="text-sm px-3 py-1 rounded-lg" style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary, #999);">לפי תאריך</button>
+                            <button onclick="sortBills('amount')" class="text-sm px-3 py-1 rounded-lg" style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-secondary, #999);">לפי סכום</button>
+                        </div>
+                    </div>
+                    <div id="bills-list" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ CASH FLOW FORECAST TAB ═══════════════ -->
+            <div id="tab-cashflow" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יתרה צפויה (סוף חודש)</div>
+                        <div id="cf-end-month" class="text-2xl font-bold text-green-600 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יתרה צפויה (3 חודשים)</div>
+                        <div id="cf-3months" class="text-2xl font-bold text-blue-600 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">חיסכון חודשי ממוצע</div>
+                        <div id="cf-avg-saving" class="text-2xl font-bold mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">חודשי קושי (שלילי)</div>
+                        <div id="cf-negative-months" class="text-2xl font-bold text-red-600 mt-1">0</div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <div class="flex flex-wrap gap-4 items-end">
+                        <div>
+                            <label class="text-sm text-gray-500">יתרה נוכחית (עו"ש)</label>
+                            <input type="number" id="cf-current-balance" placeholder="0" class="w-full p-2 rounded-lg border" onchange="renderCashFlow()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תקופת תחזית</label>
+                            <select id="cf-period" class="p-2 rounded-lg border" onchange="renderCashFlow()">
+                                <option value="6">6 חודשים</option>
+                                <option value="12" selected>12 חודשים</option>
+                                <option value="24">24 חודשים</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תרחיש</label>
+                            <select id="cf-scenario" class="p-2 rounded-lg border" onchange="renderCashFlow()">
+                                <option value="expected">צפוי</option>
+                                <option value="optimistic">אופטימי (+10%)</option>
+                                <option value="pessimistic">שמרני (-15%)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📈 תחזית תזרים מזומנים</h3>
+                    <div style="position:relative;height:300px;"><canvas id="cf-chart"></canvas></div>
+                </div>
+
+                <!-- Monthly breakdown table -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">📊 פירוט חודשי</h3>
+                    <div style="overflow-x:auto;">
+                        <table id="cf-table" style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--border,#e5e7eb);">
+                                    <th style="padding:8px;text-align:right;">חודש</th>
+                                    <th style="padding:8px;text-align:right;">הכנסות צפויות</th>
+                                    <th style="padding:8px;text-align:right;">הוצאות צפויות</th>
+                                    <th style="padding:8px;text-align:right;">חיסכון/גירעון</th>
+                                    <th style="padding:8px;text-align:right;">יתרה מצטברת</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cf-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════════ FIRE CALCULATOR TAB ═══════════════ -->
+            <div id="tab-fire" class="tab-content hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">שנים לעצמאות כלכלית</div>
+                        <div id="fire-years" class="text-2xl font-bold text-green-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">גיל פרישה צפוי</div>
+                        <div id="fire-age" class="text-2xl font-bold text-blue-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">יעד FIRE</div>
+                        <div id="fire-target" class="text-2xl font-bold mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">אחוז השגת היעד</div>
+                        <div id="fire-progress" class="text-2xl font-bold text-orange-500 mt-1">0%</div>
+                    </div>
+                </div>
+
+                <!-- FIRE Inputs -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">📋 פרטים אישיים</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-sm text-gray-500">גיל נוכחי</label>
+                                <input type="number" id="fire-current-age" value="30" min="18" max="80" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">הוצאות חודשיות רצויות בפרישה</label>
+                                <input type="number" id="fire-monthly-expense" placeholder="15000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">חיסכון חודשי נוכחי</label>
+                                <input type="number" id="fire-monthly-saving" placeholder="5000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">סה"כ חסכונות + השקעות נוכחיים</label>
+                                <input type="number" id="fire-current-savings" placeholder="200000" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">⚙️ הנחות</h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="text-sm text-gray-500">תשואה שנתית צפויה (%)</label>
+                                <input type="number" id="fire-return-rate" value="7" step="0.5" min="0" max="20" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">אינפלציה שנתית (%)</label>
+                                <input type="number" id="fire-inflation" value="2.5" step="0.5" min="0" max="10" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">שיטת חישוב</label>
+                                <select id="fire-method" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                                    <option value="25">כלל 25 (4% withdrawal)</option>
+                                    <option value="30">כלל 30 (3.33% — שמרני)</option>
+                                    <option value="20">כלל 20 (5% — אגרסיבי)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-sm text-gray-500">גידול שנתי בחיסכון (%)</label>
+                                <input type="number" id="fire-saving-growth" value="2" step="0.5" min="0" max="20" class="w-full p-2 rounded-lg border" onchange="renderFIRE()">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FIRE Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📈 מסלול לעצמאות כלכלית</h3>
+                    <div style="position:relative;height:300px;"><canvas id="fire-chart"></canvas></div>
+                </div>
+
+                <!-- FIRE Milestones -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">🏁 אבני דרך</h3>
+                    <div id="fire-milestones" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <!-- Debt Simulator Tab -->
+            <div id="tab-debt" class="tab-content hidden">
+                <!-- Summary Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">סה"כ חוב</div>
+                        <div id="debt-total" class="text-2xl font-bold text-red-500 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">תשלומים חודשיים</div>
+                        <div id="debt-monthly" class="text-2xl font-bold text-orange-500 mt-1">₪0</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">תאריך סילוק צפוי</div>
+                        <div id="debt-payoff-date" class="text-2xl font-bold text-blue-600 mt-1">—</div>
+                    </div>
+                    <div class="glass p-4 rounded-xl text-center">
+                        <div class="text-sm text-gray-500">סה"כ ריבית</div>
+                        <div id="debt-total-interest" class="text-2xl font-bold text-purple-500 mt-1">₪0</div>
+                    </div>
+                </div>
+
+                <!-- Add Debt Form -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">➕ הוסף חוב</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                        <div>
+                            <label class="text-sm text-gray-500">שם החוב</label>
+                            <input type="text" id="debt-name" placeholder="לדוגמה: משכנתא" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">יתרה (₪)</label>
+                            <input type="number" id="debt-balance" placeholder="0" min="0" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">ריבית שנתית (%)</label>
+                            <input type="number" id="debt-rate" placeholder="0" min="0" step="0.1" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">תשלום מינימלי (₪)</label>
+                            <input type="number" id="debt-min-payment" placeholder="0" min="0" class="w-full p-2 rounded-lg border">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">סוג</label>
+                            <select id="debt-type" class="w-full p-2 rounded-lg border">
+                                <option value="credit-card">כרטיס אשראי</option>
+                                <option value="loan">הלוואה</option>
+                                <option value="mortgage">משכנתא</option>
+                                <option value="other">אחר</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button onclick="addDebt()" class="mt-3 px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium">הוסף חוב</button>
+                </div>
+
+                <!-- Existing Debts List -->
+                <div id="debt-list" class="glass p-4 rounded-xl mb-6" style="display:none;">
+                    <h3 class="font-bold text-lg mb-4">📋 חובות קיימים</h3>
+                    <div id="debt-list-items"></div>
+                </div>
+
+                <!-- Strategy & Extra Payment -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">🎯 אסטרטגיית פירעון</h3>
+                        <div class="space-y-3">
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100" style="transition: background 0.2s;">
+                                <input type="radio" name="debt-strategy" value="avalanche" checked onchange="renderDebtSimulator()">
+                                <div>
+                                    <div class="font-medium">מפולת (Avalanche)</div>
+                                    <div class="text-sm text-gray-500">ריבית גבוהה קודם - חוסך הכי הרבה כסף</div>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-100" style="transition: background 0.2s;">
+                                <input type="radio" name="debt-strategy" value="snowball" onchange="renderDebtSimulator()">
+                                <div>
+                                    <div class="font-medium">כדור שלג (Snowball)</div>
+                                    <div class="text-sm text-gray-500">יתרה נמוכה קודם - מוטיבציה מהירה יותר</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="glass p-4 rounded-xl">
+                        <h3 class="font-bold text-lg mb-4">💰 תשלום נוסף חודשי</h3>
+                        <p class="text-sm text-gray-500 mb-3">סכום מעבר למינימום שתשלם בכל חודש</p>
+                        <input type="number" id="debt-extra-payment" value="0" min="0" class="w-full p-3 rounded-lg border text-lg" onchange="renderDebtSimulator()">
+                    </div>
+                </div>
+
+                <!-- Strategy Comparison -->
+                <div id="debt-comparison" class="glass p-4 rounded-xl mb-6" style="display:none;">
+                    <h3 class="font-bold text-lg mb-4">⚖️ השוואת אסטרטגיות</h3>
+                    <div id="debt-comparison-content" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                </div>
+
+                <!-- Payoff Chart -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h3 class="font-bold text-lg mb-4">📉 גרף סילוק חובות</h3>
+                    <div style="position:relative;height:300px;"><canvas id="debt-payoff-chart"></canvas></div>
+                </div>
+
+                <!-- Payoff Schedule -->
+                <div class="glass p-4 rounded-xl">
+                    <h3 class="font-bold text-lg mb-4">📅 לוח סילוק חודשי</h3>
+                    <div id="debt-schedule" style="max-height:400px;overflow-y:auto;"></div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -1498,7 +1984,12 @@
             incomeCategories: ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'],
             expenseCategories: ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'],
             categoryRules: [],
-            budgets: {}
+            budgets: {},
+            netWorthAssets: [],
+            netWorthLiabilities: [],
+            netWorthHistory: [],
+            bills: [],
+            debts: []
         };
         let editingFixed = null;
         
@@ -1635,8 +2126,10 @@
         function showTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            event.target.classList.add('tab-active');
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            if(event && event.target) event.target.classList.add('tab-active');
+            const tabEl = document.getElementById(`tab-${tab}`);
+            if(tabEl) { tabEl.classList.remove('hidden'); }
+            else { console.error('Tab not found:', tab, 'tab-'+tab); }
             if(tab==='overview') updateOverview();
             if(tab==='add') loadMonthTransactions();
             if(tab==='reports') { 
@@ -1647,6 +2140,11 @@
             if(tab==='analysis') { updateAnalysis(); }
             if(tab==='tithe') { updateTithe(); renderDonations(); }
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
+            if(tab==='networth') { renderNetWorth(); }
+            if(tab==='bills') { renderBills(); }
+            if(tab==='cashflow') { renderCashFlow(); }
+            if(tab==='fire') { renderFIRE(); }
+            if(tab==='debt') { renderDebtSimulator(); }
         }
 
         // טאבים פנימיים בדוחות
@@ -2840,7 +3338,8 @@
             document.getElementById('inc-cat').innerHTML = ic;
             document.getElementById('exp-cat').innerHTML = ec;
             document.getElementById('fix-inc-cat').innerHTML = ic;
-            document.getElementById('fix-exp-cat').innerHTML = ec;
+            const fixExpCat = document.getElementById('fix-exp-cat');
+            if(fixExpCat) fixExpCat.innerHTML = ec;
         }
 
         function renderCategories() {
@@ -3045,18 +3544,15 @@
 
             document.getElementById('fix-exp-list').innerHTML = data.fixedExpenses.map(f=>{
                 const mc = getMonthsInRange(f.start,f.end).length;
+                const linkedLabel = f.linkedBillId ? ' <span class="text-xs bg-green-100 text-green-700 px-1 rounded">מסונכרן</span>' : '';
                 return `<div class="item-expense p-3 rounded-lg">
                     <div class="flex justify-between items-start">
-                        <div class="flex-1"><div class="font-medium">${f.description}</div>
+                        <div class="flex-1"><div class="font-medium">${f.description}${linkedLabel}</div>
                         <div class="text-sm text-gray-600">${f.category} • ₪${f.amount.toLocaleString()}/חודש</div>
                         <div class="text-xs text-gray-500">${getMonthName(f.start)} - ${getMonthName(f.end)} (${mc} חודשים)</div></div>
-                        <div class="flex gap-2">
-                            <button onclick="editFixExp(${f.id})" class="text-blue-500 hover:text-blue-700 px-2 text-sm">ערוך</button>
-                            <button onclick="delFixExp(${f.id})" class="text-red-500 hover:text-red-700 px-2 text-sm">מחק</button>
-                        </div>
                     </div>
                 </div>`;
-            }).join('') || '<div class="text-gray-500 text-center py-4">אין הוצאות קבועות</div>';
+            }).join('') || '<div class="text-gray-500 text-center py-4">אין הוצאות קבועות — הוסף בטאב חיובים ומנויים</div>';
         }
 
         function addFixedIncome() {
@@ -5325,6 +5821,1199 @@
         // Expose toggleTheme to window
         window.toggleTheme = toggleTheme;
         
+        // ═══════════════════════════ NET WORTH ═══════════════════════════
+        const NW_CAT_LABELS = {
+            cash:'מזומן/עו"ש', savings:'חיסכון/פיקדון', investments:'השקעות/מניות',
+            pension:'פנסיה/קופ"ג', realestate:'נדל"ן', vehicle:'רכב', other:'אחר',
+            mortgage:'משכנתא', loan:'הלוואה', creditcard:'כרטיס אשראי',
+            carloan:'הלוואת רכב', studentloan:'הלוואת סטודנטים'
+        };
+        const NW_CAT_COLORS = {
+            cash:'#2dd87a', savings:'#4f7cff', investments:'#a78bfa',
+            pension:'#38d4c8', realestate:'#f5a623', vehicle:'#e8915c', other:'#8892a4',
+            mortgage:'#ef4444', loan:'#dc2626', creditcard:'#f97316',
+            carloan:'#d97706', studentloan:'#ec4899'
+        };
+
+        let nwChart=null, nwAssetsPie=null, nwLiabPie=null;
+
+        function addNetWorthItem(type) {
+            if(type==='asset') {
+                const name = document.getElementById('nw-asset-name').value.trim();
+                const value = +document.getElementById('nw-asset-value').value;
+                const cat = document.getElementById('nw-asset-cat').value;
+                if(!name||!value) { notify('נא למלא שם וסכום'); return; }
+                if(!data.netWorthAssets) data.netWorthAssets=[];
+                data.netWorthAssets.push({id:Date.now(), name, value, category:cat});
+                document.getElementById('nw-asset-name').value='';
+                document.getElementById('nw-asset-value').value='';
+            } else {
+                const name = document.getElementById('nw-liab-name').value.trim();
+                const value = +document.getElementById('nw-liab-value').value;
+                const cat = document.getElementById('nw-liab-cat').value;
+                const rate = +document.getElementById('nw-liab-rate').value||0;
+                const payment = +document.getElementById('nw-liab-payment').value||0;
+                if(!name||!value) { notify('נא למלא שם וסכום'); return; }
+                if(!data.netWorthLiabilities) data.netWorthLiabilities=[];
+                data.netWorthLiabilities.push({id:Date.now(), name, value, category:cat, rate, monthlyPayment:payment});
+                document.getElementById('nw-liab-name').value='';
+                document.getElementById('nw-liab-value').value='';
+                document.getElementById('nw-liab-rate').value='';
+                document.getElementById('nw-liab-payment').value='';
+            }
+            recordNetWorthSnapshot();
+            saveToFirebase();
+            renderNetWorth();
+            notify(type==='asset'?'נכס נוסף בהצלחה':'התחייבות נוספה בהצלחה');
+        }
+
+        function removeNetWorthItem(type, id) {
+            if(type==='asset') data.netWorthAssets = (data.netWorthAssets||[]).filter(a=>a.id!==id);
+            else data.netWorthLiabilities = (data.netWorthLiabilities||[]).filter(l=>l.id!==id);
+            recordNetWorthSnapshot();
+            saveToFirebase();
+            renderNetWorth();
+        }
+
+        function updateNetWorthItemValue(type, id, newVal) {
+            const list = type==='asset' ? data.netWorthAssets : data.netWorthLiabilities;
+            const item = (list||[]).find(x=>x.id===id);
+            if(item) { item.value = +newVal; recordNetWorthSnapshot(); saveToFirebase(); renderNetWorth(); }
+        }
+
+        function recordNetWorthSnapshot() {
+            if(!data.netWorthHistory) data.netWorthHistory=[];
+            const today = new Date().toISOString().slice(0,7);
+            const assets = (data.netWorthAssets||[]).reduce((s,a)=>s+a.value,0);
+            const liabilities = (data.netWorthLiabilities||[]).reduce((s,l)=>s+l.value,0);
+            const existing = data.netWorthHistory.find(h=>h.month===today);
+            if(existing) { existing.assets=assets; existing.liabilities=liabilities; existing.netWorth=assets-liabilities; }
+            else data.netWorthHistory.push({month:today, assets, liabilities, netWorth:assets-liabilities});
+            data.netWorthHistory.sort((a,b)=>a.month.localeCompare(b.month));
+        }
+
+        function syncMortgageToNetWorth() {
+            try {
+                const raw = localStorage.getItem('mortgageData');
+                if(!raw) { notify('לא נמצאו נתוני משכנתא. השתמש במחשבון המשכנתא קודם.'); return; }
+                const mortgage = JSON.parse(raw);
+
+                // Extract property value and remaining balance
+                const propertyValue = mortgage.propertyValue || mortgage.loanAmount || 0;
+                const remainingBalance = mortgage.remainingBalance || mortgage.loanAmount || 0;
+                const monthlyPayment = mortgage.monthlyPayment || 0;
+
+                if(!propertyValue && !remainingBalance) { notify('נתוני המשכנתא ריקים'); return; }
+
+                // Update or create asset entry for property
+                if(!data.netWorthAssets) data.netWorthAssets = [];
+                const existingAsset = data.netWorthAssets.find(a => a.category === 'realestate' && a.name.includes('נדל"ן'));
+                if(existingAsset) {
+                    existingAsset.value = propertyValue;
+                } else if(propertyValue > 0) {
+                    data.netWorthAssets.push({ id: Date.now(), name: 'נדל"ן (משכנתא)', category: 'realestate', value: propertyValue });
+                }
+
+                // Update or create liability entry for mortgage
+                if(!data.netWorthLiabilities) data.netWorthLiabilities = [];
+                const existingLiab = data.netWorthLiabilities.find(l => l.category === 'mortgage');
+                if(existingLiab) {
+                    existingLiab.value = remainingBalance;
+                    if(monthlyPayment) existingLiab.monthlyPayment = monthlyPayment;
+                } else if(remainingBalance > 0) {
+                    data.netWorthLiabilities.push({ id: Date.now()+1, name: 'משכנתא', category: 'mortgage', value: remainingBalance, monthlyPayment: monthlyPayment || 0 });
+                }
+
+                recordNetWorthSnapshot();
+                saveToFirebase();
+                renderNetWorth();
+                notify('✅ נתוני משכנתא סונכרנו בהצלחה!');
+            } catch(e) {
+                console.error('Mortgage sync error:', e);
+                notify('❌ שגיאה בסנכרון: ' + e.message);
+            }
+        }
+
+        function syncPortfolioToNetWorth() {
+            try {
+                const raw = localStorage.getItem('portfolioData');
+                if(!raw) { notify('לא נמצאו נתוני תיק השקעות.'); return; }
+                const portfolio = JSON.parse(raw);
+                const holdings = portfolio.holdings || [];
+
+                if(holdings.length === 0) { notify('אין אחזקות בתיק ההשקעות'); return; }
+
+                // Calculate total portfolio value
+                const rates = portfolio.rates || { USD: 3.7, EUR: 4.1 };
+                let totalValue = 0;
+                holdings.forEach(h => {
+                    const price = h.currentPrice || 0;
+                    const shares = h.shares || 0;
+                    const rate = h.currency === 'USD' ? (rates.USD||3.7) : h.currency === 'EUR' ? (rates.EUR||4.1) : 1;
+                    totalValue += shares * price * rate;
+                });
+
+                // Update or create asset entry for portfolio
+                if(!data.netWorthAssets) data.netWorthAssets = [];
+                const existing = data.netWorthAssets.find(a => a.category === 'investments' && a.name.includes('תיק השקעות'));
+                if(existing) {
+                    existing.value = Math.round(totalValue);
+                } else {
+                    data.netWorthAssets.push({ id: Date.now(), name: 'תיק השקעות', category: 'investments', value: Math.round(totalValue) });
+                }
+
+                recordNetWorthSnapshot();
+                saveToFirebase();
+                renderNetWorth();
+                notify(`✅ תיק השקעות סונכרן: ₪${Math.round(totalValue).toLocaleString('he-IL')}`);
+            } catch(e) {
+                console.error('Portfolio sync error:', e);
+                notify('❌ שגיאה בסנכרון: ' + e.message);
+            }
+        }
+
+        function renderNetWorth() {
+            const assets = data.netWorthAssets||[];
+            const liabilities = data.netWorthLiabilities||[];
+            const totalAssets = assets.reduce((s,a)=>s+a.value,0);
+            const totalLiab = liabilities.reduce((s,l)=>s+l.value,0);
+            const netWorth = totalAssets - totalLiab;
+            const history = data.netWorthHistory||[];
+            const prevMonth = history.length>=2 ? history[history.length-2].netWorth : null;
+            const change = prevMonth!==null ? netWorth - prevMonth : null;
+
+            document.getElementById('nw-assets').textContent = '₪'+totalAssets.toLocaleString('he-IL');
+            document.getElementById('nw-liabilities').textContent = '₪'+totalLiab.toLocaleString('he-IL');
+            document.getElementById('nw-total').textContent = '₪'+netWorth.toLocaleString('he-IL');
+            document.getElementById('nw-total').style.color = netWorth>=0?'var(--accent)':'var(--loss, #ef4444)';
+
+            if(change!==null) {
+                const pct = prevMonth?((change/Math.abs(prevMonth))*100).toFixed(1):'0';
+                document.getElementById('nw-change').textContent = (change>=0?'+':'')+'₪'+Math.abs(change).toLocaleString('he-IL')+` (${change>=0?'+':''}${pct}%)`;
+                document.getElementById('nw-change').style.color = change>=0?'var(--accent)':'var(--loss, #ef4444)';
+            } else {
+                document.getElementById('nw-change').textContent = '—';
+            }
+
+            // Assets list
+            document.getElementById('nw-assets-list').innerHTML = assets.map(a=>`
+                <div class="glass p-3" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-weight:600;">${a.name}</span>
+                        <span style="font-size:0.75rem;opacity:0.6;margin-right:8px;">${NW_CAT_LABELS[a.category]||a.category}</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="number" value="${a.value}" onchange="updateNetWorthItemValue('asset',${a.id},this.value)" style="width:120px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:inherit;text-align:left;font-size:0.9rem;" />
+                        <button onclick="removeNetWorthItem('asset',${a.id})" style="color:var(--loss,#ef4444);cursor:pointer;border:none;background:none;font-size:1.1rem;">✕</button>
+                    </div>
+                </div>`).join('');
+
+            // Liabilities list
+            document.getElementById('nw-liabilities-list').innerHTML = liabilities.map(l=>`
+                <div class="glass p-3" style="display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <span style="font-weight:600;">${l.name}</span>
+                        <span style="font-size:0.75rem;opacity:0.6;margin-right:8px;">${NW_CAT_LABELS[l.category]||l.category}</span>
+                        ${l.rate?`<span style="font-size:0.7rem;color:var(--loss,#ef4444);margin-right:4px;">${l.rate}%</span>`:''}
+                        ${l.monthlyPayment?`<span style="font-size:0.7rem;opacity:0.5;margin-right:4px;">₪${l.monthlyPayment.toLocaleString()}/חד'</span>`:''}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <input type="number" value="${l.value}" onchange="updateNetWorthItemValue('liability',${l.id},this.value)" style="width:120px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-elevated);color:inherit;text-align:left;font-size:0.9rem;" />
+                        <button onclick="removeNetWorthItem('liability',${l.id})" style="color:var(--loss,#ef4444);cursor:pointer;border:none;background:none;font-size:1.1rem;">✕</button>
+                    </div>
+                </div>`).join('');
+
+            // Net Worth history chart
+            renderNWChart(history);
+            renderNWPies(assets, liabilities);
+        }
+
+        function renderNWChart(history) {
+            const ctx = document.getElementById('nw-chart');
+            if(!ctx) return;
+            if(nwChart) nwChart.destroy();
+            const isDark = document.documentElement.getAttribute('data-theme')!=='light';
+            const labels = history.map(h=>h.month);
+            nwChart = new Chart(ctx, {
+                type:'line',
+                data:{
+                    labels,
+                    datasets:[
+                        {label:'נכסים',data:history.map(h=>h.assets),borderColor:'#2dd87a',backgroundColor:'rgba(45,216,122,0.1)',fill:true,tension:0.3,pointRadius:3,borderWidth:2},
+                        {label:'התחייבויות',data:history.map(h=>h.liabilities),borderColor:'#ef4444',backgroundColor:'rgba(239,68,68,0.1)',fill:true,tension:0.3,pointRadius:3,borderWidth:2},
+                        {label:'שווי נקי',data:history.map(h=>h.netWorth),borderColor:'#4f7cff',backgroundColor:'rgba(79,124,255,0.1)',fill:false,tension:0.3,pointRadius:4,borderWidth:3}
+                    ]
+                },
+                options:{
+                    responsive:true, maintainAspectRatio:false,
+                    plugins:{legend:{labels:{color:isDark?'#999':'#666',font:{family:'Heebo'}}},
+                        tooltip:{callbacks:{label:c=>`${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}`}}},
+                    scales:{
+                        x:{ticks:{color:isDark?'#666':'#999'},grid:{color:isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.06)'}},
+                        y:{ticks:{color:isDark?'#666':'#999',callback:v=>'₪'+(v/1000).toFixed(0)+'K'},grid:{color:isDark?'rgba(255,255,255,0.04)':'rgba(0,0,0,0.06)'}}
+                    }
+                }
+            });
+        }
+
+        function renderNWPies(assets, liabilities) {
+            const isDark = document.documentElement.getAttribute('data-theme')!=='light';
+            // Assets pie
+            const ctx1 = document.getElementById('nw-assets-pie');
+            if(ctx1) {
+                if(nwAssetsPie) nwAssetsPie.destroy();
+                const grouped = {};
+                assets.forEach(a=>{ grouped[a.category] = (grouped[a.category]||0)+a.value; });
+                const cats = Object.keys(grouped);
+                nwAssetsPie = new Chart(ctx1, {
+                    type:'doughnut',
+                    data:{ labels:cats.map(c=>NW_CAT_LABELS[c]||c), datasets:[{data:cats.map(c=>grouped[c]),backgroundColor:cats.map(c=>NW_CAT_COLORS[c]||'#8892a4'),borderWidth:0}] },
+                    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:isDark?'#999':'#666',font:{family:'Heebo',size:11},padding:8}},title:{display:true,text:'נכסים',color:isDark?'#e2e8f0':'#333',font:{family:'Heebo',size:14}}}}
+                });
+            }
+            // Liabilities pie
+            const ctx2 = document.getElementById('nw-liab-pie');
+            if(ctx2) {
+                if(nwLiabPie) nwLiabPie.destroy();
+                const grouped = {};
+                liabilities.forEach(l=>{ grouped[l.category] = (grouped[l.category]||0)+l.value; });
+                const cats = Object.keys(grouped);
+                nwLiabPie = new Chart(ctx2, {
+                    type:'doughnut',
+                    data:{ labels:cats.map(c=>NW_CAT_LABELS[c]||c), datasets:[{data:cats.map(c=>grouped[c]),backgroundColor:cats.map(c=>NW_CAT_COLORS[c]||'#8892a4'),borderWidth:0}] },
+                    options:{responsive:true,maintainAspectRatio:false,cutout:'55%',plugins:{legend:{position:'bottom',labels:{color:isDark?'#999':'#666',font:{family:'Heebo',size:11},padding:8}},title:{display:true,text:'התחייבויות',color:isDark?'#e2e8f0':'#333',font:{family:'Heebo',size:14}}}}
+                });
+            }
+        }
+
+        // ═══════════════════════════ BILLS & SUBSCRIPTIONS ═══════════════════════════
+        const BILL_CAT_LABELS = {
+            streaming:'סטרימינג/בידור', utilities:'חשמל/מים/גז', insurance:'ביטוח',
+            telecom:'תקשורת', software:'תוכנה/אפליקציות', gym:'ספורט/חדר כושר',
+            education:'חינוך/לימודים', transport:'תחבורה', other:'אחר'
+        };
+        const BILL_CAT_ICONS = {
+            streaming:'🎬', utilities:'💡', insurance:'🛡️', telecom:'📱',
+            software:'💻', gym:'🏋️', education:'📚', transport:'🚗', other:'📦'
+        };
+        const FREQ_LABELS = {monthly:'חודשי', bimonthly:'דו-חודשי', quarterly:'רבעוני', yearly:'שנתי', weekly:'שבועי'};
+        const FREQ_MONTHLY = {monthly:1, bimonthly:2, quarterly:3, yearly:12, weekly:0.25};
+
+        function addBill() {
+            const name = document.getElementById('bill-name').value.trim();
+            const amount = +document.getElementById('bill-amount').value;
+            const freq = document.getElementById('bill-freq').value;
+            const cat = document.getElementById('bill-cat').value;
+            const day = +document.getElementById('bill-day').value||1;
+            const start = document.getElementById('bill-start').value||new Date().toISOString().slice(0,7);
+            const notes = document.getElementById('bill-notes').value.trim();
+            if(!name||!amount) { notify('נא למלא שם וסכום'); return; }
+            if(!data.bills) data.bills=[];
+            const billId = Date.now();
+            data.bills.push({id:billId, name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true});
+
+            // Sync to fixedExpenses so budget/reports calculations include this bill
+            const monthlyAmt = getMonthlyEquivalent(amount, freq);
+            const expCat = mapBillCatToExpenseCat(cat);
+            const endDate = new Date(); endDate.setFullYear(endDate.getFullYear()+5);
+            const endMonth = endDate.toISOString().slice(0,7);
+            data.fixedExpenses.push({id:billId, description:name, amount:monthlyAmt, category:expCat, start:start, end:endMonth, linkedBillId:billId});
+
+            document.getElementById('bill-name').value='';
+            document.getElementById('bill-amount').value='';
+            document.getElementById('bill-notes').value='';
+            saveToFirebase();
+            renderBills();
+            renderFixedItems();
+            notify('חיוב נוסף בהצלחה');
+        }
+
+        // Map bill categories to expense categories for fixedExpenses sync
+        function mapBillCatToExpenseCat(billCat) {
+            const map = {
+                streaming:'בילוי ופנאי', utilities:'חשבונות', insurance:'ביטוח',
+                telecom:'תקשורת', software:'תקשורת', gym:'בילוי ופנאי',
+                education:'חינוך', transport:'תחבורה', other:'אחר'
+            };
+            // Find matching category from data.expenseCategories or return first available
+            const mapped = map[billCat] || 'אחר';
+            if(data.expenseCategories && data.expenseCategories.includes(mapped)) return mapped;
+            // Try to find similar
+            const found = (data.expenseCategories||[]).find(c => c.includes(mapped) || mapped.includes(c));
+            return found || (data.expenseCategories && data.expenseCategories[0]) || mapped;
+        }
+
+        function removeBill(id) {
+            data.bills = (data.bills||[]).filter(b=>b.id!==id);
+            // Also remove linked fixedExpense
+            data.fixedExpenses = data.fixedExpenses.filter(f=>f.linkedBillId!==id && f.id!==id);
+            saveToFirebase(); renderBills(); renderFixedItems();
+        }
+
+        function toggleBill(id) {
+            const bill = (data.bills||[]).find(b=>b.id===id);
+            if(bill) { bill.active = !bill.active; saveToFirebase(); renderBills(); }
+        }
+
+        let billSortMode = 'date';
+        let billsCalendarOffset = 0; // 0 = current month, -1 = prev, +1 = next
+        function sortBills(mode) { billSortMode = mode; renderBills(); }
+
+        function changeCalendarMonth(dir) {
+            if(dir===0) billsCalendarOffset=0; // reset to today
+            else billsCalendarOffset += dir;
+            renderBills();
+        }
+
+        function getMonthlyEquivalent(amount, freq) {
+            return amount / (FREQ_MONTHLY[freq]||1);
+        }
+
+        function getNextBillingDate(bill) {
+            const now = new Date();
+            const day = Math.min(bill.billingDay||1, 28);
+            let next = new Date(now.getFullYear(), now.getMonth(), day);
+            if(next <= now) next.setMonth(next.getMonth()+1);
+            // Adjust for frequency
+            if(bill.frequency==='bimonthly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                const diff = (next.getMonth() - startMonth + 12) % 2;
+                if(diff!==0) next.setMonth(next.getMonth()+1);
+            } else if(bill.frequency==='quarterly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                const diff = (next.getMonth() - startMonth + 12) % 3;
+                if(diff!==0) next.setMonth(next.getMonth()+(3-diff));
+            } else if(bill.frequency==='yearly') {
+                const startMonth = parseInt((bill.startDate||'2024-01').split('-')[1])-1;
+                next = new Date(now.getFullYear(), startMonth, day);
+                if(next <= now) next.setFullYear(next.getFullYear()+1);
+            }
+            return next;
+        }
+
+        function renderBills() {
+            const bills = (data.bills||[]).filter(b=>b.active!==false);
+            const allBills = data.bills||[];
+
+            // Get unlinked fixedExpenses (added before bills feature existed)
+            const linkedIds = new Set((data.bills||[]).map(b=>b.id));
+            const unlinkedFixed = (data.fixedExpenses||[]).filter(f => !f.linkedBillId && !linkedIds.has(f.id));
+
+            // Convert unlinked fixedExpenses to bill-like objects for display
+            const fixedAsBills = unlinkedFixed.map(f => ({
+                id: f.id, name: f.description, amount: f.amount, frequency:'monthly',
+                category:'other', billingDay:1, startDate:f.start, notes:'מהגדרות קבועות',
+                active:true, _isLegacyFixed: true
+            }));
+
+            const combinedActive = [...bills, ...fixedAsBills.filter(f=>f.active)];
+            const combinedAll = [...allBills, ...fixedAsBills];
+
+            const totalMonthly = combinedActive.reduce((s,b)=>s+getMonthlyEquivalent(b.amount, b.frequency),0);
+            document.getElementById('bills-total').textContent = '₪'+Math.round(totalMonthly).toLocaleString('he-IL');
+            document.getElementById('bills-count').textContent = combinedActive.length;
+
+            // Next bill
+            if(combinedActive.length) {
+                const sorted = combinedActive.map(b=>({...b, nextDate:getNextBillingDate(b)})).sort((a,b)=>a.nextDate-b.nextDate);
+                const next = sorted[0];
+                const daysUntil = Math.ceil((next.nextDate - new Date())/(1000*60*60*24));
+                document.getElementById('bills-next').innerHTML = `${next.name} — ₪${next.amount.toLocaleString()} <span style="font-size:0.8rem;opacity:0.7;">בעוד ${daysUntil} ימים</span>`;
+            } else {
+                document.getElementById('bills-next').innerHTML = '—';
+            }
+
+            // Calendar
+            renderBillsCalendar(combinedActive);
+
+            // List
+            let sortedBills = [...combinedAll];
+            if(billSortMode==='amount') sortedBills.sort((a,b)=>b.amount-a.amount);
+            else sortedBills.sort((a,b)=>getNextBillingDate(a)-getNextBillingDate(b));
+
+            document.getElementById('bills-list').innerHTML = sortedBills.map(b=>{
+                const nextDate = getNextBillingDate(b);
+                const daysUntil = Math.ceil((nextDate - new Date())/(1000*60*60*24));
+                const monthlyEq = getMonthlyEquivalent(b.amount, b.frequency);
+                const isInactive = b.active===false;
+                const isLegacy = b._isLegacyFixed;
+                return `
+                <div class="glass p-4" style="display:flex;justify-content:space-between;align-items:center;${isInactive?'opacity:0.4;':''}">
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span style="font-size:1.5rem;">${BILL_CAT_ICONS[b.category]||'📦'}</span>
+                        <div>
+                            <div style="font-weight:600;">${b.name}${isLegacy?' <span style="font-size:0.7rem;background:var(--bg-elevated);border:1px solid var(--border);padding:2px 6px;border-radius:4px;opacity:0.7;">מהגדרות</span>':''}</div>
+                            <div style="font-size:0.8rem;opacity:0.6;">${BILL_CAT_LABELS[b.category]||b.category} • ${FREQ_LABELS[b.frequency]||b.frequency} • יום ${b.billingDay||1}${b.notes?' • '+b.notes:''}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:16px;">
+                        <div style="text-align:left;">
+                            <div style="font-weight:700;font-size:1.1rem;">₪${b.amount.toLocaleString()}</div>
+                            ${b.frequency!=='monthly'?`<div style="font-size:0.75rem;opacity:0.5;">₪${Math.round(monthlyEq).toLocaleString()}/חד'</div>`:''}
+                        </div>
+                        <div style="text-align:center;min-width:60px;">
+                            <div style="font-size:0.8rem;font-weight:600;${daysUntil<=3?'color:var(--loss,#ef4444);':daysUntil<=7?'color:#f5a623;':''}">${isInactive?'מושהה':daysUntil<=0?'היום!':'בעוד '+daysUntil+' ימים'}</div>
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            ${isLegacy?`<button onclick="migrateBillFromFixed(${b.id})" style="cursor:pointer;border:none;background:none;font-size:0.8rem;color:var(--accent);text-decoration:underline;" title="העבר לחיובים">העבר</button>`:`
+                            <button onclick="toggleBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;" title="${isInactive?'הפעל':'השהה'}">${isInactive?'▶️':'⏸️'}</button>
+                            <button onclick="removeBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;color:var(--loss,#ef4444);" title="מחק">🗑️</button>`}
+                        </div>
+                    </div>
+                </div>`;
+            }).join('') || '<div style="text-align:center;padding:24px;opacity:0.5;">אין חיובים. הוסף חיוב חדש למעלה.</div>';
+        }
+
+        // Migrate a legacy fixedExpense into the bills system
+        function migrateBillFromFixed(fixedId) {
+            const f = data.fixedExpenses.find(x=>x.id===fixedId);
+            if(!f) return;
+            if(!data.bills) data.bills=[];
+            const billId = Date.now();
+            data.bills.push({
+                id:billId, name:f.description, amount:f.amount, frequency:'monthly',
+                category:'other', billingDay:1, startDate:f.start, notes:'', active:true
+            });
+            // Link the fixedExpense to the new bill
+            f.linkedBillId = billId;
+            saveToFirebase();
+            renderBills();
+            renderFixedItems();
+            notify('חיוב הועבר בהצלחה');
+        }
+
+        function renderBillsCalendar(bills) {
+            const cal = document.getElementById('bills-calendar');
+            if(!cal) return;
+            const now = new Date();
+            const viewDate = new Date(now.getFullYear(), now.getMonth() + billsCalendarOffset, 1);
+            const year = viewDate.getFullYear();
+            const month = viewDate.getMonth();
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+            const dayNames = ['א','ב','ג','ד','ה','ו','ש'];
+            const isCurrentMonth = (year===now.getFullYear() && month===now.getMonth());
+            const today = isCurrentMonth ? now.getDate() : -1;
+
+            // Update calendar title
+            const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const titleEl = document.getElementById('bills-cal-title');
+            if(titleEl) titleEl.textContent = `\u{1F4C5} ${monthNames[month]} ${year}`;
+
+            // Map bills to days for this month
+            const billsByDay = {};
+            bills.forEach(b=>{
+                const day = Math.min(b.billingDay||1, daysInMonth);
+                const startDate = new Date(b.startDate || '2024-01');
+                if(viewDate < startDate && month < startDate.getMonth() && year <= startDate.getFullYear()) return;
+
+                let showInMonth = false;
+                if(b.frequency==='monthly' || b.frequency==='weekly') showInMonth = true;
+                else if(b.frequency==='bimonthly') {
+                    const startM = startDate.getMonth();
+                    showInMonth = ((month - startM + 120) % 2) === 0;
+                } else if(b.frequency==='quarterly') {
+                    const startM = startDate.getMonth();
+                    showInMonth = ((month - startM + 120) % 3) === 0;
+                } else if(b.frequency==='yearly') {
+                    showInMonth = (month === startDate.getMonth());
+                }
+
+                if(showInMonth) {
+                    if(!billsByDay[day]) billsByDay[day]=[];
+                    billsByDay[day].push(b);
+                }
+
+                // Weekly bills appear multiple times
+                if(b.frequency==='weekly') {
+                    for(let wd=day+7; wd<=daysInMonth; wd+=7) {
+                        if(!billsByDay[wd]) billsByDay[wd]=[];
+                        billsByDay[wd].push(b);
+                    }
+                    for(let wd=day-7; wd>=1; wd-=7) {
+                        if(!billsByDay[wd]) billsByDay[wd]=[];
+                        billsByDay[wd].push(b);
+                    }
+                }
+            });
+
+            // Calculate total rows needed: header + week rows
+            const totalCells = firstDay + daysInMonth;
+            const totalRows = Math.ceil(totalCells / 7);
+
+            // Build calendar HTML
+            let html = '';
+
+            // Day name headers
+            html += dayNames.map(d=>`<div style="text-align:center;font-weight:700;padding:10px 4px;font-size:0.78rem;color:var(--text-secondary,#888);letter-spacing:1px;border-bottom:2px solid var(--border,rgba(0,0,0,0.1));">${d}</div>`).join('');
+
+            // Empty cells before first day of month
+            for(let i=0;i<firstDay;i++) html+=`<div style="min-height:52px;"></div>`;
+
+            // Day cells
+            for(let d=1;d<=daysInMonth;d++) {
+                const hasBills = billsByDay[d];
+                const isToday = d===today;
+                const totalForDay = hasBills ? hasBills.reduce((s,b)=>s+b.amount,0) : 0;
+                const isPast = isCurrentMonth && d < now.getDate();
+                const billCount = hasBills ? hasBills.length : 0;
+                const dotColors = ['#ef4444','#f59e0b','#8b5cf6','#3b82f6','#10b981'];
+
+                let cellStyle = `text-align:center;padding:6px 2px;border-radius:10px;cursor:pointer;transition:all 0.2s ease;min-height:52px;position:relative;`;
+                if(isToday) {
+                    cellStyle += `border:2px solid var(--accent,#10b981);background:rgba(16,185,129,0.08);box-shadow:0 0 12px rgba(16,185,129,0.15);`;
+                } else if(hasBills) {
+                    cellStyle += `border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.06);`;
+                } else {
+                    cellStyle += `border:1px solid transparent;`;
+                }
+                if(isPast && !hasBills) cellStyle += `opacity:0.35;`;
+
+                const tooltipText = hasBills ? hasBills.map(b=>b.name+' \u20AA'+b.amount).join('\n') : `\u05DC\u05D7\u05E5 \u05DC\u05D4\u05D5\u05E1\u05E4\u05EA \u05D7\u05D9\u05D5\u05D1 \u05D1\u05D9\u05D5\u05DD ${d}`;
+
+                html += `<div onclick="onCalendarDayClick(${year},${month},${d})" style="${cellStyle}"
+                    title="${tooltipText}"
+                    onmouseover="this.style.transform='scale(1.1)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';this.style.zIndex='2';"
+                    onmouseout="this.style.transform='';this.style.boxShadow='${isToday?'0 0 12px rgba(16,185,129,0.15)':''}';this.style.zIndex='';"
+                >
+                    <div style="font-weight:${isToday?'800':'500'};font-size:${isToday?'1rem':'0.9rem'};${isToday?'color:var(--accent,#10b981);':''}">${d}</div>
+                    ${hasBills ? `
+                        <div style="font-size:0.6rem;color:var(--loss,#ef4444);font-weight:700;margin-top:1px;">\u20AA${totalForDay.toLocaleString()}</div>
+                        <div style="display:flex;justify-content:center;gap:2px;margin-top:3px;flex-wrap:wrap;">
+                            ${hasBills.slice(0,5).map((b,i)=>`<span style="width:7px;height:7px;border-radius:50%;background:${dotColors[i % dotColors.length]};display:inline-block;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></span>`).join('')}
+                            ${billCount > 5 ? `<span style="font-size:0.55rem;color:var(--text-secondary,#999);">+${billCount-5}</span>` : ''}
+                        </div>
+                    ` : ''}
+                </div>`;
+            }
+
+            // Fill remaining cells in last row
+            const remainingCells = (7 - ((firstDay + daysInMonth) % 7)) % 7;
+            for(let i=0;i<remainingCells;i++) html+=`<div style="min-height:52px;"></div>`;
+
+            cal.innerHTML = html;
+        }
+
+        // Handle calendar day click — show bills or prefill form for new bill
+        function onCalendarDayClick(year, month, day) {
+            const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const daysInMonth = new Date(year, month+1, 0).getDate();
+            const billsForDay = (data.bills||[]).filter(b=>{
+                if(b.active===false) return false;
+                const bDay = Math.min(b.billingDay||1, daysInMonth);
+                if(bDay!==day) return false;
+                const startDate = new Date(b.startDate||'2024-01');
+                if(b.frequency==='monthly'||b.frequency==='weekly') return true;
+                if(b.frequency==='bimonthly') return ((month-startDate.getMonth()+120)%2)===0;
+                if(b.frequency==='quarterly') return ((month-startDate.getMonth()+120)%3)===0;
+                if(b.frequency==='yearly') return month===startDate.getMonth();
+                return true;
+            });
+
+            if(billsForDay.length > 0) {
+                // Show existing bills for this day in a styled modal
+                const total = billsForDay.reduce((s,b)=>s+b.amount,0);
+                const billsList = billsForDay.map(b=>
+                    `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(239,68,68,0.06);border-radius:8px;margin:4px 0;">
+                        <span>${BILL_CAT_ICONS[b.category]||'📦'} ${b.name}</span>
+                        <span style="font-weight:700;color:var(--loss,#ef4444);">₪${b.amount.toLocaleString()}</span>
+                    </div>`
+                ).join('');
+
+                // Create modal overlay
+                const overlay = document.createElement('div');
+                overlay.id = 'day-bills-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+                overlay.onclick = (e) => { if(e.target===overlay) overlay.remove(); };
+                overlay.innerHTML = `
+                    <div style="background:var(--card-bg,#fff);border-radius:16px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);direction:rtl;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <h3 style="margin:0;font-size:1.1rem;">📅 ${day} ${monthNames[month]} ${year}</h3>
+                            <button onclick="this.closest('#day-bills-modal').remove()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;opacity:0.5;">✕</button>
+                        </div>
+                        ${billsList}
+                        <div style="display:flex;justify-content:space-between;padding:12px;margin-top:8px;border-top:1px solid var(--border,#eee);font-weight:700;">
+                            <span>סה"כ</span>
+                            <span style="color:var(--loss,#ef4444);">₪${total.toLocaleString()}</span>
+                        </div>
+                        <button onclick="this.closest('#day-bills-modal').remove();prefillBillDay(${day},'${year}-${String(month+1).padStart(2,'0')}')"
+                            style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px dashed var(--accent,#10b981);background:rgba(16,185,129,0.06);color:var(--accent,#10b981);cursor:pointer;font-weight:600;">
+                            + הוסף חיוב נוסף ביום ${day}
+                        </button>
+                    </div>`;
+                document.body.appendChild(overlay);
+            } else {
+                // No bills — prefill the form with this day
+                prefillBillDay(day, `${year}-${String(month+1).padStart(2,'0')}`);
+            }
+        }
+
+        // Prefill the add-bill form with selected day and scroll to it
+        function prefillBillDay(day, yearMonth) {
+            const dayInput = document.getElementById('bill-day');
+            const startInput = document.getElementById('bill-start');
+            if(dayInput) dayInput.value = day;
+            if(startInput) startInput.value = yearMonth + '-' + String(day).padStart(2,'0');
+
+            // Scroll to the form and highlight it briefly
+            const form = document.getElementById('bill-day')?.closest('.bg-white, [class*="rounded"]');
+            if(form) {
+                form.scrollIntoView({ behavior:'smooth', block:'center' });
+                form.style.transition = 'box-shadow 0.3s';
+                form.style.boxShadow = '0 0 0 3px var(--accent, #10b981)';
+                setTimeout(()=>{ form.style.boxShadow=''; }, 2000);
+            }
+            // Focus on the name field
+            const nameInput = document.getElementById('bill-name');
+            if(nameInput) setTimeout(()=>nameInput.focus(), 400);
+        }
+
+        // Expose Net Worth & Bills functions to window for onclick handlers
+        window.addNetWorthItem = addNetWorthItem;
+        window.removeNetWorthItem = removeNetWorthItem;
+        window.updateNetWorthItemValue = updateNetWorthItemValue;
+        window.recordNetWorthSnapshot = recordNetWorthSnapshot;
+        window.renderNetWorth = renderNetWorth;
+        window.syncMortgageToNetWorth = syncMortgageToNetWorth;
+        window.syncPortfolioToNetWorth = syncPortfolioToNetWorth;
+        window.addBill = addBill;
+        window.removeBill = removeBill;
+        window.toggleBill = toggleBill;
+        window.sortBills = sortBills;
+        window.renderBills = renderBills;
+        window.changeCalendarMonth = changeCalendarMonth;
+        window.onCalendarDayClick = onCalendarDayClick;
+        window.prefillBillDay = prefillBillDay;
+        window.migrateBillFromFixed = migrateBillFromFixed;
+        window.renderCashFlow = renderCashFlow;
+        window.renderFIRE = renderFIRE;
+
+        // ═══════════════ DEBT SIMULATOR ═══════════════
+        let debtChart = null;
+
+        function addDebt() {
+            const name = document.getElementById('debt-name').value.trim();
+            const balance = parseFloat(document.getElementById('debt-balance').value) || 0;
+            const rate = parseFloat(document.getElementById('debt-rate').value) || 0;
+            const minPayment = parseFloat(document.getElementById('debt-min-payment').value) || 0;
+            const type = document.getElementById('debt-type').value;
+
+            if (!name || balance <= 0 || minPayment <= 0) {
+                notify('נא למלא שם, יתרה ותשלום מינימלי');
+                return;
+            }
+
+            if (!data.debts) data.debts = [];
+            data.debts.push({
+                id: Date.now().toString(),
+                name, balance, rate, minPayment, type
+            });
+
+            document.getElementById('debt-name').value = '';
+            document.getElementById('debt-balance').value = '';
+            document.getElementById('debt-rate').value = '';
+            document.getElementById('debt-min-payment').value = '';
+
+            saveToFirebase();
+            renderDebtSimulator();
+        }
+
+        function removeDebt(id) {
+            if (!data.debts) return;
+            data.debts = data.debts.filter(d => d.id !== id);
+            saveToFirebase();
+            renderDebtSimulator();
+        }
+
+        function calculatePayoff(debts, strategy, extraPayment) {
+            if (!debts || debts.length === 0) return { schedule: [], totalInterest: 0, months: 0 };
+
+            let remaining = debts.map(d => ({
+                ...d,
+                balance: d.balance,
+                monthlyRate: (d.rate / 100) / 12
+            }));
+
+            if (strategy === 'snowball') {
+                remaining.sort((a, b) => a.balance - b.balance);
+            } else {
+                remaining.sort((a, b) => b.rate - a.rate);
+            }
+
+            const schedule = [];
+            let totalInterest = 0;
+            let month = 0;
+            const MAX_MONTHS = 600;
+
+            while (remaining.some(d => d.balance > 0.01) && month < MAX_MONTHS) {
+                month++;
+                let extra = extraPayment;
+                const entry = { month, debts: {}, totalBalance: 0, interestPaid: 0, principalPaid: 0 };
+
+                for (const d of remaining) {
+                    if (d.balance <= 0.01) {
+                        d.balance = 0;
+                        entry.debts[d.id] = 0;
+                        continue;
+                    }
+                    const interest = d.balance * d.monthlyRate;
+                    let payment = Math.min(d.minPayment, d.balance + interest);
+                    const principal = payment - interest;
+                    d.balance = Math.max(0, d.balance - principal);
+                    totalInterest += interest;
+                    entry.interestPaid += interest;
+                    entry.principalPaid += principal;
+                    entry.debts[d.id] = d.balance;
+                }
+
+                // Apply extra payment to priority debt
+                for (const d of remaining) {
+                    if (d.balance <= 0.01 || extra <= 0) continue;
+                    const pay = Math.min(extra, d.balance);
+                    d.balance = Math.max(0, d.balance - pay);
+                    extra -= pay;
+                    entry.principalPaid += pay;
+                    entry.debts[d.id] = d.balance;
+                    if (d.balance <= 0.01) {
+                        // Freed-up minimum goes to next debt as extra
+                        extra += d.minPayment;
+                    }
+                }
+
+                // Also cascade freed-up minimums from debts paid off in regular payments
+                for (const d of remaining) {
+                    if (d.balance <= 0.01 && entry.debts[d.id] === 0) continue;
+                    entry.debts[d.id] = d.balance;
+                }
+
+                entry.totalBalance = remaining.reduce((s, d) => s + d.balance, 0);
+                schedule.push(entry);
+            }
+
+            return { schedule, totalInterest, months: month };
+        }
+
+        function renderDebtChart(avalancheResult, snowballResult, strategy) {
+            const canvas = document.getElementById('debt-payoff-chart');
+            if (!canvas) return;
+            if (debtChart) { debtChart.destroy(); debtChart = null; }
+
+            const result = strategy === 'avalanche' ? avalancheResult : snowballResult;
+            if (!result || result.schedule.length === 0) return;
+
+            const debts = data.debts || [];
+            const labels = result.schedule.map(s => s.month);
+            const datasets = debts.map((d, i) => {
+                const colors = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899','#14b8a6'];
+                return {
+                    label: d.name,
+                    data: result.schedule.map(s => (s.debts[d.id] || 0).toFixed(0)),
+                    borderColor: colors[i % colors.length],
+                    backgroundColor: colors[i % colors.length] + '20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                };
+            });
+
+            debtChart = new Chart(canvas, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } },
+                        tooltip: {
+                            rtl: true,
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ₪${parseFloat(ctx.raw).toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'חודש', font: { family: 'Heebo' } } },
+                        y: {
+                            title: { display: true, text: 'יתרה (₪)', font: { family: 'Heebo' } },
+                            ticks: { callback: v => '₪' + v.toLocaleString() }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDebtSchedule(result) {
+            const el = document.getElementById('debt-schedule');
+            if (!el) return;
+            if (!result || result.schedule.length === 0) {
+                el.innerHTML = '<p class="text-gray-500 text-center py-4">הוסף חובות כדי לראות את לוח הסילוק</p>';
+                return;
+            }
+
+            const debts = data.debts || [];
+            // Show every 3rd month + last month for readability
+            const filtered = result.schedule.filter((s, i) => i % 3 === 0 || i === result.schedule.length - 1);
+
+            let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85rem;">';
+            html += '<thead><tr style="border-bottom:2px solid var(--border-color,#e5e7eb);">';
+            html += '<th style="padding:8px;text-align:right;">חודש</th>';
+            debts.forEach(d => { html += `<th style="padding:8px;text-align:right;">${d.name}</th>`; });
+            html += '<th style="padding:8px;text-align:right;">סה"כ יתרה</th>';
+            html += '<th style="padding:8px;text-align:right;">ריבית</th>';
+            html += '<th style="padding:8px;text-align:right;">קרן</th>';
+            html += '</tr></thead><tbody>';
+
+            filtered.forEach(s => {
+                html += '<tr style="border-bottom:1px solid var(--border-color,#f3f4f6);">';
+                html += `<td style="padding:6px 8px;">${s.month}</td>`;
+                debts.forEach(d => {
+                    const val = s.debts[d.id] || 0;
+                    html += `<td style="padding:6px 8px;">₪${Math.round(val).toLocaleString()}</td>`;
+                });
+                html += `<td style="padding:6px 8px;font-weight:600;">₪${Math.round(s.totalBalance).toLocaleString()}</td>`;
+                html += `<td style="padding:6px 8px;color:#ef4444;">₪${Math.round(s.interestPaid).toLocaleString()}</td>`;
+                html += `<td style="padding:6px 8px;color:#22c55e;">₪${Math.round(s.principalPaid).toLocaleString()}</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            el.innerHTML = html;
+        }
+
+        function renderDebtSimulator() {
+            if (!data.debts) data.debts = [];
+            const debts = data.debts;
+            const extra = parseFloat(document.getElementById('debt-extra-payment')?.value) || 0;
+            const strategyEl = document.querySelector('input[name="debt-strategy"]:checked');
+            const strategy = strategyEl ? strategyEl.value : 'avalanche';
+
+            // Render debt list
+            const listEl = document.getElementById('debt-list');
+            const listItems = document.getElementById('debt-list-items');
+            if (listEl && listItems) {
+                if (debts.length === 0) {
+                    listEl.style.display = 'none';
+                } else {
+                    listEl.style.display = 'block';
+                    const typeLabels = { 'credit-card': 'כרטיס אשראי', 'loan': 'הלוואה', 'mortgage': 'משכנתא', 'other': 'אחר' };
+                    listItems.innerHTML = debts.map(d => `
+                        <div class="flex items-center justify-between p-3 rounded-lg mb-2" style="background:var(--card-bg,#f9fafb);border:1px solid var(--border-color,#e5e7eb);">
+                            <div>
+                                <span class="font-medium">${d.name}</span>
+                                <span class="text-sm text-gray-500 mr-2">(${typeLabels[d.type] || d.type})</span>
+                                <div class="text-sm text-gray-500">יתרה: ₪${d.balance.toLocaleString()} | ריבית: ${d.rate}% | מינימום: ₪${d.minPayment.toLocaleString()}</div>
+                            </div>
+                            <button onclick="removeDebt('${d.id}')" class="text-red-500 hover:text-red-700 px-3 py-1 rounded" title="מחק">✕</button>
+                        </div>
+                    `).join('');
+                }
+            }
+
+            // Calculate both strategies
+            const avalancheResult = calculatePayoff(debts, 'avalanche', extra);
+            const snowballResult = calculatePayoff(debts, 'snowball', extra);
+            const activeResult = strategy === 'avalanche' ? avalancheResult : snowballResult;
+
+            // Update summary cards
+            const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
+            const totalMonthly = debts.reduce((s, d) => s + d.minPayment, 0) + extra;
+            document.getElementById('debt-total').textContent = '₪' + Math.round(totalDebt).toLocaleString();
+            document.getElementById('debt-monthly').textContent = '₪' + Math.round(totalMonthly).toLocaleString();
+
+            if (activeResult.months > 0) {
+                const payoffDate = new Date();
+                payoffDate.setMonth(payoffDate.getMonth() + activeResult.months);
+                document.getElementById('debt-payoff-date').textContent = payoffDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'long' });
+                document.getElementById('debt-total-interest').textContent = '₪' + Math.round(activeResult.totalInterest).toLocaleString();
+            } else {
+                document.getElementById('debt-payoff-date').textContent = '—';
+                document.getElementById('debt-total-interest').textContent = '₪0';
+            }
+
+            // Render comparison
+            const compEl = document.getElementById('debt-comparison');
+            const compContent = document.getElementById('debt-comparison-content');
+            if (compEl && compContent && debts.length > 0) {
+                compEl.style.display = 'block';
+                const avDate = new Date(); avDate.setMonth(avDate.getMonth() + avalancheResult.months);
+                const snDate = new Date(); snDate.setMonth(snDate.getMonth() + snowballResult.months);
+                const interestDiff = Math.abs(snowballResult.totalInterest - avalancheResult.totalInterest);
+                const monthDiff = Math.abs(snowballResult.months - avalancheResult.months);
+
+                compContent.innerHTML = `
+                    <div class="p-4 rounded-lg ${strategy === 'avalanche' ? 'ring-2 ring-blue-400' : ''}" style="background:var(--card-bg,#f0f9ff);border:1px solid var(--border-color,#e5e7eb);">
+                        <div class="font-bold text-blue-600 mb-2">🏔️ מפולת (Avalanche)</div>
+                        <div class="text-sm space-y-1">
+                            <div>חודשים לסילוק: <strong>${avalancheResult.months}</strong></div>
+                            <div>סילוק צפוי: <strong>${avDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'short' })}</strong></div>
+                            <div>סה"כ ריבית: <strong class="text-red-500">₪${Math.round(avalancheResult.totalInterest).toLocaleString()}</strong></div>
+                        </div>
+                    </div>
+                    <div class="p-4 rounded-lg ${strategy === 'snowball' ? 'ring-2 ring-green-400' : ''}" style="background:var(--card-bg,#f0fdf4);border:1px solid var(--border-color,#e5e7eb);">
+                        <div class="font-bold text-green-600 mb-2">⛄ כדור שלג (Snowball)</div>
+                        <div class="text-sm space-y-1">
+                            <div>חודשים לסילוק: <strong>${snowballResult.months}</strong></div>
+                            <div>סילוק צפוי: <strong>${snDate.toLocaleDateString('he-IL', { year: 'numeric', month: 'short' })}</strong></div>
+                            <div>סה"כ ריבית: <strong class="text-red-500">₪${Math.round(snowballResult.totalInterest).toLocaleString()}</strong></div>
+                        </div>
+                    </div>
+                `;
+                if (interestDiff > 0 || monthDiff > 0) {
+                    const winner = avalancheResult.totalInterest <= snowballResult.totalInterest ? 'מפולת' : 'כדור שלג';
+                    compContent.innerHTML += `
+                        <div class="md:col-span-2 text-center p-3 rounded-lg" style="background:var(--card-bg,#fefce8);border:1px solid var(--border-color,#e5e7eb);">
+                            💡 אסטרטגיית <strong>${winner}</strong> חוסכת <strong>₪${Math.round(interestDiff).toLocaleString()}</strong> בריבית
+                            ${monthDiff > 0 ? `ו-<strong>${monthDiff}</strong> חודשים` : ''}
+                        </div>
+                    `;
+                }
+            } else if (compEl) {
+                compEl.style.display = 'none';
+            }
+
+            // Render chart and schedule
+            renderDebtChart(avalancheResult, snowballResult, strategy);
+            renderDebtSchedule(activeResult);
+        }
+
+        window.addDebt = addDebt;
+        window.removeDebt = removeDebt;
+        window.renderDebtSimulator = renderDebtSimulator;
+
+        // ═══════════════ CASH FLOW FORECAST ═══════════════
+        let cfChart = null;
+        function renderCashFlow() {
+            const balance = parseFloat(document.getElementById('cf-current-balance')?.value) || 0;
+            const period = parseInt(document.getElementById('cf-period')?.value) || 12;
+            const scenario = document.getElementById('cf-scenario')?.value || 'expected';
+
+            // Calculate average monthly income/expense from last 6 months
+            const now = new Date();
+            const months = [];
+            for(let i=1; i<=6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+                months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+            }
+
+            let totalIncome=0, totalExpense=0, monthsWithData=0;
+            months.forEach(m => {
+                const summary = getMonthSummary(m);
+                if(summary.income > 0 || summary.expense > 0) {
+                    totalIncome += summary.income;
+                    totalExpense += summary.expense;
+                    monthsWithData++;
+                }
+            });
+
+            let avgIncome = monthsWithData > 0 ? totalIncome / monthsWithData : 0;
+            let avgExpense = monthsWithData > 0 ? totalExpense / monthsWithData : 0;
+
+            // Add fixed incomes/expenses
+            const activeFixed = (data.fixedIncomes||[]).filter(f => {
+                const end = f.end || '2099-12';
+                const nowKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                return nowKey >= f.start && nowKey <= end;
+            });
+            const fixedIncome = activeFixed.reduce((s,f)=>s+f.amount, 0);
+
+            const activeFixedExp = (data.fixedExpenses||[]).filter(f => {
+                const end = f.end || '2099-12';
+                const nowKey = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+                return nowKey >= f.start && nowKey <= end;
+            });
+            const fixedExpense = activeFixedExp.reduce((s,f)=>s+f.amount, 0);
+
+            // Add bills
+            const billsMonthly = (data.bills||[]).filter(b=>b.active!==false).reduce((s,b) => s + getMonthlyEquivalent(b.amount, b.frequency), 0);
+
+            // Use max of calculated vs fixed
+            if(avgIncome === 0) avgIncome = fixedIncome;
+            if(avgExpense === 0) avgExpense = fixedExpense + billsMonthly;
+
+            // Scenario adjustments
+            let incMod=1, expMod=1;
+            if(scenario==='optimistic') { incMod=1.1; expMod=0.95; }
+            else if(scenario==='pessimistic') { incMod=0.9; expMod=1.15; }
+
+            // Build forecast
+            const labels=[], incomes=[], expenses=[], balances=[], savings=[];
+            const monthNames=['ינו','פבר','מרץ','אפר','מאי','יונ','יול','אוג','ספט','אוק','נוב','דצמ'];
+            let runningBalance = balance;
+            let negMonths = 0;
+
+            for(let i=0; i<period; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()+i+1, 1);
+                labels.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
+                const inc = avgIncome * incMod;
+                const exp = avgExpense * expMod;
+                const saving = inc - exp;
+                runningBalance += saving;
+                incomes.push(Math.round(inc));
+                expenses.push(Math.round(exp));
+                savings.push(Math.round(saving));
+                balances.push(Math.round(runningBalance));
+                if(saving < 0) negMonths++;
+            }
+
+            // Update summary cards
+            const endMonth = document.getElementById('cf-end-month');
+            if(endMonth) { endMonth.textContent = `₪${balances[0]?.toLocaleString('he-IL')}`; endMonth.style.color = balances[0]>=0?'#16a34a':'#ef4444'; }
+            const m3 = document.getElementById('cf-3months');
+            if(m3) { const v=balances[Math.min(2,balances.length-1)]; m3.textContent = `₪${v?.toLocaleString('he-IL')}`; m3.style.color=v>=0?'#2563eb':'#ef4444'; }
+            const avgSave = document.getElementById('cf-avg-saving');
+            if(avgSave) { const v=Math.round(savings.reduce((a,b)=>a+b,0)/savings.length); avgSave.textContent=`₪${v.toLocaleString('he-IL')}`; avgSave.style.color=v>=0?'#16a34a':'#ef4444'; }
+            const negEl = document.getElementById('cf-negative-months');
+            if(negEl) negEl.textContent = negMonths;
+
+            // Chart
+            const ctx = document.getElementById('cf-chart');
+            if(ctx) {
+                if(cfChart) cfChart.destroy();
+                cfChart = new Chart(ctx.getContext('2d'), {
+                    type:'bar',
+                    data:{
+                        labels,
+                        datasets:[
+                            { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
+                            { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
+                            { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
+                        ]
+                    },
+                    options:{
+                        responsive:true, maintainAspectRatio:false,
+                        plugins:{legend:{position:'top',rtl:true}},
+                        scales:{
+                            y:{position:'right', title:{display:true,text:'₪ חודשי'}},
+                            y1:{position:'left', title:{display:true,text:'₪ יתרה'}, grid:{drawOnChartArea:false}}
+                        }
+                    }
+                });
+            }
+
+            // Table
+            const tbody = document.getElementById('cf-table-body');
+            if(tbody) {
+                tbody.innerHTML = labels.map((l,i)=>`<tr style="border-bottom:1px solid var(--border,#e5e7eb);${savings[i]<0?'background:rgba(239,68,68,0.05);':''}">
+                    <td style="padding:8px;font-weight:600;">${l}</td>
+                    <td style="padding:8px;color:#16a34a;">₪${incomes[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;color:#ef4444;">₪${expenses[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;font-weight:700;color:${savings[i]>=0?'#16a34a':'#ef4444'};">₪${savings[i].toLocaleString('he-IL')}</td>
+                    <td style="padding:8px;font-weight:700;color:${balances[i]>=0?'#3b82f6':'#ef4444'};">₪${balances[i].toLocaleString('he-IL')}</td>
+                </tr>`).join('');
+            }
+        }
+
+        // ═══════════════ FIRE CALCULATOR ═══════════════
+        let fireChart = null;
+        function renderFIRE() {
+            const currentAge = parseInt(document.getElementById('fire-current-age')?.value) || 30;
+            const monthlyExpense = parseFloat(document.getElementById('fire-monthly-expense')?.value) || 0;
+            const monthlySaving = parseFloat(document.getElementById('fire-monthly-saving')?.value) || 0;
+            const currentSavings = parseFloat(document.getElementById('fire-current-savings')?.value) || 0;
+            const returnRate = parseFloat(document.getElementById('fire-return-rate')?.value) || 7;
+            const inflation = parseFloat(document.getElementById('fire-inflation')?.value) || 2.5;
+            const method = parseInt(document.getElementById('fire-method')?.value) || 25;
+            const savingGrowth = parseFloat(document.getElementById('fire-saving-growth')?.value) || 2;
+
+            const realReturn = (returnRate - inflation) / 100;
+            const annualExpense = monthlyExpense * 12;
+            const fireTarget = annualExpense * method; // e.g. 25x annual expenses
+
+            // Simulate year by year
+            let portfolio = currentSavings;
+            let annualSaving = monthlySaving * 12;
+            const years=[], portfolioValues=[], targetLine=[];
+            let fireYear = -1;
+            const milestones = [];
+            const pctMilestones = [25, 50, 75, 100];
+            const hitMilestones = new Set();
+
+            for(let y=0; y<=50; y++) {
+                const age = currentAge + y;
+                years.push(age);
+                portfolioValues.push(Math.round(portfolio));
+                targetLine.push(Math.round(fireTarget));
+
+                // Check milestones
+                const pct = fireTarget > 0 ? (portfolio / fireTarget) * 100 : 0;
+                pctMilestones.forEach(m => {
+                    if(pct >= m && !hitMilestones.has(m)) {
+                        hitMilestones.add(m);
+                        milestones.push({ pct:m, age, year: new Date().getFullYear()+y, value: Math.round(portfolio) });
+                    }
+                });
+
+                if(portfolio >= fireTarget && fireYear === -1) {
+                    fireYear = y;
+                }
+
+                // Grow portfolio
+                portfolio = portfolio * (1 + realReturn) + annualSaving;
+                annualSaving *= (1 + savingGrowth/100); // savings grow each year
+            }
+
+            // Update cards
+            const yearsEl = document.getElementById('fire-years');
+            if(yearsEl) yearsEl.textContent = fireYear >= 0 ? `${fireYear} שנים` : 'לא ניתן';
+            const ageEl = document.getElementById('fire-age');
+            if(ageEl) ageEl.textContent = fireYear >= 0 ? `${currentAge + fireYear}` : '—';
+            const targetEl = document.getElementById('fire-target');
+            if(targetEl) targetEl.textContent = `₪${Math.round(fireTarget).toLocaleString('he-IL')}`;
+            const progressEl = document.getElementById('fire-progress');
+            if(progressEl) {
+                const pct = fireTarget > 0 ? Math.min(100, (currentSavings/fireTarget)*100) : 0;
+                progressEl.textContent = `${pct.toFixed(1)}%`;
+                progressEl.style.color = pct >= 100 ? '#16a34a' : pct >= 50 ? '#f59e0b' : '#ef4444';
+            }
+
+            // Chart
+            const ctx = document.getElementById('fire-chart');
+            if(ctx) {
+                if(fireChart) fireChart.destroy();
+                const maxYear = fireYear >= 0 ? Math.min(fireYear + 10, 50) : 50;
+                fireChart = new Chart(ctx.getContext('2d'), {
+                    type:'line',
+                    data:{
+                        labels: years.slice(0, maxYear+1),
+                        datasets:[
+                            { label:'שווי תיק', data:portfolioValues.slice(0,maxYear+1), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:2 },
+                            { label:'יעד FIRE', data:targetLine.slice(0,maxYear+1), borderColor:'#ef4444', borderDash:[8,4], pointRadius:0, fill:false }
+                        ]
+                    },
+                    options:{
+                        responsive:true, maintainAspectRatio:false,
+                        plugins:{
+                            legend:{position:'top',rtl:true},
+                            annotation: fireYear >= 0 ? {
+                                annotations: {
+                                    fireLine: { type:'line', xMin:fireYear, xMax:fireYear, borderColor:'#16a34a', borderWidth:2, label:{display:true, content:`FIRE! גיל ${currentAge+fireYear}`, position:'start'} }
+                                }
+                            } : {}
+                        },
+                        scales:{
+                            x:{title:{display:true,text:'גיל'}},
+                            y:{position:'right', title:{display:true,text:'₪'}, ticks:{callback:v=>`₪${(v/1000000).toFixed(1)}M`}}
+                        }
+                    }
+                });
+            }
+
+            // Milestones
+            const msEl = document.getElementById('fire-milestones');
+            if(msEl) {
+                if(monthlyExpense === 0 || monthlySaving === 0) {
+                    msEl.innerHTML = '<div style="text-align:center;padding:16px;opacity:0.6;">הזן הוצאות חודשיות וחיסכון חודשי כדי לראות אבני דרך</div>';
+                } else {
+                    msEl.innerHTML = milestones.map(m => `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:${m.pct>=100?'rgba(34,197,94,0.1)':'rgba(59,130,246,0.05)'};border-radius:8px;border-right:4px solid ${m.pct>=100?'#16a34a':m.pct>=75?'#f59e0b':'#3b82f6'};">
+                        <span style="font-weight:700;">${m.pct}% מהיעד</span>
+                        <span>גיל ${m.age} (${m.year})</span>
+                        <span style="font-weight:600;">₪${m.value.toLocaleString('he-IL')}</span>
+                    </div>`).join('');
+                }
+            }
+        }
+
         // Load theme immediately
         loadTheme();
 
