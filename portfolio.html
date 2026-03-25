@@ -2095,6 +2095,10 @@
                     <i data-lucide="settings"></i>
                     <span>הגדרות</span>
                 </button>
+                <button class="nav-item" onclick="showTab('watchlist')">
+                    <i data-lucide="eye"></i>
+                    <span>רשימת מעקב</span>
+                </button>
             </div>
 
             <div class="sidebar-footer">
@@ -3095,6 +3099,66 @@
                 <div class="glass">
                     <h4 style="margin-bottom: 12px;">📋 פירוט עמלות לפי אחזקה</h4>
                     <div id="fee-breakdown"></div>
+                </div>
+            </div>
+
+            <!-- Watchlist Tab -->
+            <div id="tab-watchlist" class="tab-content">
+                <h3 style="margin-bottom: 20px;">👁️ רשימת מעקב</h3>
+
+                <!-- Summary Cards -->
+                <div class="stats-grid" id="watchlist-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div class="card" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">פריטים ברשימה</div>
+                        <div class="mono" id="wl-total-items" style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary);">0</div>
+                    </div>
+                    <div class="card" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">קרובים למחיר יעד</div>
+                        <div class="mono" id="wl-near-target" style="font-size: 1.4rem; font-weight: 700; color: var(--warning);">0</div>
+                    </div>
+                    <div class="card" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">עולה מוביל היום</div>
+                        <div class="mono" id="wl-top-gainer" style="font-size: 1.4rem; font-weight: 700; color: var(--profit);">-</div>
+                    </div>
+                    <div class="card" style="padding: 16px;">
+                        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 4px;">יורד מוביל היום</div>
+                        <div class="mono" id="wl-top-loser" style="font-size: 1.4rem; font-weight: 700; color: var(--loss);">-</div>
+                    </div>
+                </div>
+
+                <!-- Add to Watchlist Form -->
+                <div class="card" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 16px;">➕ הוסף לרשימת מעקב</h4>
+                    <div class="form-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end;">
+                        <div class="form-group">
+                            <label>סימול (Symbol)</label>
+                            <input type="text" id="wl-symbol" placeholder="לדוגמה: AAPL" style="text-transform: uppercase;">
+                        </div>
+                        <div class="form-group">
+                            <label>מחיר יעד לקנייה</label>
+                            <input type="number" id="wl-target-buy" step="0.01" placeholder="מחיר קנייה">
+                        </div>
+                        <div class="form-group">
+                            <label>מחיר יעד למכירה</label>
+                            <input type="number" id="wl-target-sell" step="0.01" placeholder="מחיר מכירה">
+                        </div>
+                        <div class="form-group">
+                            <label>הערות</label>
+                            <input type="text" id="wl-notes" placeholder="הערות (אופציונלי)">
+                        </div>
+                        <div class="form-group">
+                            <button class="btn" onclick="window.addToWatchlist()" style="background: var(--accent); color: #000; font-weight: 600; width: 100%; padding: 10px;">
+                                ➕ הוסף
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Watchlist Table -->
+                <div class="card">
+                    <div id="watchlist-table-container">
+                        <p style="color: var(--text-muted); text-align: center; padding: 40px 0;">רשימת המעקב ריקה. הוסף סימולים למעקב.</p>
+                    </div>
                 </div>
             </div>
 
@@ -6409,7 +6473,8 @@ function calculateTWRv3() {
             'history': { subTabs: null },
             'dividends': { subTabs: null },
             'fees': { subTabs: null },
-            'settings': { subTabs: null }
+            'settings': { subTabs: null },
+            'watchlist': { subTabs: null }
         };
         
         // Track current state
@@ -6576,6 +6641,9 @@ function calculateTWRv3() {
                 case 'fees':
                     renderFeesTab();
                     break;
+                case 'watchlist':
+                    renderWatchlist();
+                    break;
             }
         }
         
@@ -6716,6 +6784,7 @@ function calculateTWRv3() {
                     cashFlows: portfolio.cashFlows || [],
                     dividends: portfolio.dividends || [],
                     holdingFees: portfolio.holdingFees || {},
+                    watchlist: portfolio.watchlist || [],
                     lastModified: new Date().toISOString()
                 };
 
@@ -6746,7 +6815,8 @@ function calculateTWRv3() {
                         purchases: portfolio.purchases || [],
                         sales: portfolio.sales || [],
                         snapshots: portfolio.snapshots || [],
-                        cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 }
+                        cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
+                        watchlist: portfolio.watchlist || []
                     };
                     localStorage.setItem('portfolio', JSON.stringify(dataToSave));
                 } catch (e) {
@@ -6797,12 +6867,13 @@ function calculateTWRv3() {
                         bondsCapitalMovements: Array.isArray(loaded.bondsCapitalMovements) ? loaded.bondsCapitalMovements : [],
                         bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
                         portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
-                        cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : []
+                        cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
+                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
                     };
-                    
+
                     // Run migration
                     migrateOldData();
-                    
+
                     console.log('✅ Data loaded from Firebase');
 
                     // Also save to localStorage as backup
@@ -6864,12 +6935,13 @@ function calculateTWRv3() {
                         capitalMovements: Array.isArray(loaded.capitalMovements) ? loaded.capitalMovements : [],
                         bondsCapitalMovements: Array.isArray(loaded.bondsCapitalMovements) ? loaded.bondsCapitalMovements : [],
                         bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
-                        portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : []
+                        portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
+                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
                     };
-                    
+
                     // Run migration
                     migrateOldData();
-                    
+
                     console.log('✅ Data loaded from localStorage');
                     console.log('📊 Holdings loaded:', portfolio.holdings.length);
                     window.portfolio = portfolio;
@@ -10664,9 +10736,10 @@ ${msg}`, 'warning');
                 withdrawals: [],
                 purchases: [],
                 sales: [],
-                snapshots: []
+                snapshots: [],
+                watchlist: []
             };
-            
+
             // Save to localStorage
             saveData();
             
@@ -12751,6 +12824,237 @@ ${msg}`, 'warning');
         };
         
         // Expose functions to window for HTML onclick handlers
+        // ═══════════════ WATCHLIST FUNCTIONS ═══════════════
+
+        function renderWatchlist() {
+            if (!portfolio.watchlist) portfolio.watchlist = [];
+            const watchlist = portfolio.watchlist;
+            const container = document.getElementById('watchlist-table-container');
+
+            // Update summary cards
+            document.getElementById('wl-total-items').textContent = watchlist.length;
+
+            // Calculate stats from watchlist items
+            let nearTargetCount = 0;
+            let topGainer = { symbol: '-', change: -Infinity };
+            let topLoser = { symbol: '-', change: Infinity };
+
+            watchlist.forEach(item => {
+                const currentPrice = getWatchlistPrice(item.symbol);
+                if (currentPrice !== null) {
+                    // Check near target (within 5%)
+                    if (item.targetBuy && currentPrice > 0) {
+                        const distBuy = ((currentPrice - item.targetBuy) / item.targetBuy) * 100;
+                        if (Math.abs(distBuy) <= 5) nearTargetCount++;
+                    }
+                    if (item.targetSell && currentPrice > 0) {
+                        const distSell = ((currentPrice - item.targetSell) / item.targetSell) * 100;
+                        if (Math.abs(distSell) <= 5) nearTargetCount++;
+                    }
+
+                    // Track change today (use holding's changeToday if available)
+                    const changeToday = getWatchlistChangeToday(item.symbol);
+                    if (changeToday !== null) {
+                        if (changeToday > topGainer.change) {
+                            topGainer = { symbol: item.symbol, change: changeToday };
+                        }
+                        if (changeToday < topLoser.change) {
+                            topLoser = { symbol: item.symbol, change: changeToday };
+                        }
+                    }
+                }
+            });
+
+            document.getElementById('wl-near-target').textContent = nearTargetCount;
+            document.getElementById('wl-top-gainer').textContent = topGainer.change > -Infinity
+                ? `${topGainer.symbol} (${topGainer.change >= 0 ? '+' : ''}${topGainer.change.toFixed(2)}%)` : '-';
+            document.getElementById('wl-top-loser').textContent = topLoser.change < Infinity
+                ? `${topLoser.symbol} (${topLoser.change >= 0 ? '+' : ''}${topLoser.change.toFixed(2)}%)` : '-';
+
+            if (watchlist.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); text-align: center; padding: 40px 0;">רשימת המעקב ריקה. הוסף סימולים למעקב.</p>';
+                return;
+            }
+
+            let tableHTML = `
+                <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border); color: var(--text-muted); font-size: 0.8rem;">
+                            <th style="padding: 10px 8px; text-align: right;">סימול</th>
+                            <th style="padding: 10px 8px; text-align: right;">מחיר נוכחי</th>
+                            <th style="padding: 10px 8px; text-align: right;">יעד קנייה</th>
+                            <th style="padding: 10px 8px; text-align: right;">יעד מכירה</th>
+                            <th style="padding: 10px 8px; text-align: right;">מרחק מיעד</th>
+                            <th style="padding: 10px 8px; text-align: right;">שינוי היום</th>
+                            <th style="padding: 10px 8px; text-align: right;">הערות</th>
+                            <th style="padding: 10px 8px; text-align: center;">פעולות</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+
+            watchlist.forEach(item => {
+                const currentPrice = getWatchlistPrice(item.symbol);
+                const changeToday = getWatchlistChangeToday(item.symbol);
+                const priceDisplay = currentPrice !== null ? currentPrice.toFixed(2) : (item.manualPrice ? item.manualPrice.toFixed(2) : 'N/A');
+                const effectivePrice = currentPrice !== null ? currentPrice : (item.manualPrice || null);
+
+                // Calculate distance from targets
+                let distBuyDisplay = '-';
+                let distSellDisplay = '-';
+                let rowIndicator = '';
+
+                if (effectivePrice !== null) {
+                    if (item.targetBuy && item.targetBuy > 0) {
+                        const distBuy = ((effectivePrice - item.targetBuy) / item.targetBuy) * 100;
+                        distBuyDisplay = `<span style="color: ${distBuy <= 0 ? 'var(--profit)' : 'var(--text-secondary)'};">${distBuy >= 0 ? '+' : ''}${distBuy.toFixed(1)}%</span>`;
+                        if (Math.abs(distBuy) <= 5) rowIndicator = 'border-right: 3px solid var(--profit);';
+                    }
+                    if (item.targetSell && item.targetSell > 0) {
+                        const distSell = ((effectivePrice - item.targetSell) / item.targetSell) * 100;
+                        distSellDisplay = `<span style="color: ${distSell >= 0 ? 'var(--loss)' : 'var(--text-secondary)'};">${distSell >= 0 ? '+' : ''}${distSell.toFixed(1)}%</span>`;
+                        if (Math.abs(distSell) <= 5) rowIndicator = 'border-right: 3px solid var(--loss);';
+                    }
+                }
+
+                const changeTodayDisplay = changeToday !== null
+                    ? `<span style="color: ${changeToday >= 0 ? 'var(--profit)' : 'var(--loss)'};">${changeToday >= 0 ? '+' : ''}${changeToday.toFixed(2)}%</span>`
+                    : '-';
+
+                tableHTML += `
+                    <tr style="border-bottom: 1px solid var(--border); ${rowIndicator}" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 12px 8px; font-weight: 600;" class="mono">${item.symbol}</td>
+                        <td style="padding: 12px 8px;" class="mono">${priceDisplay}${currentPrice === null && !item.manualPrice ? ' <button onclick="window.promptManualWatchlistPrice(\'' + item.id + '\')" style="background: var(--accent-dim); color: var(--accent); border: none; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-size: 0.75rem;">הזן</button>' : ''}</td>
+                        <td style="padding: 12px 8px;" class="mono">${item.targetBuy ? item.targetBuy.toFixed(2) : '-'}</td>
+                        <td style="padding: 12px 8px;" class="mono">${item.targetSell ? item.targetSell.toFixed(2) : '-'}</td>
+                        <td style="padding: 12px 8px;">
+                            ${item.targetBuy ? '🟢 ' + distBuyDisplay : ''}
+                            ${item.targetBuy && item.targetSell ? ' | ' : ''}
+                            ${item.targetSell ? '🔴 ' + distSellDisplay : ''}
+                            ${!item.targetBuy && !item.targetSell ? '-' : ''}
+                        </td>
+                        <td style="padding: 12px 8px;">${changeTodayDisplay}</td>
+                        <td style="padding: 12px 8px; color: var(--text-secondary); font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${item.notes || ''}">${item.notes || '-'}</td>
+                        <td style="padding: 12px 8px; text-align: center;">
+                            <button onclick="window.editWatchlistItem('${item.id}')" style="background: var(--accent-dim); color: var(--accent); border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem; margin-left: 4px;">✏️</button>
+                            <button onclick="window.removeFromWatchlist('${item.id}')" style="background: hsla(0, 72%, 55%, 0.1); color: var(--loss); border: none; padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">🗑️</button>
+                        </td>
+                    </tr>`;
+            });
+
+            tableHTML += '</tbody></table></div>';
+            container.innerHTML = tableHTML;
+        }
+
+        function getWatchlistPrice(symbol) {
+            if (!portfolio.holdings || !Array.isArray(portfolio.holdings)) return null;
+            const holding = portfolio.holdings.find(h => h.symbol && h.symbol.toUpperCase() === symbol.toUpperCase());
+            if (holding && holding.currentPrice && holding.currentPrice > 0) {
+                return holding.currentPrice;
+            }
+            return null;
+        }
+
+        function getWatchlistChangeToday(symbol) {
+            if (!portfolio.holdings || !Array.isArray(portfolio.holdings)) return null;
+            const holding = portfolio.holdings.find(h => h.symbol && h.symbol.toUpperCase() === symbol.toUpperCase());
+            if (holding && typeof holding.changePercent === 'number') {
+                return holding.changePercent;
+            }
+            if (holding && holding.currentPrice && holding.avgCost) {
+                // Fallback: no daily change available
+                return null;
+            }
+            return null;
+        }
+
+        function addToWatchlist() {
+            if (!portfolio.watchlist) portfolio.watchlist = [];
+
+            const symbolInput = document.getElementById('wl-symbol');
+            const targetBuyInput = document.getElementById('wl-target-buy');
+            const targetSellInput = document.getElementById('wl-target-sell');
+            const notesInput = document.getElementById('wl-notes');
+
+            const symbol = (symbolInput.value || '').trim().toUpperCase();
+            if (!symbol) {
+                notify('⚠️ יש להזין סימול', 'error');
+                return;
+            }
+
+            // Check for duplicate
+            if (portfolio.watchlist.some(item => item.symbol === symbol)) {
+                notify('⚠️ הסימול כבר קיים ברשימת המעקב', 'warning');
+                return;
+            }
+
+            const newItem = {
+                id: Date.now().toString(),
+                symbol: symbol,
+                targetBuy: targetBuyInput.value ? parseFloat(targetBuyInput.value) : null,
+                targetSell: targetSellInput.value ? parseFloat(targetSellInput.value) : null,
+                notes: notesInput.value.trim() || '',
+                manualPrice: null,
+                addedDate: new Date().toISOString()
+            };
+
+            portfolio.watchlist.push(newItem);
+            saveData();
+
+            // Clear form
+            symbolInput.value = '';
+            targetBuyInput.value = '';
+            targetSellInput.value = '';
+            notesInput.value = '';
+
+            notify('✅ ' + symbol + ' נוסף לרשימת המעקב', 'success');
+            renderWatchlist();
+        }
+
+        function removeFromWatchlist(id) {
+            if (!portfolio.watchlist) return;
+            const item = portfolio.watchlist.find(w => w.id === id);
+            if (!item) return;
+
+            if (!confirm(`למחוק את ${item.symbol} מרשימת המעקב?`)) return;
+
+            portfolio.watchlist = portfolio.watchlist.filter(w => w.id !== id);
+            saveData();
+            notify('🗑️ ' + item.symbol + ' הוסר מרשימת המעקב', 'success');
+            renderWatchlist();
+        }
+
+        function editWatchlistItem(id) {
+            if (!portfolio.watchlist) return;
+            const item = portfolio.watchlist.find(w => w.id === id);
+            if (!item) return;
+
+            const newTargetBuy = prompt('מחיר יעד לקנייה:', item.targetBuy || '');
+            const newTargetSell = prompt('מחיר יעד למכירה:', item.targetSell || '');
+            const newNotes = prompt('הערות:', item.notes || '');
+
+            if (newTargetBuy !== null) item.targetBuy = newTargetBuy ? parseFloat(newTargetBuy) : null;
+            if (newTargetSell !== null) item.targetSell = newTargetSell ? parseFloat(newTargetSell) : null;
+            if (newNotes !== null) item.notes = newNotes.trim();
+
+            saveData();
+            notify('✅ ' + item.symbol + ' עודכן', 'success');
+            renderWatchlist();
+        }
+
+        function promptManualWatchlistPrice(id) {
+            if (!portfolio.watchlist) return;
+            const item = portfolio.watchlist.find(w => w.id === id);
+            if (!item) return;
+
+            const price = prompt('הזן מחיר נוכחי עבור ' + item.symbol + ':', item.manualPrice || '');
+            if (price === null) return;
+
+            item.manualPrice = price ? parseFloat(price) : null;
+            saveData();
+            renderWatchlist();
+        }
+
         window.showTab = showTab;
         window.addHolding = addHolding;
         window.editHolding = editHolding;
@@ -12816,6 +13120,11 @@ ${msg}`, 'warning');
         window.submitWithdrawal = submitWithdrawal;
         window.toggleTheme = toggleTheme;
         window.deleteAllData = deleteAllData;
+        window.addToWatchlist = addToWatchlist;
+        window.removeFromWatchlist = removeFromWatchlist;
+        window.editWatchlistItem = editWatchlistItem;
+        window.promptManualWatchlistPrice = promptManualWatchlistPrice;
+        window.renderWatchlist = renderWatchlist;
         window.fixSnapshots = fixSnapshots;
         window.rebuildSnapshotsFromHistory = rebuildSnapshotsFromHistory;
         
@@ -13095,21 +13404,28 @@ ${msg}`, 'warning');
 
             const terList = document.getElementById('fee-ter-list');
             if (terList) {
-                terList.innerHTML = allItems.map(item => {
-                    const ter = fees[item.symbol] || 0;
-                    const rate = item.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : item.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
-                    const valueILS = item.value * rate;
-                    const annualFee = valueILS * ter / 100;
-                    return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg-elevated,rgba(0,0,0,0.1));border-radius:8px;">
-                        <span style="font-weight:600;min-width:100px;">${item.symbol}</span>
-                        <span style="font-size:0.85rem;opacity:0.6;min-width:100px;">₪${Math.round(valueILS).toLocaleString('he-IL')}</span>
-                        <input type="number" step="0.01" min="0" max="5" value="${ter}"
-                            onchange="updateHoldingFee('${item.symbol}',this.value)"
-                            style="width:80px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-surface,#1a1a2e);color:inherit;text-align:center;" />
-                        <span style="font-size:0.85rem;opacity:0.6;">% TER</span>
-                        <span style="font-size:0.85rem;color:var(--loss);min-width:80px;">₪${Math.round(annualFee).toLocaleString('he-IL')}/שנה</span>
+                if(allItems.length === 0) {
+                    terList.innerHTML = `<div style="text-align:center;padding:24px;opacity:0.6;">
+                        <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+                        <div>אין אחזקות בתיק. הוסף מניות או קרנות בטאב "אחזקות" ודמי הניהול יופיעו כאן.</div>
                     </div>`;
-                }).join('');
+                } else {
+                    terList.innerHTML = allItems.map(item => {
+                        const ter = fees[item.symbol] || 0;
+                        const rate = item.currency === 'USD' ? (portfolio.rates?.USD || 3.7) : item.currency === 'EUR' ? (portfolio.rates?.EUR || 4.1) : 1;
+                        const valueILS = item.value * rate;
+                        const annualFee = valueILS * ter / 100;
+                        return `<div style="display:flex;align-items:center;gap:12px;padding:8px 12px;background:var(--bg-elevated,rgba(0,0,0,0.1));border-radius:8px;">
+                            <span style="font-weight:600;min-width:100px;">${item.symbol}</span>
+                            <span style="font-size:0.85rem;opacity:0.6;min-width:100px;">₪${Math.round(valueILS).toLocaleString('he-IL')}</span>
+                            <input type="number" step="0.01" min="0" max="5" value="${ter}"
+                                onchange="updateHoldingFee('${item.symbol}',this.value)"
+                                style="width:80px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg-surface,#1a1a2e);color:inherit;text-align:center;" />
+                            <span style="font-size:0.85rem;opacity:0.6;">% TER</span>
+                            <span style="font-size:0.85rem;color:var(--loss);min-width:80px;">₪${Math.round(annualFee).toLocaleString('he-IL')}/שנה</span>
+                        </div>`;
+                    }).join('');
+                }
             }
 
             // Calculate totals

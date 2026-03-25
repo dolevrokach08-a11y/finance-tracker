@@ -30,7 +30,9 @@
         #tab-settings:not(.hidden) { display: block !important; }
         #tab-networth:not(.hidden) { display: block !important; }
         #tab-bills:not(.hidden) { display: block !important; }
-        
+        #tab-cashflow:not(.hidden) { display: block !important; }
+        #tab-fire:not(.hidden) { display: block !important; }
+
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; }
@@ -52,7 +54,7 @@
         
         /* Display */
         .flex { display: flex; } .flex-1 { flex: 1; } .flex-wrap { flex-wrap: wrap; }
-        .grid { display: grid; } .grid-cols-1 { grid-template-columns: repeat(1, 1fr); }
+        .grid { display: grid; } .grid-cols-1 { grid-template-columns: repeat(1, 1fr); } .grid-cols-7 { grid-template-columns: repeat(7, 1fr); }
         .items-center { align-items: center; } .items-start { align-items: flex-start; }
         .justify-between { justify-content: space-between; }
         .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; } .gap-4 { gap: 1rem; } .gap-6 { gap: 1.5rem; }
@@ -1567,7 +1569,7 @@
                         <h3 id="bills-cal-title" class="text-lg font-semibold">📅 לוח שנה — חיובים</h3>
                         <button onclick="changeCalendarMonth(1)" class="px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;font-size:1.1rem;">←</button>
                     </div>
-                    <div id="bills-calendar" class="grid grid-cols-7 gap-1" style="font-size: 0.85rem;"></div>
+                    <div id="bills-calendar" class="grid grid-cols-7 gap-1" style="font-size: 0.85rem; direction: rtl;"></div>
                     <div style="text-align:center;margin-top:8px;">
                         <button onclick="changeCalendarMonth(0)" class="text-sm px-3 py-1 rounded-lg" style="background:var(--bg-elevated);border:1px solid var(--border);cursor:pointer;color:var(--text-secondary,#999);">חזור להיום</button>
                     </div>
@@ -1636,7 +1638,7 @@
                 <!-- Chart -->
                 <div class="glass p-4 rounded-xl mb-6">
                     <h3 class="font-bold text-lg mb-4">📈 תחזית תזרים מזומנים</h3>
-                    <canvas id="cf-chart" height="300"></canvas>
+                    <div style="position:relative;height:300px;"><canvas id="cf-chart"></canvas></div>
                 </div>
 
                 <!-- Monthly breakdown table -->
@@ -1733,7 +1735,7 @@
                 <!-- FIRE Chart -->
                 <div class="glass p-4 rounded-xl mb-6">
                     <h3 class="font-bold text-lg mb-4">📈 מסלול לעצמאות כלכלית</h3>
-                    <canvas id="fire-chart" height="300"></canvas>
+                    <div style="position:relative;height:300px;"><canvas id="fire-chart"></canvas></div>
                 </div>
 
                 <!-- FIRE Milestones -->
@@ -2002,8 +2004,10 @@
         function showTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-            event.target.classList.add('tab-active');
-            document.getElementById(`tab-${tab}`).classList.remove('hidden');
+            if(event && event.target) event.target.classList.add('tab-active');
+            const tabEl = document.getElementById(`tab-${tab}`);
+            if(tabEl) { tabEl.classList.remove('hidden'); }
+            else { console.error('Tab not found:', tab, 'tab-'+tab); }
             if(tab==='overview') updateOverview();
             if(tab==='add') loadMonthTransactions();
             if(tab==='reports') { 
@@ -6083,7 +6087,7 @@
             const year = viewDate.getFullYear();
             const month = viewDate.getMonth();
             const daysInMonth = new Date(year, month+1, 0).getDate();
-            const firstDay = new Date(year, month, 1).getDay();
+            const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
             const dayNames = ['א','ב','ג','ד','ה','ו','ש'];
             const isCurrentMonth = (year===now.getFullYear() && month===now.getMonth());
             const today = isCurrentMonth ? now.getDate() : -1;
@@ -6091,14 +6095,12 @@
             // Update calendar title
             const monthNames = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
             const titleEl = document.getElementById('bills-cal-title');
-            if(titleEl) titleEl.textContent = `📅 ${monthNames[month]} ${year}`;
+            if(titleEl) titleEl.textContent = `\u{1F4C5} ${monthNames[month]} ${year}`;
 
             // Map bills to days for this month
             const billsByDay = {};
             bills.forEach(b=>{
-                // For each bill, check if it falls in the viewed month
                 const day = Math.min(b.billingDay||1, daysInMonth);
-                // Check if bill is active in this month based on frequency
                 const startDate = new Date(b.startDate || '2024-01');
                 if(viewDate < startDate && month < startDate.getMonth() && year <= startDate.getFullYear()) return;
 
@@ -6132,27 +6134,60 @@
                 }
             });
 
-            let html = dayNames.map(d=>`<div style="text-align:center;font-weight:700;padding:8px 4px;font-size:0.8rem;opacity:0.5;">${d}</div>`).join('');
-            for(let i=0;i<firstDay;i++) html+=`<div></div>`;
+            // Calculate total rows needed: header + week rows
+            const totalCells = firstDay + daysInMonth;
+            const totalRows = Math.ceil(totalCells / 7);
+
+            // Build calendar HTML
+            let html = '';
+
+            // Day name headers
+            html += dayNames.map(d=>`<div style="text-align:center;font-weight:700;padding:10px 4px;font-size:0.78rem;color:var(--text-secondary,#888);letter-spacing:1px;border-bottom:2px solid var(--border,rgba(0,0,0,0.1));">${d}</div>`).join('');
+
+            // Empty cells before first day of month
+            for(let i=0;i<firstDay;i++) html+=`<div style="min-height:52px;"></div>`;
+
+            // Day cells
             for(let d=1;d<=daysInMonth;d++) {
                 const hasBills = billsByDay[d];
                 const isToday = d===today;
                 const totalForDay = hasBills ? hasBills.reduce((s,b)=>s+b.amount,0) : 0;
                 const isPast = isCurrentMonth && d < now.getDate();
-                html+=`<div onclick="onCalendarDayClick(${year},${month},${d})" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:pointer;transition:all 0.15s;
-                    ${isToday?'border:2px solid var(--accent);':'border:1px solid var(--border,rgba(0,0,0,0.1));'}
-                    ${hasBills?'background:rgba(239,68,68,0.1);':''}
-                    ${isPast&&!hasBills?'opacity:0.4;':''}
-                    " ${hasBills?`title="${hasBills.map(b=>b.name+' ₪'+b.amount).join('\n')}"`:`title="לחץ להוספת חיוב ביום ${d}"`}
-                    onmouseover="this.style.transform='scale(1.08)';this.style.boxShadow='0 2px 8px rgba(0,0,0,0.12)';"
-                    onmouseout="this.style.transform='';this.style.boxShadow='';"
+                const billCount = hasBills ? hasBills.length : 0;
+                const dotColors = ['#ef4444','#f59e0b','#8b5cf6','#3b82f6','#10b981'];
+
+                let cellStyle = `text-align:center;padding:6px 2px;border-radius:10px;cursor:pointer;transition:all 0.2s ease;min-height:52px;position:relative;`;
+                if(isToday) {
+                    cellStyle += `border:2px solid var(--accent,#10b981);background:rgba(16,185,129,0.08);box-shadow:0 0 12px rgba(16,185,129,0.15);`;
+                } else if(hasBills) {
+                    cellStyle += `border:1px solid rgba(239,68,68,0.25);background:rgba(239,68,68,0.06);`;
+                } else {
+                    cellStyle += `border:1px solid transparent;`;
+                }
+                if(isPast && !hasBills) cellStyle += `opacity:0.35;`;
+
+                const tooltipText = hasBills ? hasBills.map(b=>b.name+' \u20AA'+b.amount).join('\n') : `\u05DC\u05D7\u05E5 \u05DC\u05D4\u05D5\u05E1\u05E4\u05EA \u05D7\u05D9\u05D5\u05D1 \u05D1\u05D9\u05D5\u05DD ${d}`;
+
+                html += `<div onclick="onCalendarDayClick(${year},${month},${d})" style="${cellStyle}"
+                    title="${tooltipText}"
+                    onmouseover="this.style.transform='scale(1.1)';this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)';this.style.zIndex='2';"
+                    onmouseout="this.style.transform='';this.style.boxShadow='${isToday?'0 0 12px rgba(16,185,129,0.15)':''}';this.style.zIndex='';"
                 >
-                    <div style="font-weight:${isToday?'800':'500'};${isToday?'color:var(--accent);':''}">${d}</div>
-                    ${hasBills?`<div style="font-size:0.65rem;color:var(--loss,#ef4444);font-weight:700;">₪${totalForDay.toLocaleString()}</div>
-                    <div style="display:flex;justify-content:center;gap:2px;margin-top:2px;">${hasBills.map(b=>`<span style="width:6px;height:6px;border-radius:50%;background:var(--loss,#ef4444);display:inline-block;"></span>`).join('')}</div>`
-                    :`<div style="font-size:0.6rem;color:var(--text-muted,#aaa);margin-top:2px;">+</div>`}
+                    <div style="font-weight:${isToday?'800':'500'};font-size:${isToday?'1rem':'0.9rem'};${isToday?'color:var(--accent,#10b981);':''}">${d}</div>
+                    ${hasBills ? `
+                        <div style="font-size:0.6rem;color:var(--loss,#ef4444);font-weight:700;margin-top:1px;">\u20AA${totalForDay.toLocaleString()}</div>
+                        <div style="display:flex;justify-content:center;gap:2px;margin-top:3px;flex-wrap:wrap;">
+                            ${hasBills.slice(0,5).map((b,i)=>`<span style="width:7px;height:7px;border-radius:50%;background:${dotColors[i % dotColors.length]};display:inline-block;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></span>`).join('')}
+                            ${billCount > 5 ? `<span style="font-size:0.55rem;color:var(--text-secondary,#999);">+${billCount-5}</span>` : ''}
+                        </div>
+                    ` : ''}
                 </div>`;
             }
+
+            // Fill remaining cells in last row
+            const remainingCells = (7 - ((firstDay + daysInMonth) % 7)) % 7;
+            for(let i=0;i<remainingCells;i++) html+=`<div style="min-height:52px;"></div>`;
+
             cal.innerHTML = html;
         }
 
