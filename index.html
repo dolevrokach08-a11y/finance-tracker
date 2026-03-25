@@ -248,7 +248,45 @@
             font-size: 1.2rem;
         }
 
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .dash-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 12px;
+            text-align: center;
+        }
+
+        .dash-card .dash-icon {
+            font-size: 1.4rem;
+            margin-bottom: 6px;
+        }
+
+        .dash-card .dash-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .dash-card .dash-value {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'Space Grotesk', sans-serif;
+            direction: ltr;
+        }
+
         @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
             .buttons-container {
                 grid-template-columns: 1fr;
             }
@@ -318,6 +356,33 @@
             </a>
         </div>
 
+        <!-- Dashboard Summary -->
+        <div id="dashboardSection" style="margin-top: 24px; display: none;">
+            <h2 style="color: var(--text-primary); font-size: 1.1rem; font-weight: 600; margin-bottom: 4px; text-align: right;">📊 סיכום פיננסי</h2>
+            <div class="dashboard-grid">
+                <div class="dash-card">
+                    <div class="dash-icon">💎</div>
+                    <div class="dash-label">שווי נקי כולל</div>
+                    <div class="dash-value" id="dashNetWorth">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">📈</div>
+                    <div class="dash-label">תיק השקעות</div>
+                    <div class="dash-value" id="dashPortfolio">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">🏦</div>
+                    <div class="dash-label">חיסכון חודשי</div>
+                    <div class="dash-value" id="dashSavings">—</div>
+                </div>
+                <div class="dash-card">
+                    <div class="dash-icon">📋</div>
+                    <div class="dash-label">חיובים חודשיים</div>
+                    <div class="dash-value" id="dashBills">—</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Unified Export/Import -->
         <div style="margin-top: 32px; padding: 20px; border-radius: 12px; background: var(--bg-surface); border: 1px solid var(--border);">
             <div style="display: flex; justify-content: center; gap: 12px; flex-wrap: wrap;">
@@ -358,6 +423,72 @@
             userName.textContent = user.displayName || user.email;
             loadingScreen.style.display = 'none';
             mainContainer.style.display = 'block';
+            loadDashboard();
+        }
+
+        function formatCurrency(value) {
+            const formatted = Math.abs(value).toLocaleString('he-IL', { maximumFractionDigits: 0 });
+            return (value < 0 ? '-' : '') + '₪' + formatted;
+        }
+
+        function setDashValue(id, value) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = formatCurrency(value);
+            el.style.color = value > 0 ? 'var(--profit)' : value < 0 ? 'var(--loss)' : 'var(--text-primary)';
+        }
+
+        function loadDashboard() {
+            const financeRaw = localStorage.getItem('financeData');
+            const portfolioRaw = localStorage.getItem('portfolioData');
+
+            if (!financeRaw && !portfolioRaw) return;
+
+            document.getElementById('dashboardSection').style.display = 'block';
+
+            const finance = financeRaw ? JSON.parse(financeRaw) : null;
+            const portfolio = portfolioRaw ? JSON.parse(portfolioRaw) : null;
+
+            let totalIncome = 0;
+            let totalExpenses = 0;
+            let totalBills = 0;
+            let assetsTotal = 0;
+            let liabilitiesTotal = 0;
+            let portfolioValue = 0;
+
+            if (finance) {
+                if (Array.isArray(finance.fixedIncomes)) {
+                    totalIncome = finance.fixedIncomes.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (Array.isArray(finance.fixedExpenses)) {
+                    totalExpenses = finance.fixedExpenses.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (Array.isArray(finance.bills)) {
+                    totalBills = finance.bills.reduce((s, item) => s + (Number(item.amount) || 0), 0);
+                }
+                if (finance.netWorthAssets) {
+                    assetsTotal = Object.values(finance.netWorthAssets).reduce((s, v) => s + (Number(v) || 0), 0);
+                }
+                if (finance.netWorthLiabilities) {
+                    liabilitiesTotal = Object.values(finance.netWorthLiabilities).reduce((s, v) => s + (Number(v) || 0), 0);
+                }
+            }
+
+            if (portfolio) {
+                if (Array.isArray(portfolio.holdings)) {
+                    portfolioValue = portfolio.holdings.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
+                } else if (Array.isArray(portfolio)) {
+                    portfolioValue = portfolio.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
+                }
+            }
+
+            const netWorth = assetsTotal - liabilitiesTotal + portfolioValue;
+            const monthlySavings = totalIncome - totalExpenses;
+
+            setDashValue('dashNetWorth', netWorth);
+            setDashValue('dashPortfolio', portfolioValue);
+            setDashValue('dashSavings', monthlySavings);
+            setDashValue('dashBills', totalBills > 0 ? -totalBills : 0);
         }
 
         // Check demo mode first
