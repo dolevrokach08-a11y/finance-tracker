@@ -2099,6 +2099,10 @@
                     <i data-lucide="eye"></i>
                     <span>רשימת מעקב</span>
                 </button>
+                <button class="nav-item" onclick="showTab('backtest')">
+                    <i data-lucide="history"></i>
+                    <span>בדיקה היסטורית</span>
+                </button>
             </div>
 
             <div class="sidebar-footer">
@@ -3241,6 +3245,98 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Backtest Tab -->
+            <div id="tab-backtest" class="tab-content">
+                <h3 style="margin-bottom: 20px;">⏪ בדיקה היסטורית (Backtesting)</h3>
+
+                <div class="glass" style="margin-bottom: 12px; padding: 12px 16px; background: hsla(38, 92%, 55%, 0.08); border: 1px solid hsla(38, 92%, 55%, 0.25);">
+                    <p style="color: var(--warning); font-size: 0.85rem; margin: 0;">
+                        ⚠️ <strong>סימולציה בלבד</strong> — החישוב מבוסס על תשואות שנתיות ממוצעות ואינו מבטא תשואות היסטוריות בפועל. התוצאות אינן מהוות ייעוץ השקעות.
+                    </p>
+                </div>
+
+                <!-- Input Section -->
+                <div class="glass" style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 15px;">📊 פרמטרים</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>סכום השקעה ראשוני (₪)</label>
+                            <input type="number" id="bt-initial" value="50000" min="0" step="1000"
+                                   style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);">
+                        </div>
+                        <div class="form-group">
+                            <label>הפקדה חודשית (₪)</label>
+                            <input type="number" id="bt-monthly" value="3000" min="0" step="100"
+                                   style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);">
+                        </div>
+                        <div class="form-group">
+                            <label>תקופה</label>
+                            <select id="bt-period"
+                                    style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: var(--radius-sm);">
+                                <option value="1">שנה אחת</option>
+                                <option value="3">3 שנים</option>
+                                <option value="5" selected>5 שנים</option>
+                                <option value="10">10 שנים</option>
+                                <option value="20">20 שנים</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>אסטרטגיית השקעה</label>
+                            <select id="bt-strategy"
+                                    onchange="handleStrategyChange()"
+                                    style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary); padding: 8px 12px; border-radius: var(--radius-sm);">
+                                <option value="10">100% מניות (S&amp;P 500 ~10%)</option>
+                                <option value="8.5" selected>80/20 מניות/אג&quot;ח (~8.5%)</option>
+                                <option value="7">60/40 מניות/אג&quot;ח (~7%)</option>
+                                <option value="5.5">40/60 שמרני (~5.5%)</option>
+                                <option value="custom">מותאם אישית</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="bt-custom-return-group" style="display:none;">
+                            <label>תשואה שנתית צפויה (%)</label>
+                            <input type="number" id="bt-custom-return" value="8" min="0" max="50" step="0.5"
+                                   style="background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text-primary);">
+                        </div>
+                        <div class="form-group" style="display:flex; align-items:center; gap:10px; padding-top: 24px;">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; margin:0;">
+                                <input type="checkbox" id="bt-inflation" checked
+                                       style="width:18px; height:18px; accent-color: var(--accent);">
+                                <span>הפחת אינפלציה (2.5% שנתי)</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-top: 15px;">
+                        <button onclick="runBacktest()" class="btn btn-primary" style="background: var(--accent); color: #000; font-weight: 600;">
+                            ▶ הרץ סימולציה
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Results Section -->
+                <div id="bt-results" style="display:none;">
+                    <!-- Summary Cards -->
+                    <div id="bt-summary" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px;"></div>
+
+                    <!-- Growth Chart -->
+                    <div class="glass" style="margin-bottom: 20px;">
+                        <h4 style="margin-bottom: 15px;">📈 גרף צמיחה</h4>
+                        <div style="position:relative;height:300px;">
+                            <canvas id="bt-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Year-by-Year Table -->
+                    <div class="glass">
+                        <h4 style="margin-bottom: 15px;">📋 פירוט שנתי</h4>
+                        <div style="overflow-x: auto;">
+                            <table id="bt-table" style="width:100%; border-collapse: collapse; font-size: 0.9rem;">
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -6474,7 +6570,8 @@ function calculateTWRv3() {
             'dividends': { subTabs: null },
             'fees': { subTabs: null },
             'settings': { subTabs: null },
-            'watchlist': { subTabs: null }
+            'watchlist': { subTabs: null },
+            'backtest': { subTabs: null }
         };
         
         // Track current state
@@ -6643,6 +6740,9 @@ function calculateTWRv3() {
                     break;
                 case 'watchlist':
                     renderWatchlist();
+                    break;
+                case 'backtest':
+                    renderBacktest();
                     break;
             }
         }
@@ -13127,7 +13227,275 @@ ${msg}`, 'warning');
         window.renderWatchlist = renderWatchlist;
         window.fixSnapshots = fixSnapshots;
         window.rebuildSnapshotsFromHistory = rebuildSnapshotsFromHistory;
-        
+
+        // ==================== BACKTEST FUNCTIONS ====================
+
+        let backtestChart = null;
+
+        function handleStrategyChange() {
+            const sel = document.getElementById('bt-strategy');
+            const customGroup = document.getElementById('bt-custom-return-group');
+            if (customGroup) {
+                customGroup.style.display = sel.value === 'custom' ? '' : 'none';
+            }
+        }
+
+        function getBacktestParams() {
+            const strategyVal = document.getElementById('bt-strategy').value;
+            const annualReturn = strategyVal === 'custom'
+                ? parseFloat(document.getElementById('bt-custom-return').value) || 8
+                : parseFloat(strategyVal);
+            return {
+                initial: parseFloat(document.getElementById('bt-initial').value) || 0,
+                monthly: parseFloat(document.getElementById('bt-monthly').value) || 0,
+                years: parseInt(document.getElementById('bt-period').value) || 5,
+                annualReturn: annualReturn,
+                includeInflation: document.getElementById('bt-inflation').checked
+            };
+        }
+
+        function calculateBacktest(params) {
+            const { initial, monthly, years, annualReturn, includeInflation } = params;
+            const monthlyRate = annualReturn / 100 / 12;
+            const inflationMonthly = 2.5 / 100 / 12;
+            const totalMonths = years * 12;
+
+            const monthlyData = [];
+            let nominalBalance = initial;
+            let realBalance = initial;
+            let totalContributions = initial;
+
+            monthlyData.push({
+                month: 0,
+                contributions: initial,
+                nominalBalance: initial,
+                realBalance: initial,
+                totalContributions: initial
+            });
+
+            for (let m = 1; m <= totalMonths; m++) {
+                nominalBalance = (nominalBalance + monthly) * (1 + monthlyRate);
+                totalContributions += monthly;
+
+                const inflationFactor = Math.pow(1 + inflationMonthly, m);
+                realBalance = nominalBalance / inflationFactor;
+
+                monthlyData.push({
+                    month: m,
+                    contributions: monthly,
+                    nominalBalance,
+                    realBalance,
+                    totalContributions
+                });
+            }
+
+            // Build yearly summary
+            const yearlyData = [];
+            for (let y = 0; y <= years; y++) {
+                const idx = y * 12;
+                const entry = monthlyData[idx];
+                const prevEntry = y > 0 ? monthlyData[(y - 1) * 12] : null;
+                const yearContributions = y === 0 ? initial : monthly * 12;
+                const yearGrowth = y === 0 ? 0 : entry.nominalBalance - (prevEntry.nominalBalance + monthly * 12);
+                const yearReturnPct = y === 0 ? 0 : (prevEntry.nominalBalance > 0
+                    ? ((entry.nominalBalance - prevEntry.nominalBalance - monthly * 12) / prevEntry.nominalBalance * 100)
+                    : 0);
+
+                yearlyData.push({
+                    year: y,
+                    contributions: yearContributions,
+                    growth: yearGrowth,
+                    nominalBalance: entry.nominalBalance,
+                    realBalance: entry.realBalance,
+                    returnPct: yearReturnPct,
+                    totalContributions: entry.totalContributions
+                });
+            }
+
+            return { monthlyData, yearlyData, params };
+        }
+
+        function renderBacktestSummary(result) {
+            const container = document.getElementById('bt-summary');
+            if (!container) return;
+
+            const last = result.monthlyData[result.monthlyData.length - 1];
+            const totalInvested = last.totalContributions;
+            const finalNominal = last.nominalBalance;
+            const totalReturnAmt = finalNominal - totalInvested;
+            const totalReturnPct = totalInvested > 0 ? (totalReturnAmt / totalInvested * 100) : 0;
+            const finalReal = last.realBalance;
+            const realReturnAmt = finalReal - totalInvested;
+
+            const cards = [
+                { label: 'סה"כ הושקע', value: `₪${totalInvested.toLocaleString('he-IL', {maximumFractionDigits:0})}`, color: 'var(--info)' },
+                { label: 'שווי סופי (נומינלי)', value: `₪${finalNominal.toLocaleString('he-IL', {maximumFractionDigits:0})}`, color: 'var(--accent)' },
+                { label: 'תשואה כוללת', value: `${totalReturnPct.toFixed(1)}%`, color: totalReturnAmt >= 0 ? 'var(--profit)' : 'var(--loss)' },
+                { label: 'רווח כולל', value: `₪${totalReturnAmt.toLocaleString('he-IL', {maximumFractionDigits:0})}`, color: totalReturnAmt >= 0 ? 'var(--profit)' : 'var(--loss)' },
+            ];
+
+            if (result.params.includeInflation) {
+                cards.push({ label: 'שווי ריאלי (אחרי אינפלציה)', value: `₪${finalReal.toLocaleString('he-IL', {maximumFractionDigits:0})}`, color: 'var(--warning)' });
+                cards.push({ label: 'רווח ריאלי', value: `₪${realReturnAmt.toLocaleString('he-IL', {maximumFractionDigits:0})}`, color: realReturnAmt >= 0 ? 'var(--profit)' : 'var(--loss)' });
+            }
+
+            container.innerHTML = cards.map(c => `
+                <div class="glass" style="padding: 16px; text-align: center;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">${c.label}</div>
+                    <div style="font-size: 1.3rem; font-weight: 700; color: ${c.color};">${c.value}</div>
+                </div>
+            `).join('');
+        }
+
+        function renderBacktestChart(result) {
+            const canvas = document.getElementById('bt-chart');
+            if (!canvas) return;
+
+            if (backtestChart) {
+                backtestChart.destroy();
+                backtestChart = null;
+            }
+
+            const labels = result.monthlyData
+                .filter((_, i) => i % Math.max(1, Math.floor(result.monthlyData.length / 60)) === 0 || i === result.monthlyData.length - 1)
+                .map(d => {
+                    const y = Math.floor(d.month / 12);
+                    const m = d.month % 12;
+                    return `${y}y${m > 0 ? m + 'm' : ''}`;
+                });
+
+            const filteredData = result.monthlyData
+                .filter((_, i) => i % Math.max(1, Math.floor(result.monthlyData.length / 60)) === 0 || i === result.monthlyData.length - 1);
+
+            const datasets = [
+                {
+                    label: 'שווי נומינלי',
+                    data: filteredData.map(d => d.nominalBalance),
+                    borderColor: 'hsl(142, 60%, 50%)',
+                    backgroundColor: 'hsla(142, 60%, 50%, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                },
+                {
+                    label: 'סה"כ הושקע',
+                    data: filteredData.map(d => d.totalContributions),
+                    borderColor: 'hsl(210, 80%, 55%)',
+                    backgroundColor: 'transparent',
+                    borderDash: [5, 5],
+                    fill: false,
+                    tension: 0,
+                    pointRadius: 0,
+                    borderWidth: 1.5
+                }
+            ];
+
+            if (result.params.includeInflation) {
+                datasets.splice(1, 0, {
+                    label: 'שווי ריאלי (אחרי אינפלציה)',
+                    data: filteredData.map(d => d.realBalance),
+                    borderColor: 'hsl(38, 92%, 55%)',
+                    backgroundColor: 'hsla(38, 92%, 55%, 0.05)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    borderWidth: 2
+                });
+            }
+
+            backtestChart = new Chart(canvas, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            labels: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary').trim() || '#aaa', font: { size: 12 } }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: function(ctx) {
+                                    return ctx.dataset.label + ': ₪' + Math.round(ctx.raw).toLocaleString('he-IL');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666', maxTicksLimit: 12 },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: getComputedStyle(document.documentElement).getPropertyValue('--text-muted').trim() || '#666',
+                                callback: v => '₪' + v.toLocaleString('he-IL')
+                            },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderBacktestTable(result) {
+            const table = document.getElementById('bt-table');
+            if (!table) return;
+
+            const headerStyle = 'padding:10px 8px; text-align:right; border-bottom:2px solid var(--border); color:var(--text-muted); font-weight:600; font-size:0.8rem;';
+            const cellStyle = 'padding:10px 8px; text-align:right; border-bottom:1px solid var(--border); color:var(--text-primary);';
+
+            let html = `<thead><tr>
+                <th style="${headerStyle}">שנה</th>
+                <th style="${headerStyle}">הפקדות</th>
+                <th style="${headerStyle}">צמיחה</th>
+                <th style="${headerStyle}">יתרה נומינלית</th>
+                ${result.params.includeInflation ? `<th style="${headerStyle}">יתרה ריאלית</th>` : ''}
+                <th style="${headerStyle}">תשואה %</th>
+            </tr></thead><tbody>`;
+
+            for (const row of result.yearlyData) {
+                const returnColor = row.returnPct >= 0 ? 'var(--profit)' : 'var(--loss)';
+                html += `<tr>
+                    <td style="${cellStyle}">${row.year === 0 ? 'התחלה' : row.year}</td>
+                    <td style="${cellStyle}">₪${row.contributions.toLocaleString('he-IL', {maximumFractionDigits:0})}</td>
+                    <td style="${cellStyle}; color:${row.growth >= 0 ? 'var(--profit)' : 'var(--loss)'}">₪${row.growth.toLocaleString('he-IL', {maximumFractionDigits:0})}</td>
+                    <td style="${cellStyle}; font-weight:600;">₪${row.nominalBalance.toLocaleString('he-IL', {maximumFractionDigits:0})}</td>
+                    ${result.params.includeInflation ? `<td style="${cellStyle}; color:var(--warning);">₪${row.realBalance.toLocaleString('he-IL', {maximumFractionDigits:0})}</td>` : ''}
+                    <td style="${cellStyle}; color:${returnColor}; font-weight:600;">${row.year === 0 ? '-' : row.returnPct.toFixed(1) + '%'}</td>
+                </tr>`;
+            }
+
+            html += '</tbody>';
+            table.innerHTML = html;
+        }
+
+        function runBacktest() {
+            const params = getBacktestParams();
+            const result = calculateBacktest(params);
+
+            document.getElementById('bt-results').style.display = '';
+            renderBacktestSummary(result);
+            renderBacktestChart(result);
+            renderBacktestTable(result);
+        }
+
+        function renderBacktest() {
+            // Auto-run with defaults on tab load
+            runBacktest();
+        }
+
+        window.renderBacktest = renderBacktest;
+        window.runBacktest = runBacktest;
+        window.calculateBacktest = calculateBacktest;
+        window.renderBacktestChart = renderBacktestChart;
+        window.renderBacktestTable = renderBacktestTable;
+        window.handleStrategyChange = handleStrategyChange;
+
         // TWR Enhancement v45 exports
         window.calculateTWREnhanced = calculateTWREnhanced;
         window.getTotalPortfolioValueEnhanced = getTotalPortfolioValueEnhanced;
