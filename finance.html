@@ -1401,6 +1401,17 @@
                     </div>
                 </div>
 
+                <!-- Sync Buttons -->
+                <div class="glass p-4 mb-6" style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:center;">
+                    <button onclick="syncMortgageToNetWorth()" class="px-4 py-2 rounded-lg font-medium text-sm" style="background:var(--bg-elevated,#f3f4f6);border:1px solid var(--border,#e5e7eb);cursor:pointer;color:inherit;display:flex;align-items:center;gap:6px;">
+                        🏠 סנכרן נתוני משכנתא
+                    </button>
+                    <button onclick="syncPortfolioToNetWorth()" class="px-4 py-2 rounded-lg font-medium text-sm" style="background:var(--bg-elevated,#f3f4f6);border:1px solid var(--border,#e5e7eb);cursor:pointer;color:inherit;display:flex;align-items:center;gap:6px;">
+                        📈 סנכרן שווי תיק השקעות
+                    </button>
+                    <span style="font-size:0.72rem;opacity:0.5;">מושך נתונים ממחשבון המשכנתא ומתיק ההשקעות</span>
+                </div>
+
                 <!-- Net Worth Chart -->
                 <div class="glass p-6 mb-6">
                     <h3 class="text-lg font-semibold mb-4">📈 שווי נקי לאורך זמן</h3>
@@ -5881,6 +5892,86 @@
             data.netWorthHistory.sort((a,b)=>a.month.localeCompare(b.month));
         }
 
+        function syncMortgageToNetWorth() {
+            try {
+                const raw = localStorage.getItem('mortgageData');
+                if(!raw) { notify('לא נמצאו נתוני משכנתא. השתמש במחשבון המשכנתא קודם.'); return; }
+                const mortgage = JSON.parse(raw);
+
+                // Extract property value and remaining balance
+                const propertyValue = mortgage.propertyValue || mortgage.loanAmount || 0;
+                const remainingBalance = mortgage.remainingBalance || mortgage.loanAmount || 0;
+                const monthlyPayment = mortgage.monthlyPayment || 0;
+
+                if(!propertyValue && !remainingBalance) { notify('נתוני המשכנתא ריקים'); return; }
+
+                // Update or create asset entry for property
+                if(!data.netWorthAssets) data.netWorthAssets = [];
+                const existingAsset = data.netWorthAssets.find(a => a.category === 'realestate' && a.name.includes('נדל"ן'));
+                if(existingAsset) {
+                    existingAsset.value = propertyValue;
+                } else if(propertyValue > 0) {
+                    data.netWorthAssets.push({ id: Date.now(), name: 'נדל"ן (משכנתא)', category: 'realestate', value: propertyValue });
+                }
+
+                // Update or create liability entry for mortgage
+                if(!data.netWorthLiabilities) data.netWorthLiabilities = [];
+                const existingLiab = data.netWorthLiabilities.find(l => l.category === 'mortgage');
+                if(existingLiab) {
+                    existingLiab.value = remainingBalance;
+                    if(monthlyPayment) existingLiab.monthlyPayment = monthlyPayment;
+                } else if(remainingBalance > 0) {
+                    data.netWorthLiabilities.push({ id: Date.now()+1, name: 'משכנתא', category: 'mortgage', value: remainingBalance, monthlyPayment: monthlyPayment || 0 });
+                }
+
+                recordNetWorthSnapshot();
+                saveToFirebase();
+                renderNetWorth();
+                notify('✅ נתוני משכנתא סונכרנו בהצלחה!');
+            } catch(e) {
+                console.error('Mortgage sync error:', e);
+                notify('❌ שגיאה בסנכרון: ' + e.message);
+            }
+        }
+
+        function syncPortfolioToNetWorth() {
+            try {
+                const raw = localStorage.getItem('portfolioData');
+                if(!raw) { notify('לא נמצאו נתוני תיק השקעות.'); return; }
+                const portfolio = JSON.parse(raw);
+                const holdings = portfolio.holdings || [];
+
+                if(holdings.length === 0) { notify('אין אחזקות בתיק ההשקעות'); return; }
+
+                // Calculate total portfolio value
+                const rates = portfolio.rates || { USD: 3.7, EUR: 4.1 };
+                let totalValue = 0;
+                holdings.forEach(h => {
+                    const price = h.currentPrice || 0;
+                    const shares = h.shares || 0;
+                    const rate = h.currency === 'USD' ? (rates.USD||3.7) : h.currency === 'EUR' ? (rates.EUR||4.1) : 1;
+                    totalValue += shares * price * rate;
+                });
+
+                // Update or create asset entry for portfolio
+                if(!data.netWorthAssets) data.netWorthAssets = [];
+                const existing = data.netWorthAssets.find(a => a.category === 'investments' && a.name.includes('תיק השקעות'));
+                if(existing) {
+                    existing.value = Math.round(totalValue);
+                } else {
+                    data.netWorthAssets.push({ id: Date.now(), name: 'תיק השקעות', category: 'investments', value: Math.round(totalValue) });
+                }
+
+                recordNetWorthSnapshot();
+                saveToFirebase();
+                renderNetWorth();
+                notify(`✅ תיק השקעות סונכרן: ₪${Math.round(totalValue).toLocaleString('he-IL')}`);
+            } catch(e) {
+                console.error('Portfolio sync error:', e);
+                notify('❌ שגיאה בסנכרון: ' + e.message);
+            }
+        }
+
         function renderNetWorth() {
             const assets = data.netWorthAssets||[];
             const liabilities = data.netWorthLiabilities||[];
@@ -6383,6 +6474,8 @@
         window.updateNetWorthItemValue = updateNetWorthItemValue;
         window.recordNetWorthSnapshot = recordNetWorthSnapshot;
         window.renderNetWorth = renderNetWorth;
+        window.syncMortgageToNetWorth = syncMortgageToNetWorth;
+        window.syncPortfolioToNetWorth = syncPortfolioToNetWorth;
         window.addBill = addBill;
         window.removeBill = removeBill;
         window.toggleBill = toggleBill;
