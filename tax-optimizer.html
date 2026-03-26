@@ -37,13 +37,12 @@ a { color: hsl(142, 60%, 50%); }
 }
 .nav-links { display: flex; gap: 8px; align-items: center; }
 .nav-links a {
-  padding: 6px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  text-decoration: none;
+  width: 36px; height: 36px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; text-decoration: none;
   color: hsl(215, 12%, 52%);
   border: 1px solid hsl(220, 14%, 16%);
+  background: hsl(220, 16%, 13%);
   transition: all 0.2s;
 }
 .nav-links a:hover { background: hsl(220, 16%, 18%); color: hsl(210, 20%, 92%); }
@@ -113,9 +112,10 @@ a { color: hsl(142, 60%, 50%); }
 <!-- Navigation -->
 <nav class="nav-bar">
   <div class="nav-links">
-    <a href="index.html">🏠 ראשי</a>
-    <a href="finance.html">💰 הכנסות/הוצאות</a>
-    <a href="portfolio.html">📈 תיק השקעות</a>
+    <a href="index.html" title="דף ראשי">🏠</a>
+    <a href="finance.html" title="מעקב כספי">💵</a>
+    <a href="portfolio.html" title="תיק השקעות">📈</a>
+    <a href="mortgage.html" title="מחשבון משכנתא">🏡</a>
   </div>
   <div class="nav-user" id="nav-user"></div>
 </nav>

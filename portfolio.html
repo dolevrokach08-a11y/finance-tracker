@@ -273,6 +273,21 @@
             height: 14px;
         }
 
+        .nav-sq {
+            width: 36px; height: 36px; border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--text-secondary);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px; text-decoration: none; cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .nav-sq:hover {
+            color: var(--text-primary);
+            border-color: var(--border-accent);
+            background: var(--bg-surface);
+        }
+
         /* Main Content */
         .main-content {
             flex: 1;
@@ -2047,17 +2062,13 @@
                     <span>📈</span>
                     תיק השקעות
                 </div>
-                <div class="top-header-actions">
-                    <a href="finance.html" class="header-link">
-                        <i data-lucide="wallet"></i>
-                        מעקב כספי
-                    </a>
-                    <a href="tax-optimizer.html" class="header-link">
-                        🧮 אופטימיזציית מס
-                    </a>
-                    <button class="header-link" onclick="toggleTheme()" id="themeToggleBtn">
+                <div class="top-header-actions" style="display:flex;gap:6px;align-items:center;">
+                    <a href="index.html" class="nav-sq" title="דף ראשי">🏠</a>
+                    <a href="finance.html" class="nav-sq" title="מעקב כספי">💵</a>
+                    <a href="mortgage.html" class="nav-sq" title="מחשבון משכנתא">🏡</a>
+                    <a href="tax-optimizer.html" class="nav-sq" title="אופטימיזציית מס">🧮</a>
+                    <button class="nav-sq" onclick="toggleTheme()" id="themeToggleBtn" title="מצב תצוגה">
                         <span id="theme-icon">☀️</span>
-                        <span>מצב בהיר</span>
                     </button>
                 </div>
             </div>
