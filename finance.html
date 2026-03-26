@@ -5939,7 +5939,7 @@
 
         function syncPortfolioToNetWorth() {
             try {
-                const raw = localStorage.getItem('portfolioData');
+                const raw = localStorage.getItem('portfolio');
                 if(!raw) { notify('לא נמצאו נתוני תיק השקעות.'); return; }
                 const portfolio = JSON.parse(raw);
                 const holdings = portfolio.holdings || [];

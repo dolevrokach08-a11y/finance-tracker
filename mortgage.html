@@ -1280,6 +1280,21 @@ function updateCurrentSummary() {
     rows+=`<tr${m%2===0?' style="background:var(--bg-elevated)"':''}><td>${m}</td><td>₪${fmtShort(totPmt)}</td><td style="color:var(--green)">₪${fmtShort(totPrin)}</td><td style="color:var(--red)">₪${fmtShort(totInt)}</td><td>₪${fmtShort(totBal)}</td></tr>`;
   }
   document.getElementById('amort-table').innerHTML = rows;
+
+  // Save to localStorage for cross-system sync (Net Worth)
+  try {
+    const propertyVal = parseFloat(document.getElementById('equity-property-val')?.value) || 0;
+    localStorage.setItem('mortgageData', JSON.stringify({
+      propertyValue: propertyVal,
+      loanAmount: total,
+      remainingBalance: total,
+      monthlyPayment: monthly,
+      weightedRate: wavg,
+      totalInterest: totalInt,
+      tranches: currentTranches.length,
+      lastUpdate: new Date().toISOString()
+    }));
+  } catch(e) { console.warn('Mortgage localStorage save failed:', e); }
 }
 
 // ═══════════════════════════ EARLY REPAYMENT ═══════════════════════════
