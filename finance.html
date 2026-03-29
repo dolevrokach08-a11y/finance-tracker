@@ -5949,15 +5949,25 @@
 
                 if(holdings.length === 0) { notify('אין אחזקות בתיק ההשקעות'); return; }
 
-                // Calculate total portfolio value
+                // Calculate total portfolio value (holdings + bonds + cash)
                 const rates = portfolio.rates || { USD: 3.7, EUR: 4.1 };
+                const getRate = (cur) => cur === 'USD' ? (rates.USD||3.7) : cur === 'EUR' ? (rates.EUR||4.1) : 1;
                 let totalValue = 0;
+
+                // Stocks/ETFs
                 holdings.forEach(h => {
-                    const price = h.currentPrice || 0;
-                    const shares = h.shares || 0;
-                    const rate = h.currency === 'USD' ? (rates.USD||3.7) : h.currency === 'EUR' ? (rates.EUR||4.1) : 1;
-                    totalValue += shares * price * rate;
+                    totalValue += (h.shares || 0) * (h.currentPrice || 0) * getRate(h.currency);
                 });
+
+                // Bonds
+                const bonds = portfolio.bonds || [];
+                bonds.forEach(b => {
+                    totalValue += (b.units || 0) * (b.currentPrice || 0) * getRate(b.currency);
+                });
+
+                // Cash balances
+                const cash = portfolio.cash || {};
+                totalValue += (cash.ILS || 0) + (cash.USD || 0) * getRate('USD') + (cash.EUR || 0) * getRate('EUR');
 
                 // Update or create asset entry for portfolio
                 if(!data.netWorthAssets) data.netWorthAssets = [];
