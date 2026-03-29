@@ -893,7 +893,7 @@ tr:hover td{background:var(--bg-elevated);}
           </div>
           <div class="field" id="equity-property-field" style="display:none;">
             <div class="f-label">שווי נכס (לחישוב אקוויטי)</div>
-            <input type="number" id="equity-property-val" value="1800000" oninput="updateGraph()">
+            <input type="number" id="equity-property-val" value="" placeholder="הזן שווי נכס" oninput="updateGraph()">
           </div>
           <div class="divider"></div>
           <div class="four-col">
@@ -961,7 +961,7 @@ async function loadFromFirebase() {
                 window._mortgageLoaded = true;
                 // Trigger reload in main script
                 if (typeof window.loadFirebaseData === 'function') {
-                    window.loadFirebaseData(saved.tranches);
+                    window.loadFirebaseData(saved.tranches, saved.propertyValue || '');
                 }
                 console.log('✅ Mortgage data loaded from Firebase');
             }
@@ -973,12 +973,13 @@ async function loadFromFirebase() {
     }
 }
 
-window._saveToFirebase = async function(tranches) {
+window._saveToFirebase = async function(tranches, propertyVal) {
     if (!currentUser || !firebaseReady) return;
     try {
         const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
         await setDoc(userDocRef, {
             tranches: tranches,
+            propertyValue: propertyVal || '',
             lastModified: new Date().toISOString()
         });
         console.log('✅ Mortgage saved to Firebase');
@@ -1034,22 +1035,39 @@ let builderTranches = [];
 let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
 
 function saveTranches() {
-  try { localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches)); } catch(e) {}
+  const propertyVal = document.getElementById('equity-property-val')?.value || '';
+  try {
+    localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches));
+    localStorage.setItem('mortgagePropertyValue', propertyVal);
+  } catch(e) {}
   // Also save to Firebase if available
   if (typeof window._saveToFirebase === 'function') {
-    window._saveToFirebase(currentTranches);
+    window._saveToFirebase(currentTranches, propertyVal);
   }
 }
 
 // Called by Firebase module when data loads from cloud
-window.loadFirebaseData = function(tranches) {
+window.loadFirebaseData = function(tranches, propertyVal) {
+  // Compare with current data — skip if identical (avoid double refresh)
+  const isSame = JSON.stringify(currentTranches) === JSON.stringify(tranches);
+  if (isSame && !propertyVal) return;
+
   currentTranches = tranches;
   nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
   renderCurrentTranches();
   updateCurrentSummary();
-  // Also update localStorage backup
-  try { localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches)); } catch(e) {}
-  showToast('נתונים נטענו מהענן');
+
+  // Restore property value
+  if (propertyVal) {
+    const el = document.getElementById('equity-property-val');
+    if (el) el.value = propertyVal;
+  }
+
+  // Update localStorage backup
+  try {
+    localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches));
+    if (propertyVal) localStorage.setItem('mortgagePropertyValue', propertyVal);
+  } catch(e) {}
 };
 
 const TYPE_LABELS = {prime:'פריים',var5:'משתנה 5Y',var1:'משתנה 1Y',fix:'קבועה ל"צ',cpi:'קבועה צמודה'};
@@ -2090,7 +2108,7 @@ function updateGraph() {
   let labels=[], datasets=[], totalPmt=0, totalInt=0;
 
   if(view==='equity') {
-    const propertyVal = +document.getElementById('equity-property-val').value || 1800000;
+    const propertyVal = +document.getElementById('equity-property-val').value || 0;
     const totalPrincipal = tranches.reduce((s,t)=>s+t.principal,0);
     let data = [];
     let bals = tranches.map(t=>t.principal);
@@ -2224,6 +2242,15 @@ function updateGraph() {
 
 // ═══════════════════════════ INIT ═══════════════════════════
 renderCurrentPage();
+
+// Restore saved property value from localStorage
+try {
+  const savedPropVal = localStorage.getItem('mortgagePropertyValue');
+  if (savedPropVal) {
+    const el = document.getElementById('equity-property-val');
+    if (el) el.value = savedPropVal;
+  }
+} catch(e) {}
 </script>
 </body>
 </html>
