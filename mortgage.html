@@ -800,7 +800,7 @@ tr:hover td{background:var(--bg-elevated);}
         <div class="card-body">
           <div class="field">
             <div class="f-label">שווי הנכס (₪) <span class="tip-icon">?<span class="tip-text">מחיר הרכישה בפועל או שווי השוק — הגבוה מביניהם</span></span></div>
-            <input type="number" id="tax-property-val" value="" placeholder="שווי הנכס" oninput="updateTax()">
+            <input type="number" id="tax-property-val" value="" placeholder="שווי הנכס" oninput="syncPropertyValue(this.value);updateTax()">
           </div>
           <div class="field">
             <div class="f-label">סוג רוכש <span class="tip-icon">?<span class="tip-text">רוכש דירה יחידה נהנה ממדרגות מס נמוכות יותר. משקיע או בעל דירה נוספת — מדרגות גבוהות.</span></span></div>
@@ -893,7 +893,7 @@ tr:hover td{background:var(--bg-elevated);}
           </div>
           <div class="field" id="equity-property-field" style="display:none;">
             <div class="f-label">שווי נכס (לחישוב אקוויטי)</div>
-            <input type="number" id="equity-property-val" value="" placeholder="הזן שווי נכס" oninput="updateGraph()">
+            <input type="number" id="equity-property-val" value="" placeholder="הזן שווי נכס" oninput="syncPropertyValue(this.value);updateGraph()">
           </div>
           <div class="divider"></div>
           <div class="four-col">
@@ -1100,6 +1100,15 @@ window.loadFirebaseData = function(state) {
   // Update localStorage backup
   try { localStorage.setItem('mortgageState', JSON.stringify(mortgageState)); } catch(e) {}
 };
+
+// Sync both property value inputs + save
+function syncPropertyValue(val) {
+  const el1 = document.getElementById('equity-property-val');
+  const el2 = document.getElementById('tax-property-val');
+  if (el1) el1.value = val;
+  if (el2) el2.value = val;
+  saveMortgage();
+}
 
 // Backwards compat alias
 function saveTranches() { saveMortgage(); }
