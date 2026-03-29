@@ -5902,8 +5902,11 @@
                 const mortgage = JSON.parse(raw);
 
                 // Extract property value and remaining balance
-                const propertyValue = mortgage.propertyValue || mortgage.loanAmount || 0;
+                const propertyValue = (mortgage.propertyValue && mortgage.propertyValue > 0) ? mortgage.propertyValue : 0;
                 const remainingBalance = mortgage.remainingBalance || mortgage.loanAmount || 0;
+                if(!propertyValue) {
+                    notify('שווי הנכס לא הוגדר. הגדר אותו במחשבון המשכנתא (טאב מס ועמלות → שווי נכס).');
+                }
                 const monthlyPayment = mortgage.monthlyPayment || 0;
 
                 if(!propertyValue && !remainingBalance) { notify('נתוני המשכנתא ריקים'); return; }

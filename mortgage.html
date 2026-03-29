@@ -1070,8 +1070,17 @@ function saveMortgage() {
 // Called by Firebase module when data loads from cloud
 window.loadFirebaseData = function(state) {
   if (!state || !state.tranches) return;
-  // Skip if identical
-  if (JSON.stringify(mortgageState) === JSON.stringify(state)) return;
+
+  // Compare tranches content only (ignore lastModified etc.)
+  const localTranches = JSON.stringify(currentTranches);
+  const cloudTranches = JSON.stringify(state.tranches);
+  const localProp = document.getElementById('equity-property-val')?.value || '';
+  const cloudProp = state.propertyValue || '';
+
+  if (localTranches === cloudTranches && localProp === cloudProp) {
+    console.log('Firebase data identical to local, skipping reload');
+    return;
+  }
 
   mortgageState = state;
   currentTranches = mortgageState.tranches;
