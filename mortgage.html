@@ -800,7 +800,7 @@ tr:hover td{background:var(--bg-elevated);}
         <div class="card-body">
           <div class="field">
             <div class="f-label">שווי הנכס (₪) <span class="tip-icon">?<span class="tip-text">מחיר הרכישה בפועל או שווי השוק — הגבוה מביניהם</span></span></div>
-            <input type="number" id="tax-property-val" value="1800000" oninput="updateTax()">
+            <input type="number" id="tax-property-val" value="" placeholder="שווי הנכס" oninput="updateTax()">
           </div>
           <div class="field">
             <div class="f-label">סוג רוכש <span class="tip-icon">?<span class="tip-text">רוכש דירה יחידה נהנה ממדרגות מס נמוכות יותר. משקיע או בעל דירה נוספת — מדרגות גבוהות.</span></span></div>
@@ -833,7 +833,7 @@ tr:hover td{background:var(--bg-elevated);}
             </div>
             <div class="field">
               <div class="f-label">מחיר מכירה (₪)</div>
-              <input type="number" id="tax-shevach-sell" value="1800000" oninput="updateTax()">
+              <input type="number" id="tax-shevach-sell" value="" placeholder="מחיר מכירה" oninput="updateTax()">
             </div>
           </div>
         </div>
@@ -957,11 +957,8 @@ async function loadFromFirebase() {
         if (snapshot.exists()) {
             const saved = snapshot.data();
             if (saved.tranches && saved.tranches.length > 0) {
-                window._mortgageTranches = saved.tranches;
-                window._mortgageLoaded = true;
-                // Trigger reload in main script
                 if (typeof window.loadFirebaseData === 'function') {
-                    window.loadFirebaseData(saved.tranches, saved.propertyValue || '');
+                    window.loadFirebaseData(saved);
                 }
                 console.log('✅ Mortgage data loaded from Firebase');
             }
@@ -973,13 +970,12 @@ async function loadFromFirebase() {
     }
 }
 
-window._saveToFirebase = async function(tranches, propertyVal) {
+window._saveToFirebase = async function(state) {
     if (!currentUser || !firebaseReady) return;
     try {
         const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
         await setDoc(userDocRef, {
-            tranches: tranches,
-            propertyValue: propertyVal || '',
+            ...state,
             lastModified: new Date().toISOString()
         });
         console.log('✅ Mortgage saved to Firebase');
@@ -1019,57 +1015,85 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════ DATA ═══════════════════════════
-const MY_MORTGAGE = [
+const DEFAULT_TRANCHES = [
   {id:1, name:'משתנה כל 5 שנים', type:'var5', rate:5.55, principal:389956, months:340, anchor:4.51, spread:1.04},
   {id:2, name:'קבועה לא צמודה', type:'fix', rate:5.60, principal:196485, months:340}
 ];
 
-let currentTranches = (function() {
+// Single state object — like portfolio/finance pattern
+let mortgageState = (function() {
   try {
-    const saved = localStorage.getItem('mortgageTranches');
+    const saved = localStorage.getItem('mortgageState');
     if(saved) return JSON.parse(saved);
   } catch(e) {}
-  return JSON.parse(JSON.stringify(MY_MORTGAGE));
+  return {
+    tranches: JSON.parse(JSON.stringify(DEFAULT_TRANCHES)),
+    propertyValue: '',
+    taxPropertyValue: 1800000,
+    taxShevachSell: 1800000
+  };
 })();
+
+let currentTranches = mortgageState.tranches;
 let builderTranches = [];
 let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
 
-function saveTranches() {
-  if (_skipSave) return;
-  const propertyVal = document.getElementById('equity-property-val')?.value || '';
+function saveMortgage() {
+  // Collect all state from UI
+  mortgageState.tranches = currentTranches;
+  mortgageState.propertyValue = document.getElementById('equity-property-val')?.value || '';
+  mortgageState.taxPropertyValue = document.getElementById('tax-property-val')?.value || '';
+  mortgageState.taxShevachSell = document.getElementById('tax-shevach-sell')?.value || '';
+
+  try { localStorage.setItem('mortgageState', JSON.stringify(mortgageState)); } catch(e) {}
+  // Also sync mortgageData for Net Worth cross-system
   try {
-    localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches));
-    localStorage.setItem('mortgagePropertyValue', propertyVal);
+    const total = currentTranches.reduce((s,t)=>s+t.principal,0);
+    const monthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+    localStorage.setItem('mortgageData', JSON.stringify({
+      propertyValue: parseFloat(mortgageState.propertyValue) || 0,
+      loanAmount: total,
+      remainingBalance: total,
+      monthlyPayment: monthly,
+      weightedRate: weightedRate(currentTranches),
+      totalInterest: currentTranches.reduce((s,t)=>s+totalInterest(t.rate,t.months,t.principal),0),
+      tranches: currentTranches.length,
+      lastUpdate: new Date().toISOString()
+    }));
   } catch(e) {}
-  // Also save to Firebase if available
+  // Save to Firebase
   if (typeof window._saveToFirebase === 'function') {
-    window._saveToFirebase(currentTranches, propertyVal);
+    window._saveToFirebase(mortgageState);
   }
 }
 
 // Called by Firebase module when data loads from cloud
-window.loadFirebaseData = function(tranches, propertyVal) {
-  // Compare with current data — skip if identical (avoid double refresh)
-  const isSame = JSON.stringify(currentTranches) === JSON.stringify(tranches);
-  if (isSame && !propertyVal) return;
+window.loadFirebaseData = function(state) {
+  if (!state || !state.tranches) return;
+  // Skip if identical
+  if (JSON.stringify(mortgageState) === JSON.stringify(state)) return;
 
-  currentTranches = tranches;
+  mortgageState = state;
+  currentTranches = mortgageState.tranches;
   nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+
+  // Restore UI values
+  const propEl = document.getElementById('equity-property-val');
+  if (propEl && mortgageState.propertyValue) propEl.value = mortgageState.propertyValue;
+  const taxPropEl = document.getElementById('tax-property-val');
+  if (taxPropEl && mortgageState.taxPropertyValue) taxPropEl.value = mortgageState.taxPropertyValue;
+  const taxSellEl = document.getElementById('tax-shevach-sell');
+  if (taxSellEl && mortgageState.taxShevachSell) taxSellEl.value = mortgageState.taxShevachSell;
+
   renderCurrentTranches();
   updateCurrentSummary();
 
-  // Restore property value
-  if (propertyVal) {
-    const el = document.getElementById('equity-property-val');
-    if (el) el.value = propertyVal;
-  }
-
   // Update localStorage backup
-  try {
-    localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches));
-    if (propertyVal) localStorage.setItem('mortgagePropertyValue', propertyVal);
-  } catch(e) {}
+  try { localStorage.setItem('mortgageState', JSON.stringify(mortgageState)); } catch(e) {}
 };
+
+// Backwards compat alias
+function saveTranches() { saveMortgage(); }
 
 const TYPE_LABELS = {prime:'פריים',var5:'משתנה 5Y',var1:'משתנה 1Y',fix:'קבועה ל"צ',cpi:'קבועה צמודה'};
 const TYPE_BADGES = {prime:'b-pri',var5:'b-mut',var1:'b-mut',fix:'b-fix',cpi:'b-cpi'};
@@ -1393,23 +1417,8 @@ function updateCurrentSummary() {
   }
   document.getElementById('amort-table').innerHTML = rows;
 
-  // Save to localStorage for cross-system sync (Net Worth)
-  try {
-    const propertyVal = parseFloat(document.getElementById('equity-property-val')?.value) || 0;
-    localStorage.setItem('mortgageData', JSON.stringify({
-      propertyValue: propertyVal,
-      loanAmount: total,
-      remainingBalance: total,
-      monthlyPayment: monthly,
-      weightedRate: wavg,
-      totalInterest: totalInt,
-      tranches: currentTranches.length,
-      lastUpdate: new Date().toISOString()
-    }));
-  } catch(e) { console.warn('Mortgage localStorage save failed:', e); }
-
-  // Save tranches to localStorage + Firebase
-  saveTranches();
+  // Save everything (localStorage + Firebase + mortgageData for Net Worth)
+  saveMortgage();
 }
 
 // ═══════════════════════════ EARLY REPAYMENT ═══════════════════════════
@@ -2242,18 +2251,17 @@ function updateGraph() {
 }
 
 // ═══════════════════════════ INIT ═══════════════════════════
-// Restore saved property value BEFORE render (so saveTranches doesn't overwrite it)
-let _skipSave = true;
-try {
-  const savedPropVal = localStorage.getItem('mortgagePropertyValue');
-  if (savedPropVal) {
-    const el = document.getElementById('equity-property-val');
-    if (el) el.value = savedPropVal;
-  }
-} catch(e) {}
+// Restore all saved UI values from mortgageState BEFORE render
+(function restoreState() {
+  const propEl = document.getElementById('equity-property-val');
+  if (propEl && mortgageState.propertyValue) propEl.value = mortgageState.propertyValue;
+  const taxPropEl = document.getElementById('tax-property-val');
+  if (taxPropEl && mortgageState.taxPropertyValue) taxPropEl.value = mortgageState.taxPropertyValue;
+  const taxSellEl = document.getElementById('tax-shevach-sell');
+  if (taxSellEl && mortgageState.taxShevachSell) taxSellEl.value = mortgageState.taxShevachSell;
+})();
 
 renderCurrentPage();
-_skipSave = false;
 </script>
 </body>
 </html>
