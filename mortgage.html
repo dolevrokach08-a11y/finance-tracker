@@ -920,6 +920,74 @@ tr:hover td{background:var(--bg-elevated);}
   </div>
 </div>
 
+<script type="module">
+// ═══════════════════════════ FIREBASE ═══════════════════════════
+let auth, db, onAuthStateChanged, doc, setDoc, getDoc;
+let firebaseReady = false;
+let currentUser = null;
+
+try {
+    const fb = await import('./firebase-config.js');
+    auth = fb.auth;
+    db = fb.db;
+    onAuthStateChanged = fb.onAuthStateChanged;
+    doc = fb.doc;
+    setDoc = fb.setDoc;
+    getDoc = fb.getDoc;
+    firebaseReady = true;
+} catch(e) {
+    console.warn('Firebase not available, using localStorage only:', e.message);
+}
+
+if (firebaseReady) {
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            currentUser = user;
+            console.log('Mortgage: User authenticated:', user.email);
+            await loadFromFirebase();
+        }
+    });
+}
+
+async function loadFromFirebase() {
+    if (!currentUser || !firebaseReady) return;
+    try {
+        const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
+        const snapshot = await getDoc(userDocRef);
+        if (snapshot.exists()) {
+            const saved = snapshot.data();
+            if (saved.tranches && saved.tranches.length > 0) {
+                window._mortgageTranches = saved.tranches;
+                window._mortgageLoaded = true;
+                // Trigger reload in main script
+                if (typeof window.loadFirebaseData === 'function') {
+                    window.loadFirebaseData(saved.tranches);
+                }
+                console.log('✅ Mortgage data loaded from Firebase');
+            }
+        } else {
+            console.log('No mortgage data in Firebase, using local');
+        }
+    } catch(e) {
+        console.error('Firebase load failed:', e);
+    }
+}
+
+window._saveToFirebase = async function(tranches) {
+    if (!currentUser || !firebaseReady) return;
+    try {
+        const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
+        await setDoc(userDocRef, {
+            tranches: tranches,
+            lastModified: new Date().toISOString()
+        });
+        console.log('✅ Mortgage saved to Firebase');
+    } catch(e) {
+        console.error('Firebase save failed:', e);
+    }
+};
+</script>
+
 <script>
 // ═══════════════════════════ THEME ═══════════════════════════
 function toggleTheme() {
@@ -955,9 +1023,34 @@ const MY_MORTGAGE = [
   {id:2, name:'קבועה לא צמודה', type:'fix', rate:5.60, principal:196485, months:340}
 ];
 
-let currentTranches = JSON.parse(JSON.stringify(MY_MORTGAGE));
+let currentTranches = (function() {
+  try {
+    const saved = localStorage.getItem('mortgageTranches');
+    if(saved) return JSON.parse(saved);
+  } catch(e) {}
+  return JSON.parse(JSON.stringify(MY_MORTGAGE));
+})();
 let builderTranches = [];
-let nextId = 10;
+let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+
+function saveTranches() {
+  try { localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches)); } catch(e) {}
+  // Also save to Firebase if available
+  if (typeof window._saveToFirebase === 'function') {
+    window._saveToFirebase(currentTranches);
+  }
+}
+
+// Called by Firebase module when data loads from cloud
+window.loadFirebaseData = function(tranches) {
+  currentTranches = tranches;
+  nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+  renderCurrentTranches();
+  updateCurrentSummary();
+  // Also update localStorage backup
+  try { localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches)); } catch(e) {}
+  showToast('נתונים נטענו מהענן');
+};
 
 const TYPE_LABELS = {prime:'פריים',var5:'משתנה 5Y',var1:'משתנה 1Y',fix:'קבועה ל"צ',cpi:'קבועה צמודה'};
 const TYPE_BADGES = {prime:'b-pri',var5:'b-mut',var1:'b-mut',fix:'b-fix',cpi:'b-cpi'};
@@ -1295,6 +1388,9 @@ function updateCurrentSummary() {
       lastUpdate: new Date().toISOString()
     }));
   } catch(e) { console.warn('Mortgage localStorage save failed:', e); }
+
+  // Save tranches to localStorage + Firebase
+  saveTranches();
 }
 
 // ═══════════════════════════ EARLY REPAYMENT ═══════════════════════════
