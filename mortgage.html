@@ -1035,6 +1035,7 @@ let builderTranches = [];
 let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
 
 function saveTranches() {
+  if (_skipSave) return;
   const propertyVal = document.getElementById('equity-property-val')?.value || '';
   try {
     localStorage.setItem('mortgageTranches', JSON.stringify(currentTranches));
@@ -2241,9 +2242,8 @@ function updateGraph() {
 }
 
 // ═══════════════════════════ INIT ═══════════════════════════
-renderCurrentPage();
-
-// Restore saved property value from localStorage
+// Restore saved property value BEFORE render (so saveTranches doesn't overwrite it)
+let _skipSave = true;
 try {
   const savedPropVal = localStorage.getItem('mortgagePropertyValue');
   if (savedPropVal) {
@@ -2251,6 +2251,9 @@ try {
     if (el) el.value = savedPropVal;
   }
 } catch(e) {}
+
+renderCurrentPage();
+_skipSave = false;
 </script>
 </body>
 </html>
