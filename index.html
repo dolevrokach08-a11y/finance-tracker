@@ -466,11 +466,11 @@
                 if (Array.isArray(finance.bills)) {
                     totalBills = finance.bills.reduce((s, item) => s + (Number(item.amount) || 0), 0);
                 }
-                if (finance.netWorthAssets) {
-                    assetsTotal = Object.values(finance.netWorthAssets).reduce((s, v) => s + (Number(v) || 0), 0);
+                if (Array.isArray(finance.netWorthAssets)) {
+                    assetsTotal = finance.netWorthAssets.reduce((s, a) => s + (Number(a.value) || 0), 0);
                 }
-                if (finance.netWorthLiabilities) {
-                    liabilitiesTotal = Object.values(finance.netWorthLiabilities).reduce((s, v) => s + (Number(v) || 0), 0);
+                if (Array.isArray(finance.netWorthLiabilities)) {
+                    liabilitiesTotal = finance.netWorthLiabilities.reduce((s, a) => s + (Number(a.value) || 0), 0);
                 }
             }
 
@@ -482,7 +482,9 @@
                 }
             }
 
-            const netWorth = assetsTotal - liabilitiesTotal + portfolioValue;
+            // netWorthAssets already includes portfolio value (synced from portfolio page),
+            // so don't add portfolioValue again to avoid double-counting
+            const netWorth = assetsTotal - liabilitiesTotal;
             const monthlySavings = totalIncome - totalExpenses;
 
             setDashValue('dashNetWorth', netWorth);
