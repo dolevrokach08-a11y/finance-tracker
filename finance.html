@@ -5391,35 +5391,34 @@
 
         // ========== גרפים חדשים - מתוקנים! ==========
         
-        // Sankey Chart - זרימת כסף אמיתית עם D3.js!
+        // Sankey Chart - זרימת כסף עם D3.js
         function renderSankeyChart() {
             const container = document.getElementById('sankey-container');
             if(!container) return;
-            
-            // ניקוי
+
             container.innerHTML = '';
-            
+
             const months = getReportMonths();
-            
+
             // איסוף נתונים
             const incomeByCategory = {};
             const expenseByCategory = {};
             let totalIncome = 0;
-            
+
             months.forEach(m => {
                 data.transactions.filter(t=>t.month===m.key&&t.type==='income').forEach(t=>{
                     incomeByCategory[t.cat] = (incomeByCategory[t.cat]||0) + t.amt;
                     totalIncome += t.amt;
                 });
-                
+
                 data.transactions.filter(t=>t.month===m.key&&t.type==='expense').forEach(t=>{
                     expenseByCategory[t.cat] = (expenseByCategory[t.cat]||0) + t.amt;
                 });
-                
+
                 const today = new Date();
                 const [y,mn] = m.key.split('-').map(Number);
                 const monthDate = new Date(y, mn-1);
-                
+
                 if(monthDate <= today) {
                     data.fixedIncomes.forEach(f=>{
                         if(getMonthsInRange(f.start,f.end).includes(m.key)) {
@@ -5434,162 +5433,194 @@
                     });
                 }
             });
-            
+
             if(totalIncome === 0) {
                 container.innerHTML = '<div class="text-center text-gray-500 py-20">אין נתונים להצגה</div>';
                 return;
             }
-            
-            // בניית nodes ו-links לסנקי
+
+            // קיבוץ קטגוריות קטנות (מתחת ל-3% מסה"כ הכנסות) ל"אחר"
+            const MIN_PCT = 0.03;
+            function consolidate(catMap, total) {
+                const sorted = Object.entries(catMap).sort((a,b) => b[1] - a[1]);
+                const result = {};
+                let otherSum = 0;
+                sorted.forEach(([cat, amt]) => {
+                    if(amt / total >= MIN_PCT) {
+                        result[cat] = amt;
+                    } else {
+                        otherSum += amt;
+                    }
+                });
+                if(otherSum > 0) result['אחר (קטנות)'] = otherSum;
+                return result;
+            }
+
+            const consolidatedIncome = consolidate(incomeByCategory, totalIncome);
+            const consolidatedExpense = consolidate(expenseByCategory, totalIncome);
+
+            // בניית nodes ו-links
             const nodes = [];
             const links = [];
             let nodeIndex = 0;
-            
-            // הוספת הכנסות
+
+            // הכנסות - ממוינות מגדול לקטן
             const incomeNodes = {};
-            Object.entries(incomeByCategory).forEach(([cat, amt]) => {
-                incomeNodes[cat] = nodeIndex;
-                nodes.push({ name: cat, type: 'income' });
-                nodeIndex++;
-            });
-            
-            // צומת ביניים - "סה"כ הכנסות"
+            Object.entries(consolidatedIncome)
+                .sort((a,b) => b[1] - a[1])
+                .forEach(([cat, amt]) => {
+                    incomeNodes[cat] = nodeIndex;
+                    nodes.push({ name: cat, type: 'income' });
+                    nodeIndex++;
+                });
+
+            // צומת ביניים
             const totalIncomeNode = nodeIndex;
             nodes.push({ name: 'סה"כ הכנסות', type: 'total' });
             nodeIndex++;
-            
-            // קישורים מהכנסות לסה"כ
-            Object.entries(incomeByCategory).forEach(([cat, amt]) => {
-                links.push({
-                    source: incomeNodes[cat],
-                    target: totalIncomeNode,
-                    value: amt
-                });
+
+            Object.entries(consolidatedIncome).forEach(([cat, amt]) => {
+                links.push({ source: incomeNodes[cat], target: totalIncomeNode, value: amt });
             });
-            
-            // הוספת הוצאות + מעשר + חיסכון
-            const expenseNodes = {};
-            Object.entries(expenseByCategory).forEach(([cat, amt]) => {
-                expenseNodes[cat] = nodeIndex;
-                nodes.push({ name: cat, type: 'expense' });
-                nodeIndex++;
-            });
-            
+
+            // הוצאות - ממוינות מגדול לקטן
+            const totalExpense = Object.values(consolidatedExpense).reduce((s,v)=>s+v, 0);
             const tithe = totalIncome * 0.1;
-            const totalExpense = Object.values(expenseByCategory).reduce((s,v)=>s+v, 0);
             const savings = totalIncome - totalExpense - tithe;
-            
+
+            const expenseNodes = {};
+            Object.entries(consolidatedExpense)
+                .sort((a,b) => b[1] - a[1])
+                .forEach(([cat, amt]) => {
+                    expenseNodes[cat] = nodeIndex;
+                    nodes.push({ name: cat, type: 'expense' });
+                    nodeIndex++;
+                });
+
             const titheNode = nodeIndex++;
             nodes.push({ name: 'מעשר', type: 'tithe' });
-            
+
             let savingsNode = -1;
             if(savings > 0) {
                 savingsNode = nodeIndex++;
                 nodes.push({ name: 'חיסכון', type: 'savings' });
             }
-            
-            // קישורים מסה"כ הכנסות להוצאות
-            Object.entries(expenseByCategory).forEach(([cat, amt]) => {
-                links.push({
-                    source: totalIncomeNode,
-                    target: expenseNodes[cat],
-                    value: amt
-                });
+
+            Object.entries(consolidatedExpense).forEach(([cat, amt]) => {
+                links.push({ source: totalIncomeNode, target: expenseNodes[cat], value: amt });
             });
-            
-            links.push({
-                source: totalIncomeNode,
-                target: titheNode,
-                value: tithe
-            });
-            
+            links.push({ source: totalIncomeNode, target: titheNode, value: tithe });
             if(savings > 0) {
-                links.push({
-                    source: totalIncomeNode,
-                    target: savingsNode,
-                    value: savings
-                });
+                links.push({ source: totalIncomeNode, target: savingsNode, value: savings });
             }
-            
+
+            // חישוב גובה דינמי לפי מספר צמתים
+            const rightNodes = Object.keys(consolidatedExpense).length + 1 + (savings > 0 ? 1 : 0);
+            const leftNodes = Object.keys(consolidatedIncome).length;
+            const maxNodes = Math.max(leftNodes, rightNodes);
+            const chartHeight = Math.max(500, maxNodes * 55);
+            container.style.height = chartHeight + 'px';
+
             // יצירת SVG
-            const margin = { top: 10, right: 150, bottom: 10, left: 150 };
+            const margin = { top: 20, right: 180, bottom: 20, left: 180 };
             const width = container.clientWidth - margin.left - margin.right;
-            const height = 600 - margin.top - margin.bottom;
-            
+            const height = chartHeight - margin.top - margin.bottom;
+
             const svg = d3.select(container)
                 .append('svg')
                 .attr('width', container.clientWidth)
-                .attr('height', 600)
+                .attr('height', chartHeight)
                 .append('g')
                 .attr('transform', `translate(${margin.left},${margin.top})`);
-            
-            // יצירת הסנקי
+
             const sankey = d3.sankey()
-                .nodeWidth(20)
-                .nodePadding(15)
+                .nodeWidth(14)
+                .nodePadding(20)
                 .extent([[0, 0], [width, height]]);
-            
+
             const graph = sankey({
                 nodes: nodes.map(d => Object.assign({}, d)),
                 links: links.map(d => Object.assign({}, d))
             });
-            
-            // צבעים
+
+            // צבעים משופרים
             const colorMap = {
-                income: '#10b981',
-                expense: '#ef4444',
-                tithe: '#8b5cf6',
-                savings: '#3b82f6',
-                total: '#6b7280'
+                income: '#00f5d4',
+                expense: '#ff6b6b',
+                tithe: '#a78bfa',
+                savings: '#60a5fa',
+                total: '#94a3b8'
             };
-            
-            // ציור קישורים
+
+            // gradient לקישורים
+            const defs = svg.append('defs');
+            graph.links.forEach((link, i) => {
+                const gradient = defs.append('linearGradient')
+                    .attr('id', `sankey-grad-${i}`)
+                    .attr('gradientUnits', 'userSpaceOnUse')
+                    .attr('x1', link.source.x1).attr('x2', link.target.x0);
+                gradient.append('stop').attr('offset', '0%')
+                    .attr('stop-color', colorMap[link.source.type] || '#ccc')
+                    .attr('stop-opacity', 0.45);
+                gradient.append('stop').attr('offset', '100%')
+                    .attr('stop-color', colorMap[link.target.type] || '#ccc')
+                    .attr('stop-opacity', 0.45);
+            });
+
+            // ציור קישורים עם gradient
             svg.append('g')
                 .selectAll('.link')
                 .data(graph.links)
                 .enter().append('path')
                 .attr('class', 'link')
                 .attr('d', d3.sankeyLinkHorizontal())
-                .style('stroke', d => colorMap[d.source.type] || '#ccc')
-                .style('stroke-width', d => Math.max(1, d.width))
+                .style('stroke', (d,i) => `url(#sankey-grad-${i})`)
+                .style('stroke-width', d => Math.max(2, d.width))
                 .style('fill', 'none')
-                .style('opacity', 0.5)
-                .on('mouseover', function(event, d) {
-                    d3.select(this).style('opacity', 0.8);
+                .style('opacity', 1)
+                .on('mouseover', function() {
+                    d3.select(this).style('stroke-opacity', 1).style('filter', 'brightness(1.3)');
                 })
-                .on('mouseout', function(event, d) {
-                    d3.select(this).style('opacity', 0.5);
+                .on('mouseout', function() {
+                    d3.select(this).style('stroke-opacity', 1).style('filter', 'none');
                 })
                 .append('title')
-                .text(d => `${d.source.name} → ${d.target.name}\n₪${d.value.toLocaleString()}`);
-            
+                .text(d => `${d.source.name} → ${d.target.name}\n₪${Math.round(d.value).toLocaleString()} (${(d.value/totalIncome*100).toFixed(1)}%)`);
+
             // ציור צמתים
             const node = svg.append('g')
                 .selectAll('.node')
                 .data(graph.nodes)
                 .enter().append('g')
                 .attr('class', 'node');
-            
+
             node.append('rect')
                 .attr('x', d => d.x0)
                 .attr('y', d => d.y0)
-                .attr('height', d => d.y1 - d.y0)
+                .attr('height', d => Math.max(4, d.y1 - d.y0))
                 .attr('width', d => d.x1 - d.x0)
                 .style('fill', d => colorMap[d.type] || '#999')
-                .style('stroke', '#000')
-                .style('stroke-width', 0.5)
+                .style('stroke', 'rgba(255,255,255,0.15)')
+                .style('stroke-width', 1)
+                .attr('rx', 3)
                 .append('title')
-                .text(d => `${d.name}\n₪${d.value.toLocaleString()}`);
-            
-            // תוויות
+                .text(d => `${d.name}\n₪${Math.round(d.value).toLocaleString()}`);
+
+            // תוויות - צבע לבן, עם אחוזים
             node.append('text')
-                .attr('x', d => d.x0 < width / 2 ? d.x1 + 6 : d.x0 - 6)
+                .attr('x', d => d.x0 < width / 2 ? d.x1 + 10 : d.x0 - 10)
                 .attr('y', d => (d.y1 + d.y0) / 2)
                 .attr('dy', '0.35em')
                 .attr('text-anchor', d => d.x0 < width / 2 ? 'start' : 'end')
-                .style('font-size', '12px')
+                .style('font-size', '13px')
                 .style('font-weight', '600')
-                .text(d => `${d.name} (₪${(d.value/1000).toFixed(1)}K)`);
+                .style('fill', '#e2e8f0')
+                .style('text-shadow', '0 1px 3px rgba(0,0,0,0.5)')
+                .text(d => {
+                    const pct = (d.value / totalIncome * 100).toFixed(0);
+                    const val = d.value >= 1000 ? `₪${(d.value/1000).toFixed(1)}K` : `₪${Math.round(d.value)}`;
+                    return d.type === 'total' ? `${d.name} (${val})` : `${d.name} (${val}, ${pct}%)`;
+                });
         }
         
         // Waterfall Chart - 3 עמודות פשוטות וברורות!
