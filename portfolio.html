@@ -6914,7 +6914,7 @@ function calculateTWRv3() {
                 try {
                     const dataToSave = {
                         holdings: portfolio.holdings || [],
-                        groups: [
+                        groups: portfolio.groups || [
                             { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
                             { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
                             { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
@@ -6927,6 +6927,14 @@ function calculateTWRv3() {
                         sales: portfolio.sales || [],
                         snapshots: portfolio.snapshots || [],
                         cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
+                        transactions: portfolio.transactions || [],
+                        capitalMovements: portfolio.capitalMovements || [],
+                        bondsCapitalMovements: portfolio.bondsCapitalMovements || [],
+                        bondsSales: portfolio.bondsSales || [],
+                        portfolioSnapshots: portfolio.portfolioSnapshots || [],
+                        cashFlows: portfolio.cashFlows || [],
+                        dividends: portfolio.dividends || [],
+                        holdingFees: portfolio.holdingFees || {},
                         watchlist: portfolio.watchlist || []
                     };
                     localStorage.setItem('portfolio', JSON.stringify(dataToSave));
@@ -6979,6 +6987,8 @@ function calculateTWRv3() {
                         bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
                         portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
                         cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
+                        dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
+                        holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
                         watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
                     };
 
@@ -7047,6 +7057,9 @@ function calculateTWRv3() {
                         bondsCapitalMovements: Array.isArray(loaded.bondsCapitalMovements) ? loaded.bondsCapitalMovements : [],
                         bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
                         portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
+                        cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
+                        dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
+                        holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
                         watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
                     };
 
