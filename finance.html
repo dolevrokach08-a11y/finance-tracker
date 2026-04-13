@@ -800,7 +800,12 @@
                 <h1 class="text-4xl font-bold text-white mb-2" style="text-shadow: 0 2px 10px rgba(0,0,0,0.2);">💰 מעקב כספי חכם</h1>
                 <p class="text-white/80" style="animation: fadeInUp 0.6s ease 0.2s both;">נהל את הכספים שלך בפשטות ובקלות</p>
             </div>
-            <div style="width:174px;"></div>
+            <div style="display:flex;justify-content:flex-end;min-width:174px;">
+                <button id="syncWidget" type="button" onclick="forceSyncNow()" style="display:none;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border,#374151);background:var(--bg-elevated,#1e293b);cursor:pointer;font-size:13px;font-weight:500;color:var(--text-primary,#e5e7eb);transition:all .2s;min-width:150px;justify-content:center;white-space:nowrap;">
+                    <span id="syncIcon">⏳</span>
+                    <span id="syncLabel">טוען...</span>
+                </button>
+            </div>
         </div>
         
         <!-- Offline Indicator Banner -->
@@ -2000,19 +2005,99 @@
         let localLoadTime = null;           // When we loaded data locally
         let cloudLastModified = null;       // lastModified from Firebase when we loaded
         let isOffline = !navigator.onLine;  // Track offline status
-        
+
+        // Sync widget state
+        let syncStatus = 'loading';         // 'loading' | 'synced' | 'syncing' | 'pending' | 'error' | 'local-only'
+        let dataSource = null;              // 'cloud' | 'local'
+        let lastSyncTime = null;            // ISO timestamp of last successful cloud sync
+        const SYNC_META_KEY = 'financeTrackerData_meta';
+
+        function getSyncMeta() {
+            try {
+                const raw = localStorage.getItem(SYNC_META_KEY);
+                return raw ? JSON.parse(raw) : null;
+            } catch(e) { return null; }
+        }
+
+        function setSyncMeta(meta) {
+            try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); } catch(e) {}
+        }
+
+        function updateSyncWidget() {
+            const widget = document.getElementById('syncWidget');
+            const iconEl = document.getElementById('syncIcon');
+            const labelEl = document.getElementById('syncLabel');
+            if (!widget || !iconEl || !labelEl) return;
+
+            // Hide widget entirely in demo mode
+            if (_isDemoMode) {
+                widget.style.display = 'none';
+                return;
+            }
+            widget.style.display = 'inline-flex';
+
+            const states = {
+                'loading':    { icon: '⏳', label: 'טוען...',           color: '#6b7280', bg: 'rgba(107,114,128,0.1)' },
+                'synced':     { icon: '✅', label: 'מסונכרן',           color: '#10b981', bg: 'rgba(16,185,129,0.12)' },
+                'syncing':    { icon: '🔄', label: 'מסנכרן...',         color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' },
+                'pending':    { icon: '🟡', label: 'ממתין לסנכרון',     color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+                'error':      { icon: '⚠️', label: 'שגיאה בסנכרון',     color: '#ef4444', bg: 'rgba(239,68,68,0.15)' },
+                'local-only': { icon: '📴', label: 'מקומי בלבד',        color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' }
+            };
+            const s = states[syncStatus] || states['loading'];
+            iconEl.textContent = s.icon;
+            labelEl.textContent = s.label;
+            widget.style.borderColor = s.color;
+            widget.style.color = s.color;
+            widget.style.background = s.bg;
+
+            // Build tooltip
+            const tipLines = [];
+            if (dataSource === 'cloud') tipLines.push('נטען מהענן (Firebase)');
+            else if (dataSource === 'local') tipLines.push('נטען ממאגר מקומי (localStorage)');
+            if (lastSyncTime) {
+                try { tipLines.push('סנכרון אחרון: ' + new Date(lastSyncTime).toLocaleString('he-IL')); } catch(e) {}
+            }
+            const meta = getSyncMeta();
+            if (meta && meta.hasUnsyncedChanges) tipLines.push('יש שינויים מקומיים שטרם סונכרנו');
+            tipLines.push('לחץ כדי לסנכרן עכשיו');
+            widget.title = tipLines.join('\n');
+        }
+
+        async function forceSyncNow() {
+            if (_isDemoMode) { notify('מצב הדגמה - אין סנכרון'); return; }
+            if (!currentUser) { notify('לא מחובר - לא ניתן לסנכרן'); return; }
+            if (!navigator.onLine) { notify('⚠️ אין חיבור לאינטרנט'); return; }
+            if (syncStatus === 'syncing') return;
+            notify('🔄 מסנכרן...');
+            await saveToFirebase(false);
+            if (syncStatus === 'synced') notify('✅ הנתונים סונכרנו בהצלחה');
+        }
+
         // Listen for online/offline events
         window.addEventListener('online', () => {
             isOffline = false;
             const banner = document.getElementById('offlineBanner');
             if (banner) banner.style.display = 'none';
             notify('✅ חזרת לאינטרנט');
+
+            // Auto-retry pending sync when connection is restored
+            const meta = getSyncMeta();
+            if (meta && meta.hasUnsyncedChanges && currentUser && !_isDemoMode) {
+                setTimeout(() => {
+                    console.log('🔄 Auto-retrying sync after reconnect');
+                    forceSyncNow();
+                }, 1500);
+            } else {
+                updateSyncWidget();
+            }
         });
         window.addEventListener('offline', () => {
             isOffline = true;
             const banner = document.getElementById('offlineBanner');
             if (banner) banner.style.display = 'block';
             notify('⚠️ אין חיבור לאינטרנט - שינויים יישמרו מקומית בלבד');
+            updateSyncWidget();
         });
         
         // Check initial offline state after DOM loads
@@ -2198,31 +2283,41 @@
                 console.warn('No user logged in, cannot save');
                 return;
             }
-            
-            // If offline, only save locally
+
+            // If offline, only save locally - mark as pending
             if (isOffline || !navigator.onLine) {
                 console.log('📴 Offline - saving to localStorage only');
                 localStorage.setItem('financeTrackerData', JSON.stringify(data));
+                setSyncMeta({
+                    localLastModified: new Date().toISOString(),
+                    cloudLastModified: cloudLastModified,
+                    hasUnsyncedChanges: true
+                });
+                syncStatus = 'pending';
+                updateSyncWidget();
                 notify('⚠️ אופליין - נשמר מקומית בלבד');
                 return;
             }
-            
+
+            syncStatus = 'syncing';
+            updateSyncWidget();
+
             try {
                 const userDocRef = doc(db, 'users', currentUser.uid, 'finance', 'data');
-                
+
                 // CONFLICT DETECTION: Check if cloud data is newer
                 if (!forceOverwrite && cloudLastModified) {
                     const cloudDoc = await getDoc(userDocRef);
                     if (cloudDoc.exists()) {
                         const currentCloudModified = cloudDoc.data()?.lastModified;
-                        
+
                         if (currentCloudModified && currentCloudModified > cloudLastModified) {
                             // Cloud has newer data than what we loaded!
                             console.warn('⚠️ Conflict detected!', {
                                 cloudLastModified: cloudLastModified,
                                 currentCloudModified: currentCloudModified
                             });
-                            
+
                             const userChoice = confirm(
                                 '⚠️ זוהה קונפליקט!\n\n' +
                                 'הנתונים בענן עודכנו ממכשיר אחר מאז שטענת את הדף.\n\n' +
@@ -2230,7 +2325,7 @@
                                 '• לחץ Cancel כדי לרענן ולטעון את הנתונים מהענן\n\n' +
                                 '💡 טיפ: אם לא בטוח, לחץ Cancel ויצא גיבוי קודם'
                             );
-                            
+
                             if (!userChoice) {
                                 // User chose to reload from cloud
                                 notify('🔄 טוען נתונים מהענן...');
@@ -2242,26 +2337,43 @@
                         }
                     }
                 }
-                
+
                 // Save to Firebase
                 const newLastModified = new Date().toISOString();
                 await setDoc(userDocRef, {
                     ...data,
                     lastModified: newLastModified
                 });
-                
+
                 // Update our tracking
                 cloudLastModified = newLastModified;
                 localLoadTime = new Date().toISOString();
-                
+                lastSyncTime = newLastModified;
+
                 console.log('✅ Data saved to Firebase');
-                
-                // Also save to localStorage as backup
+
+                // Also save to localStorage as backup and clear pending flag
                 localStorage.setItem('financeTrackerData', JSON.stringify(data));
+                setSyncMeta({
+                    localLastModified: newLastModified,
+                    cloudLastModified: newLastModified,
+                    hasUnsyncedChanges: false
+                });
+
+                syncStatus = 'synced';
+                dataSource = 'cloud';
+                updateSyncWidget();
             } catch(e) {
                 console.error('❌ Firebase save failed:', e);
-                // Fallback to localStorage only
+                // Fallback to localStorage only - mark as unsynced
                 localStorage.setItem('financeTrackerData', JSON.stringify(data));
+                setSyncMeta({
+                    localLastModified: new Date().toISOString(),
+                    cloudLastModified: cloudLastModified,
+                    hasUnsyncedChanges: true
+                });
+                syncStatus = 'error';
+                updateSyncWidget();
                 notify('שגיאה בשמירה בענן, נשמר מקומית');
             }
         }
@@ -2290,10 +2402,35 @@
 
                 if (docSnap.exists()) {
                     const firebaseData = docSnap.data();
+                    const cloudMod = firebaseData.lastModified || null;
+
+                    // PROTECTION: Check if local has unsynced changes newer than cloud.
+                    // This prevents refresh from wiping out locally-saved data that
+                    // failed to reach the cloud.
+                    const meta = getSyncMeta();
+                    if (meta && meta.hasUnsyncedChanges && meta.localLastModified &&
+                        (!cloudMod || meta.localLastModified > cloudMod)) {
+                        console.warn('⚠️ Local has unsynced changes newer than cloud - preserving local', {
+                            localLastModified: meta.localLastModified,
+                            cloudLastModified: cloudMod
+                        });
+                        notify('🟡 נמצאו שינויים מקומיים שטרם סונכרנו - משמר ודוחף לענן');
+
+                        // Load local version instead of overwriting
+                        const loaded = loadFromLocalStorage();
+                        if (loaded) {
+                            // Remember what the cloud had, for future conflict detection
+                            cloudLastModified = cloudMod;
+                            // Try to push local to cloud (force, since we explicitly chose local)
+                            setTimeout(() => saveToFirebase(true), 500);
+                        }
+                        return loaded;
+                    }
 
                     // Track the lastModified for conflict detection
-                    cloudLastModified = firebaseData.lastModified || null;
+                    cloudLastModified = cloudMod;
                     localLoadTime = new Date().toISOString();
+                    lastSyncTime = cloudMod;
 
                     delete firebaseData.lastModified; // Remove metadata from data object
                     data = firebaseData;
@@ -2305,8 +2442,18 @@
 
                     console.log('✅ Data loaded from Firebase', { cloudLastModified });
 
-                    // Also save to localStorage as backup
+                    // Also save to localStorage as backup and reset meta
                     localStorage.setItem('financeTrackerData', JSON.stringify(data));
+                    setSyncMeta({
+                        localLastModified: cloudMod,
+                        cloudLastModified: cloudMod,
+                        hasUnsyncedChanges: false
+                    });
+
+                    dataSource = 'cloud';
+                    syncStatus = 'synced';
+                    updateSyncWidget();
+
                     window.__financeData = data;
                     return true;
                 } else {
@@ -2340,7 +2487,19 @@
                     // Mark that we loaded from localStorage (no cloud reference)
                     localLoadTime = new Date().toISOString();
                     // Don't set cloudLastModified - we don't know what's in the cloud
-                    
+
+                    // Reflect state in the sync widget
+                    dataSource = 'local';
+                    const meta = getSyncMeta();
+                    if (meta && meta.hasUnsyncedChanges) {
+                        syncStatus = 'pending';
+                        lastSyncTime = meta.cloudLastModified || null;
+                    } else {
+                        syncStatus = 'local-only';
+                        lastSyncTime = meta ? (meta.cloudLastModified || null) : null;
+                    }
+                    updateSyncWidget();
+
                     console.log('✅ Data loaded from localStorage');
                     window.__financeData = data;
                     return true;
@@ -2348,6 +2507,8 @@
             } catch(e) {
                 console.error('❌ Load failed:', e);
             }
+            syncStatus = 'error';
+            updateSyncWidget();
             return false;
         }
         
@@ -5854,6 +6015,7 @@
         
         // Expose toggleTheme to window
         window.toggleTheme = toggleTheme;
+        window.forceSyncNow = forceSyncNow;
         
         // ═══════════════════════════ NET WORTH ═══════════════════════════
         const NW_CAT_LABELS = {
