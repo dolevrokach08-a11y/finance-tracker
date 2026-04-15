@@ -1,5 +1,5 @@
 // Service Worker for Finance Tracker PWA
-const CACHE_NAME = 'finance-tracker-v4';
+const CACHE_NAME = 'finance-tracker-v5';
 const urlsToCache = [
   '/finance-tracker/',
   '/finance-tracker/index.html',
@@ -7,7 +7,9 @@ const urlsToCache = [
   '/finance-tracker/portfolio.html',
   '/finance-tracker/finance.html',
   '/finance-tracker/tax-optimizer.html',
+  '/finance-tracker/mortgage.html',
   '/finance-tracker/firebase-config.js',
+  '/finance-tracker/sync-widget.js',
   '/finance-tracker/manifest.json',
   '/finance-tracker/icons/icon-192.png',
   '/finance-tracker/icons/icon-512.png'

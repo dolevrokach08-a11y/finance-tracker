@@ -106,6 +106,7 @@ a { color: hsl(142, 60%, 50%); }
 }
 .year-selector select option { background: hsl(220, 18%, 10%); }
 </style>
+<script src="sync-widget.js"></script>
 </head>
 <body>
 
@@ -116,6 +117,7 @@ a { color: hsl(142, 60%, 50%); }
     <a href="finance.html" title="מעקב כספי">💵</a>
     <a href="portfolio.html" title="תיק השקעות">📈</a>
     <a href="mortgage.html" title="מחשבון משכנתא">🏡</a>
+    <span id="syncWidgetSlot" style="display:inline-flex;margin-inline-start:6px;"></span>
   </div>
   <div class="nav-user" id="nav-user"></div>
 </nav>
@@ -155,16 +157,46 @@ a { color: hsl(142, 60%, 50%); }
   window.__financeDocRef = null;
   window.__financeData = null;
 
+  // Initialize sync widget. We share the same metaKey as finance.html
+  // because tax-optimizer writes to the SAME finance/data document.
+  if (window.SyncWidget) {
+    window.SyncWidget.init({
+      containerId: 'syncWidgetSlot',
+      metaKey: 'financeTrackerData_meta',
+      isDemoMode: () => _isDemoMode,
+      onForceSync: async () => {
+        // Re-save current finance data + tax settings to push any pending writes
+        if (window.__financeDocRef && window.__financeData) {
+          await setDoc(window.__financeDocRef, { ...window.__financeData, lastModified: new Date().toISOString() });
+        }
+        if (window.__pendingTaxSettings) {
+          await window.__saveTaxSettings(window.__pendingTaxSettings);
+        }
+      }
+    });
+  }
+
+  function _markSyncing() { if (window.SyncWidget) window.SyncWidget.markSyncing(); }
+  function _markSynced(ts) { if (window.SyncWidget) window.SyncWidget.markSynced(ts); }
+  function _markError() { if (window.SyncWidget) window.SyncWidget.markError(); }
+  function _markPending() { if (window.SyncWidget) window.SyncWidget.markPending(); }
+
   // Save settings to Firebase
   window.__saveTaxSettings = async (settings) => {
     if (_isDemoMode) return;
     const user = auth.currentUser;
     if (!user) return;
+    window.__pendingTaxSettings = settings;
+    if (!navigator.onLine) { _markPending(); return; }
+    _markSyncing();
     try {
       const ref = doc(db, 'users', user.uid, 'finance', 'taxSettings');
-      await setDoc(ref, { ...settings, lastModified: new Date().toISOString() });
+      const ts = new Date().toISOString();
+      await setDoc(ref, { ...settings, lastModified: ts });
+      _markSynced(ts);
     } catch (e) {
       console.error('Failed to save tax settings:', e);
+      _markError();
     }
   };
 
@@ -172,29 +204,40 @@ a { color: hsl(142, 60%, 50%); }
   window.__savePayslip = async (payslip) => {
     if (_isDemoMode) return false;
     if (!window.__financeDocRef) return false;
-    try {
-      const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
-      if (!data.payslips) data.payslips = [];
+    const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
+    if (!data.payslips) data.payslips = [];
 
-      // For form106: only replace entries with same month+earner+fileName (allows multiple employers)
-      // For regular payslips: replace entries with same month+earner (excluding form106 entries)
-      if (payslip.source === 'form106') {
-        data.payslips = data.payslips.filter(p =>
-          !(p.month === payslip.month && p.earner === payslip.earner && p.fileName === payslip.fileName)
-        );
-      } else {
-        data.payslips = data.payslips.filter(p =>
-          !(p.month === payslip.month && p.earner === payslip.earner && p.source !== 'form106')
-        );
-      }
-      data.payslips.push(payslip);
+    // For form106: only replace entries with same month+earner+fileName (allows multiple employers)
+    // For regular payslips: replace entries with same month+earner (excluding form106 entries)
+    if (payslip.source === 'form106') {
+      data.payslips = data.payslips.filter(p =>
+        !(p.month === payslip.month && p.earner === payslip.earner && p.fileName === payslip.fileName)
+      );
+    } else {
+      data.payslips = data.payslips.filter(p =>
+        !(p.month === payslip.month && p.earner === payslip.earner && p.source !== 'form106')
+      );
+    }
+    data.payslips.push(payslip);
 
-      await setDoc(window.__financeDocRef, { ...data, lastModified: new Date().toISOString() });
+    if (!navigator.onLine) {
       window.__financeData = data;
       window.__payslipData = { payslips: data.payslips, loaded: true };
+      _markPending();
+      return true;
+    }
+
+    _markSyncing();
+    try {
+      const ts = new Date().toISOString();
+      await setDoc(window.__financeDocRef, { ...data, lastModified: ts });
+      window.__financeData = data;
+      window.__payslipData = { payslips: data.payslips, loaded: true };
+      _markSynced(ts);
       return true;
     } catch (e) {
       console.error('Failed to save payslip:', e);
+      _markError();
       return false;
     }
   };
@@ -203,15 +246,27 @@ a { color: hsl(142, 60%, 50%); }
   window.__deletePayslip = async (payslipId) => {
     if (_isDemoMode) return false;
     if (!window.__financeDocRef || !window.__financeData) return false;
-    try {
-      const data = window.__financeData;
-      data.payslips = (data.payslips || []).filter(p => p.id !== payslipId);
-      await setDoc(window.__financeDocRef, { ...data, lastModified: new Date().toISOString() });
+    const data = window.__financeData;
+    data.payslips = (data.payslips || []).filter(p => p.id !== payslipId);
+
+    if (!navigator.onLine) {
       window.__financeData = data;
       window.__payslipData = { payslips: data.payslips, loaded: true };
+      _markPending();
+      return true;
+    }
+
+    _markSyncing();
+    try {
+      const ts = new Date().toISOString();
+      await setDoc(window.__financeDocRef, { ...data, lastModified: ts });
+      window.__financeData = data;
+      window.__payslipData = { payslips: data.payslips, loaded: true };
+      _markSynced(ts);
       return true;
     } catch (e) {
       console.error('Failed to delete payslip:', e);
+      _markError();
       return false;
     }
   };
@@ -333,9 +388,13 @@ a { color: hsl(142, 60%, 50%); }
 
           const result = processIncomeData(transactions, fixedIncomes);
           window.__taxData = { loaded: true, years: result.years, availableYears: result.availableYears };
+          if (window.SyncWidget) window.SyncWidget.markLoadedFromCloud(data.lastModified || null);
+        } else {
+          if (window.SyncWidget) window.SyncWidget.markLocalOnly();
         }
       } catch (e) {
         console.error('Failed to load finance data:', e);
+        if (window.SyncWidget) window.SyncWidget.markError();
       }
 
       // Load saved tax optimizer settings

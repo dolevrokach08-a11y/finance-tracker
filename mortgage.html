@@ -381,6 +381,7 @@ tr:hover td{background:var(--bg-elevated);}
   .nav-tab{font-size:10px;padding:5px 8px;}
 }
 </style>
+<script src="sync-widget.js"></script>
 </head>
 <body>
 
@@ -399,6 +400,7 @@ tr:hover td{background:var(--bg-elevated);}
     <button class="nav-tab" onclick="showPage('p-graph',this)">גרף החזרים</button>
   </div>
   <div class="nav-actions">
+    <span id="syncWidgetSlot" style="display:inline-flex;"></span>
     <a href="index.html" class="nav-link-home" title="דף ראשי">🏠</a>
     <a href="finance.html" class="nav-link-home" title="מעקב כספי">💵</a>
     <a href="portfolio.html" class="nav-link-home" title="תיק השקעות">📈</a>
@@ -939,6 +941,22 @@ try {
     console.warn('Firebase not available, using localStorage only:', e.message);
 }
 
+// Initialize sync widget (renders the button into the nav slot)
+if (window.SyncWidget) {
+    window.SyncWidget.init({
+        containerId: 'syncWidgetSlot',
+        metaKey: 'mortgage_sync_meta',
+        isDemoMode: () => false,
+        onForceSync: async () => {
+            if (typeof window.saveMortgage === 'function') {
+                window.saveMortgage();
+            } else if (typeof window._saveToFirebase === 'function' && typeof window.mortgageState !== 'undefined') {
+                await window._saveToFirebase(window.mortgageState);
+            }
+        }
+    });
+}
+
 if (firebaseReady) {
     onAuthStateChanged(auth, async (user) => {
         if (user) {
@@ -947,6 +965,8 @@ if (firebaseReady) {
             await loadFromFirebase();
         }
     });
+} else {
+    if (window.SyncWidget) window.SyncWidget.markLocalOnly();
 }
 
 async function loadFromFirebase() {
@@ -956,31 +976,63 @@ async function loadFromFirebase() {
         const snapshot = await getDoc(userDocRef);
         if (snapshot.exists()) {
             const saved = snapshot.data();
+            const cloudMod = saved.lastModified || null;
+
+            // Refresh protection: if local has unsynced changes newer than cloud,
+            // preserve local and push it to cloud instead of overwriting.
+            if (window.SyncWidget && window.SyncWidget.shouldPreserveLocal(cloudMod)) {
+                console.warn('⚠️ Local mortgage has unsynced changes newer than cloud — preserving local');
+                window.SyncWidget.markPending();
+                setTimeout(() => {
+                    if (typeof window.saveMortgage === 'function') {
+                        try { window.saveMortgage(); } catch(e) {}
+                    }
+                }, 800);
+                return;
+            }
+
             if (saved.tranches && saved.tranches.length > 0) {
                 if (typeof window.loadFirebaseData === 'function') {
                     window.loadFirebaseData(saved);
                 }
                 console.log('✅ Mortgage data loaded from Firebase');
+                if (window.SyncWidget) window.SyncWidget.markLoadedFromCloud(cloudMod);
+            } else {
+                if (window.SyncWidget) window.SyncWidget.markLocalOnly();
             }
         } else {
             console.log('No mortgage data in Firebase, using local');
+            if (window.SyncWidget) window.SyncWidget.markLocalOnly();
         }
     } catch(e) {
         console.error('Firebase load failed:', e);
+        if (window.SyncWidget) window.SyncWidget.markError();
     }
 }
 
 window._saveToFirebase = async function(state) {
-    if (!currentUser || !firebaseReady) return;
+    if (!currentUser || !firebaseReady) {
+        // Not signed in / Firebase unavailable — keep local-only state visible
+        if (window.SyncWidget) window.SyncWidget.markLocalOnly();
+        return;
+    }
+    const newLastModified = new Date().toISOString();
+    if (!navigator.onLine) {
+        if (window.SyncWidget) window.SyncWidget.markPending();
+        return;
+    }
+    if (window.SyncWidget) window.SyncWidget.markSyncing();
     try {
         const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
         await setDoc(userDocRef, {
             ...state,
-            lastModified: new Date().toISOString()
+            lastModified: newLastModified
         });
         console.log('✅ Mortgage saved to Firebase');
+        if (window.SyncWidget) window.SyncWidget.markSynced(newLastModified);
     } catch(e) {
         console.error('Firebase save failed:', e);
+        if (window.SyncWidget) window.SyncWidget.markError();
     }
 };
 </script>
@@ -1037,6 +1089,7 @@ let mortgageState = (function() {
 let currentTranches = mortgageState.tranches;
 let builderTranches = [];
 let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+window.mortgageState = mortgageState;
 
 function saveMortgage() {
   // Collect all state from UI
@@ -1065,7 +1118,9 @@ function saveMortgage() {
   if (typeof window._saveToFirebase === 'function') {
     window._saveToFirebase(mortgageState);
   }
+  window.mortgageState = mortgageState;
 }
+window.saveMortgage = saveMortgage;
 
 // Called by Firebase module when data loads from cloud
 window.loadFirebaseData = function(state) {

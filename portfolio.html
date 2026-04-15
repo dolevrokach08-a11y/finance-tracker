@@ -2043,6 +2043,7 @@
         }
 
         </style>
+    <script src="sync-widget.js"></script>
 </head>
 <body>
     <!-- Loading Screen -->
@@ -2063,6 +2064,7 @@
                     תיק השקעות
                 </div>
                 <div class="top-header-actions" style="display:flex;gap:6px;align-items:center;">
+                    <span id="syncWidgetSlot" style="display:inline-flex;"></span>
                     <a href="index.html" class="nav-sq" title="דף ראשי">🏠</a>
                     <a href="finance.html" class="nav-sq" title="מעקב כספי">💵</a>
                     <a href="mortgage.html" class="nav-sq" title="מחשבון משכנתא">🏡</a>
@@ -3364,6 +3366,22 @@
                 window.__demoUser = demoModule.getDemoUser();
             }
         } catch(e) { console.warn('Demo module not loaded:', e); }
+
+        // Initialize the shared sync widget. The forceSync callback is bound
+        // later via window.SyncWidget.config.onForceSync once saveData is
+        // available (it lives in a different script block).
+        if (window.SyncWidget) {
+            window.SyncWidget.init({
+                containerId: 'syncWidgetSlot',
+                metaKey: 'portfolio_sync_meta',
+                isDemoMode: () => _isDemoMode,
+                onForceSync: async () => {
+                    if (typeof window.saveData === 'function') {
+                        await window.saveData(true);
+                    }
+                }
+            });
+        }
 
         // Firebase Import
         let auth, db, onAuthStateChanged, doc, setDoc, getDoc, collection, getDocs, deleteDoc;
@@ -6856,93 +6874,81 @@ function calculateTWRv3() {
                 console.log('⏳ Waiting for authentication...');
                 return;
             }
-            
-            try {
-                const defaultGroups = [
-                    { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                    { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                    { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-                ];
-                
-                // Validate all holdings have valid groupId
-                if (Array.isArray(portfolio.holdings)) {
-                    portfolio.holdings = portfolio.holdings.map(h => {
-                        const groupId = parseInt(h.groupId);
-                        if (isNaN(groupId) || groupId <= 0) {
-                            console.warn(`⚠️ Invalid groupId for ${h.symbol}, setting to 1`);
-                            return { ...h, groupId: 1 };
-                        }
-                        return h;
-                    });
-                }
-                
-                const dataToSave = {
-                    holdings: portfolio.holdings || [],
-                    groups: portfolio.groups || defaultGroups,
-                    rates: portfolio.rates || {},
-                    bonds: portfolio.bonds || [],
-                    deposits: portfolio.deposits || [],
-                    withdrawals: portfolio.withdrawals || [],
-                    purchases: portfolio.purchases || [],
-                    sales: portfolio.sales || [],
-                    snapshots: portfolio.snapshots || [],
-                    cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
-                    transactions: portfolio.transactions || [],
-                    capitalMovements: portfolio.capitalMovements || [],
-                    bondsCapitalMovements: portfolio.bondsCapitalMovements || [],
-                    bondsSales: portfolio.bondsSales || [],
-                    portfolioSnapshots: portfolio.portfolioSnapshots || [],
-                    cashFlows: portfolio.cashFlows || [],
-                    dividends: portfolio.dividends || [],
-                    holdingFees: portfolio.holdingFees || {},
-                    watchlist: portfolio.watchlist || [],
-                    lastModified: new Date().toISOString()
-                };
 
-                // Save to Firebase
+            const defaultGroups = [
+                { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
+                { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
+                { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
+            ];
+
+            // Validate all holdings have valid groupId
+            if (Array.isArray(portfolio.holdings)) {
+                portfolio.holdings = portfolio.holdings.map(h => {
+                    const groupId = parseInt(h.groupId);
+                    if (isNaN(groupId) || groupId <= 0) {
+                        console.warn(`⚠️ Invalid groupId for ${h.symbol}, setting to 1`);
+                        return { ...h, groupId: 1 };
+                    }
+                    return h;
+                });
+            }
+
+            const newLastModified = new Date().toISOString();
+            const dataToSave = {
+                holdings: portfolio.holdings || [],
+                groups: portfolio.groups || defaultGroups,
+                rates: portfolio.rates || {},
+                bonds: portfolio.bonds || [],
+                deposits: portfolio.deposits || [],
+                withdrawals: portfolio.withdrawals || [],
+                purchases: portfolio.purchases || [],
+                sales: portfolio.sales || [],
+                snapshots: portfolio.snapshots || [],
+                cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
+                transactions: portfolio.transactions || [],
+                capitalMovements: portfolio.capitalMovements || [],
+                bondsCapitalMovements: portfolio.bondsCapitalMovements || [],
+                bondsSales: portfolio.bondsSales || [],
+                portfolioSnapshots: portfolio.portfolioSnapshots || [],
+                cashFlows: portfolio.cashFlows || [],
+                dividends: portfolio.dividends || [],
+                holdingFees: portfolio.holdingFees || {},
+                watchlist: portfolio.watchlist || [],
+                lastModified: newLastModified
+            };
+
+            // Offline shortcut — save locally and mark as pending
+            if (!navigator.onLine) {
+                try { localStorage.setItem('portfolio', JSON.stringify(dataToSave)); } catch(e) {}
+                if (window.SyncWidget) window.SyncWidget.markPending();
+                notify('⚠️ אופליין - נשמר מקומית בלבד', 'warning');
+                return;
+            }
+
+            if (window.SyncWidget) window.SyncWidget.markSyncing();
+
+            try {
                 const userDocRef = doc(db, 'users', currentUser.uid, 'portfolio', 'data');
                 await setDoc(userDocRef, dataToSave);
                 console.log('✅ Data saved to Firebase');
-                
+
                 // Also save to localStorage as backup
                 localStorage.setItem('portfolio', JSON.stringify(dataToSave));
+                if (window.SyncWidget) window.SyncWidget.markSynced(newLastModified);
             } catch (error) {
                 console.error('❌ Error saving data:', error);
-                notify('⚠️ שגיאה בשמירת נתונים', 'error');
-                
-                // Fallback to localStorage
+                // Fallback to localStorage and flag as unsynced
                 try {
-                    const dataToSave = {
-                        holdings: portfolio.holdings || [],
-                        groups: portfolio.groups || [
-                            { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                            { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                            { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-                        ],
-                        rates: portfolio.rates || {},
-                        bonds: portfolio.bonds || [],
-                        deposits: portfolio.deposits || [],
-                        withdrawals: portfolio.withdrawals || [],
-                        purchases: portfolio.purchases || [],
-                        sales: portfolio.sales || [],
-                        snapshots: portfolio.snapshots || [],
-                        cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
-                        transactions: portfolio.transactions || [],
-                        capitalMovements: portfolio.capitalMovements || [],
-                        bondsCapitalMovements: portfolio.bondsCapitalMovements || [],
-                        bondsSales: portfolio.bondsSales || [],
-                        portfolioSnapshots: portfolio.portfolioSnapshots || [],
-                        cashFlows: portfolio.cashFlows || [],
-                        dividends: portfolio.dividends || [],
-                        holdingFees: portfolio.holdingFees || {},
-                        watchlist: portfolio.watchlist || []
-                    };
                     localStorage.setItem('portfolio', JSON.stringify(dataToSave));
                 } catch (e) {
                     console.error('❌ localStorage fallback failed:', e);
                 }
+                if (window.SyncWidget) window.SyncWidget.markError();
+                notify('⚠️ שגיאה בשמירה בענן, נשמר מקומית', 'error');
             }
         }
+        // Expose for the sync widget retry button
+        window.saveData = saveData;
         
         async function loadData() {
             if (!currentUser) {
@@ -6956,13 +6962,26 @@ function calculateTWRv3() {
                 
                 if (docSnap.exists()) {
                     const loaded = docSnap.data();
-                    
+                    const cloudMod = loaded.lastModified || null;
+
+                    // Refresh protection: if local has unsynced changes newer than
+                    // cloud, preserve local and push to cloud instead of overwriting.
+                    if (window.SyncWidget && window.SyncWidget.shouldPreserveLocal(cloudMod)) {
+                        console.warn('⚠️ Local has unsynced changes newer than cloud — preserving local');
+                        const ok = loadFromLocalStorage();
+                        if (ok) {
+                            window.SyncWidget.markPending();
+                            setTimeout(() => { try { saveData(); } catch(e) {} }, 800);
+                            return true;
+                        }
+                    }
+
                     const defaultGroups = [
                         { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
                         { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
                         { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
                     ];
-                    
+
                     portfolio = {
                         holdings: Array.isArray(loaded.holdings) ? loaded.holdings.map(h => {
                             const groupId = parseInt(h.groupId);
@@ -7000,6 +7019,8 @@ function calculateTWRv3() {
                     // Also save to localStorage as backup
                     localStorage.setItem('portfolio', JSON.stringify(portfolio));
                     window.portfolio = portfolio;
+
+                    if (window.SyncWidget) window.SyncWidget.markLoadedFromCloud(cloudMod);
 
                     return true;
                 } else {
@@ -7069,6 +7090,7 @@ function calculateTWRv3() {
                     console.log('✅ Data loaded from localStorage');
                     console.log('📊 Holdings loaded:', portfolio.holdings.length);
                     window.portfolio = portfolio;
+                    if (window.SyncWidget) window.SyncWidget.markLocalOnly();
                     return true;
                 } else {
                     console.log('ℹ️ No saved data, using defaults');
