@@ -12,7 +12,10 @@
     <meta name="apple-mobile-web-app-title" content="Portfolio">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
-    
+
+    <!-- Shared theme -->
+    <link rel="stylesheet" href="shared/theme.css">
+
     <!-- Google Fonts - Space Grotesk for modern look -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,87 +30,11 @@
     <style>
         /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
         :root {
-            /* Dark backgrounds — Bloomberg/Terminal inspired */
-            --bg-base: hsl(220, 20%, 7%);
-            --bg-surface: hsl(220, 18%, 10%);
-            --bg-elevated: hsl(220, 16%, 13%);
-            --bg-hover: hsl(220, 16%, 18%);
-
-            /* Accent - Finance Green */
-            --accent: hsl(142, 60%, 50%);
-            --accent-dim: hsla(142, 60%, 50%, 0.12);
-            --accent-glow: 0 0 20px hsla(142, 60%, 50%, 0.3);
-
-            /* Text — improved contrast */
-            --text-primary: hsl(210, 20%, 92%);
-            --text-secondary: hsl(210, 20%, 75%);
-            --text-muted: hsl(215, 12%, 52%);
-
-            /* Status Colors */
-            --profit: hsl(142, 60%, 50%);
-            --loss: hsl(0, 72%, 55%);
-            --warning: hsl(38, 92%, 55%);
-            --info: hsl(210, 80%, 55%);
-            --success: hsl(142, 60%, 50%);
-            --danger: hsl(0, 72%, 55%);
-
-            /* Borders */
-            --border: hsl(220, 14%, 16%);
-            --border-accent: hsla(142, 60%, 50%, 0.3);
-            --border-color: hsl(220, 14%, 16%);
-
-            /* Legacy mapping */
-            --bg-primary: hsl(220, 18%, 10%);
-            --bg-secondary: hsl(220, 16%, 13%);
-            --bg-tertiary: hsl(220, 16%, 18%);
+            /* Portfolio-specific gradient vars */
             --bg-gradient-start: hsl(142, 60%, 50%);
             --bg-gradient-end: hsl(142, 50%, 40%);
-            --card-bg: hsl(220, 18%, 10%);
-            --glass-bg: hsla(220, 18%, 10%, 0.95);
-            --shadow-color: rgba(0,0,0,0.4);
-            --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
-
-            /* Misc */
-            --radius: 12px;
-            --radius-sm: 8px;
-            --radius-md: 12px;
-            --radius-lg: 12px;
-            --radius-xl: 16px;
         }
-        
-        /* Light Theme */
-        [data-theme="light"] {
-            --bg-base: hsl(220, 15%, 96%);
-            --bg-surface: hsl(0, 0%, 100%);
-            --bg-elevated: hsl(220, 15%, 94%);
-            --bg-hover: hsl(220, 12%, 90%);
 
-            --accent: hsl(142, 55%, 40%);
-            --accent-dim: hsla(142, 55%, 40%, 0.1);
-            --accent-glow: 0 0 20px hsla(142, 55%, 40%, 0.15);
-
-            --text-primary: hsl(220, 25%, 12%);
-            --text-secondary: hsl(220, 12%, 42%);
-            --text-muted: hsl(220, 10%, 58%);
-
-            --profit: hsl(142, 55%, 38%);
-            --loss: hsl(0, 65%, 50%);
-            --success: hsl(142, 55%, 38%);
-            --danger: hsl(0, 65%, 50%);
-
-            --border: hsl(220, 12%, 88%);
-            --border-accent: hsla(142, 55%, 40%, 0.3);
-            --border-color: hsl(220, 12%, 88%);
-
-            --bg-primary: hsl(0, 0%, 100%);
-            --bg-secondary: hsl(220, 15%, 94%);
-            --bg-tertiary: hsl(220, 12%, 90%);
-            --card-bg: hsl(0, 0%, 100%);
-            --glass-bg: hsla(0, 0%, 100%, 0.95);
-            --shadow-color: rgba(0,0,0,0.06);
-            --shadow-lg: 0 10px 40px rgba(0,0,0,0.06);
-        }
-        
         /* ==================== BASIC RESET & RTL ==================== */
         * { box-sizing: border-box; margin: 0; padding: 0; }
         

@@ -1,0 +1,118 @@
+/* Bloomberg Dark Theme - shared CSS variables */
+
+:root {
+  /* Backgrounds */
+  --bg-base: hsl(220, 20%, 7%);
+  --bg-surface: hsl(220, 18%, 10%);
+  --bg-elevated: hsl(220, 16%, 13%);
+  --bg-hover: hsl(220, 16%, 18%);
+  --bg-primary: hsl(220, 18%, 10%);
+  --bg-secondary: hsl(220, 16%, 13%);
+  --bg-tertiary: hsl(220, 16%, 18%);
+  --card-bg: hsl(220, 18%, 10%);
+  --glass-bg: hsla(220, 18%, 10%, 0.95);
+
+  /* Accent */
+  --accent: hsl(142, 60%, 50%);
+  --accent-dim: hsla(142, 60%, 50%, 0.12);
+  --accent-glow: 0 0 20px hsla(142, 60%, 50%, 0.3);
+  --accent-hover: hsl(142, 60%, 42%);
+  --accent-secondary: hsl(210, 80%, 55%);
+
+  /* Text — --text-primary convention (portfolio/index) */
+  --text-primary: hsl(210, 20%, 92%);
+  --text-secondary: hsl(210, 20%, 75%);
+  --text-muted: hsl(215, 12%, 52%);
+  /* Text — --text convention (mortgage) */
+  --text: hsl(210, 20%, 92%);
+  --text2: hsl(210, 20%, 65%);
+  --text3: hsl(215, 12%, 42%);
+
+  /* Status */
+  --profit: hsl(142, 60%, 50%);
+  --loss: hsl(0, 72%, 55%);
+  --warning: hsl(38, 92%, 55%);
+  --info: hsl(210, 80%, 55%);
+  --success: hsl(142, 60%, 50%);
+  --danger: hsl(0, 72%, 55%);
+
+  /* Named colors */
+  --green: #2dd87a;
+  --green-bg: rgba(45, 216, 122, 0.1);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.1);
+  --amber: #f5a623;
+  --amber-bg: rgba(245, 166, 35, 0.1);
+  --teal: #38d4c8;
+  --purple: #a78bfa;
+  --blue: #4f7cff;
+
+  /* Borders */
+  --border: hsl(220, 14%, 16%);
+  --border-accent: hsla(142, 60%, 50%, 0.3);
+  --border-color: hsl(220, 14%, 16%);
+  --border2: rgba(255, 255, 255, 0.11);
+
+  /* Border radius */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --r: 8px;
+  --r2: 12px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.4);
+  --shadow-color: rgba(0, 0, 0, 0.4);
+
+  --transition: all 0.2s ease;
+}
+
+[data-theme="light"] {
+  --bg-base: hsl(220, 15%, 96%);
+  --bg-surface: hsl(0, 0%, 100%);
+  --bg-elevated: hsl(220, 15%, 94%);
+  --bg-hover: hsl(220, 12%, 90%);
+  --bg-primary: hsl(0, 0%, 100%);
+  --bg-secondary: hsl(220, 15%, 94%);
+  --bg-tertiary: hsl(220, 12%, 90%);
+  --card-bg: hsl(0, 0%, 100%);
+  --glass-bg: hsla(0, 0%, 100%, 0.95);
+
+  --accent: hsl(142, 55%, 40%);
+  --accent-dim: hsla(142, 55%, 40%, 0.1);
+  --accent-glow: 0 0 20px hsla(142, 55%, 40%, 0.15);
+  --accent-hover: hsl(142, 60%, 32%);
+
+  --text-primary: hsl(220, 25%, 12%);
+  --text-secondary: hsl(220, 12%, 42%);
+  --text-muted: hsl(220, 10%, 58%);
+  --text: hsl(220, 20%, 15%);
+  --text2: hsl(220, 10%, 45%);
+  --text3: hsl(220, 8%, 58%);
+
+  --profit: hsl(142, 55%, 38%);
+  --loss: hsl(0, 65%, 50%);
+  --success: hsl(142, 55%, 38%);
+  --danger: hsl(0, 65%, 50%);
+
+  --border: hsl(220, 12%, 88%);
+  --border-accent: hsla(142, 55%, 40%, 0.3);
+  --border-color: hsl(220, 12%, 88%);
+  --border2: rgba(0, 0, 0, 0.12);
+
+  --green: #16a34a;
+  --green-bg: rgba(22, 163, 74, 0.08);
+  --red: #dc2626;
+  --red-bg: rgba(220, 38, 38, 0.08);
+  --amber: #d97706;
+  --amber-bg: rgba(217, 119, 6, 0.08);
+
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 10px 40px rgba(0, 0, 0, 0.1);
+  --shadow-color: rgba(0, 0, 0, 0.06);
+}

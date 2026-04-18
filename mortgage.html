@@ -5,62 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מחשבון משכנתא מקצועי</title>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared/theme.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 :root {
-  --bg-base: hsl(220, 20%, 7%);
-  --bg-surface: hsl(220, 18%, 10%);
-  --bg-elevated: hsl(220, 16%, 13%);
-  --bg-hover: hsl(220, 16%, 18%);
+  /* Mortgage uses rgba-based borders (overrides shared/theme.css) */
   --border: rgba(255,255,255,0.06);
   --border2: rgba(255,255,255,0.11);
-  --text: hsl(210, 20%, 92%);
-  --text2: hsl(210, 20%, 65%);
-  --text3: hsl(215, 12%, 42%);
-  --accent: hsl(142, 60%, 50%);
-  --accent-dim: hsla(142, 60%, 50%, 0.12);
-  --accent-hover: hsl(142, 60%, 42%);
-  --accent-glow: 0 0 20px hsla(142, 60%, 50%, 0.3);
-  --green: #2dd87a;
-  --green-bg: rgba(45,216,122,0.1);
-  --red: #ef4444;
-  --red-bg: rgba(239,68,68,0.1);
-  --amber: #f5a623;
-  --amber-bg: rgba(245,166,35,0.1);
-  --teal: #38d4c8;
-  --purple: #a78bfa;
-  --blue: #4f7cff;
-  --r: 8px;
-  --r2: 12px;
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.2);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.3);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.4);
-  --transition: all 0.2s ease;
 }
 
 [data-theme="light"] {
-  --bg-base: hsl(210, 20%, 96%);
-  --bg-surface: hsl(0, 0%, 100%);
-  --bg-elevated: hsl(210, 15%, 95%);
-  --bg-hover: hsl(210, 15%, 90%);
   --border: rgba(0,0,0,0.08);
   --border2: rgba(0,0,0,0.12);
-  --text: hsl(220, 20%, 15%);
-  --text2: hsl(220, 10%, 45%);
-  --text3: hsl(220, 8%, 58%);
-  --accent: hsl(142, 60%, 38%);
-  --accent-dim: hsla(142, 60%, 38%, 0.1);
-  --accent-hover: hsl(142, 60%, 32%);
-  --accent-glow: 0 0 20px hsla(142, 60%, 38%, 0.2);
-  --green: #16a34a;
-  --green-bg: rgba(22,163,74,0.08);
-  --red: #dc2626;
-  --red-bg: rgba(220,38,38,0.08);
-  --amber: #d97706;
-  --amber-bg: rgba(217,119,6,0.08);
-  --shadow-sm: 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-  --shadow-lg: 0 10px 40px rgba(0,0,0,0.1);
 }
 
 *{margin:0;padding:0;box-sizing:border-box;}

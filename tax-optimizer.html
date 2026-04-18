@@ -12,53 +12,18 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 
+<!-- Shared theme -->
+<link rel="stylesheet" href="shared/theme.css">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif; background: hsl(220, 20%, 7%); color: hsl(210, 20%, 92%); min-height: 100vh; -webkit-font-smoothing: antialiased; }
-input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: hsl(220, 14%, 16%); border-radius: 4px; outline: none; cursor: pointer; accent-color: hsl(142, 60%, 50%); }
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: hsl(142, 60%, 50%); cursor: pointer; }
-a { color: hsl(142, 60%, 50%); }
-
-/* Navigation Bar */
-.nav-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 16px;
-  background: hsla(220, 18%, 10%, 0.95);
-  border-bottom: 1px solid hsl(220, 14%, 16%);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  backdrop-filter: blur(10px);
-}
-.nav-links { display: flex; gap: 8px; align-items: center; }
-.nav-links a {
-  width: 36px; height: 36px; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; text-decoration: none;
-  color: hsl(215, 12%, 52%);
-  border: 1px solid hsl(220, 14%, 16%);
-  background: hsl(220, 16%, 13%);
-  transition: all 0.2s;
-}
-.nav-links a:hover { background: hsl(220, 16%, 18%); color: hsl(210, 20%, 92%); }
-.nav-user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: hsl(215, 12%, 52%);
-}
-.nav-user img {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid hsla(142, 60%, 50%, 0.4);
-}
+body { font-family: 'Heebo', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-base); color: var(--text-primary); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appearance: none; background: var(--border); border-radius: 4px; outline: none; cursor: pointer; accent-color: var(--accent); }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
+a { color: var(--accent); }
 
 /* Auth loading */
 #auth-loading {
@@ -110,18 +75,6 @@ a { color: hsl(142, 60%, 50%); }
 </head>
 <body>
 
-<!-- Navigation -->
-<nav class="nav-bar">
-  <div class="nav-links">
-    <a href="index.html" title="דף ראשי">🏠</a>
-    <a href="finance.html" title="מעקב כספי">💵</a>
-    <a href="portfolio.html" title="תיק השקעות">📈</a>
-    <a href="mortgage.html" title="מחשבון משכנתא">🏡</a>
-    <span id="syncWidgetSlot" style="display:inline-flex;margin-inline-start:6px;"></span>
-  </div>
-  <div class="nav-user" id="nav-user"></div>
-</nav>
-
 <div id="auth-loading">טוען...</div>
 <div id="root" style="display:none;"></div>
 
@@ -133,6 +86,9 @@ a { color: hsl(142, 60%, 50%); }
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
+  import { injectNav, setNavUser } from './shared/nav.js';
+  injectNav('tax');
+
   // Demo mode check
   let _isDemoMode = false;
   let _demoFinanceData = null;
@@ -337,7 +293,7 @@ a { color: hsl(142, 60%, 50%); }
   if (_isDemoMode) {
     // Demo mode - use fictitious data
     const demoUser = (await import('./demo-data.js')).getDemoUser();
-    document.getElementById('nav-user').innerHTML = `<span>${demoUser.displayName}</span>`;
+    setNavUser(demoUser);
 
     const transactions = _demoFinanceData.transactions || [];
     const fixedIncomes = _demoFinanceData.fixedIncomes || [];
@@ -367,10 +323,7 @@ a { color: hsl(142, 60%, 50%); }
       }
 
       // Show user in nav
-      document.getElementById('nav-user').innerHTML = `
-        ${user.photoURL ? `<img src="${user.photoURL}" alt="">` : ''}
-        <span>${user.displayName || user.email}</span>
-      `;
+      setNavUser(user);
 
       // Load finance data from Firebase
       try {
