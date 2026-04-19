@@ -29,12 +29,22 @@
     // ================= MARKET STATUS =================
     function getMarketStatus() {
         const now = new Date();
-        // TASE: Sun-Thu, 09:30-17:35 Israel time
+        // TASE new schedule (effective 2025): Mon-Fri, aligned with Western markets.
+        //   Mon-Thu: 10:00–17:25 IL time
+        //   Fri:     09:30–14:15 IL time (short session)
+        // Sunday is no longer a trading day.
         const ilHour = parseInt(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: '2-digit', hour12: false }));
         const ilMin = parseInt(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', minute: '2-digit' }));
         const ilDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' })).getDay(); // 0=Sun
         const taseMinutes = ilHour * 60 + ilMin;
-        const taseOpen = ilDay >= 0 && ilDay <= 4 && taseMinutes >= 9 * 60 + 30 && taseMinutes < 17 * 60 + 35;
+        let taseOpen = false;
+        if (ilDay >= 1 && ilDay <= 4) {
+            // Mon-Thu
+            taseOpen = taseMinutes >= 10 * 60 && taseMinutes < 17 * 60 + 25;
+        } else if (ilDay === 5) {
+            // Friday short session
+            taseOpen = taseMinutes >= 9 * 60 + 30 && taseMinutes < 14 * 60 + 15;
+        }
 
         // NYSE: Mon-Fri, 09:30-16:00 New York time
         const nyHour = parseInt(now.toLocaleString('en-US', { timeZone: 'America/New_York', hour: '2-digit', hour12: false }));
