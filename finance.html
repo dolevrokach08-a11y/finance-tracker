@@ -760,9 +760,8 @@
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 
-    <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
+    <!-- Shared Lovable-inspired theme additions (page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
-    <script src="ticker.js" defer></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -792,8 +791,6 @@
     </div>
     
     <div id="mainContent" style="display: none;">
-    <!-- Live Market Ticker Bar -->
-    <div class="ticker-bar" id="liveTicker" aria-label="Live market ticker" style="margin-bottom: 16px; border-radius: 10px;"></div>
     <div class="max-w-6xl mx-auto">
         <div class="mb-8" style="animation: fadeInDown 0.6s ease; display:flex; justify-content:space-between; align-items:center;">
             <div style="display:flex;gap:6px;align-items:center;">
@@ -3434,13 +3431,6 @@
             clearTimeout(window.__loadingTimeout);
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
-
-            // Initialize live ticker bar (market indices + FX only — no user holdings on finance page)
-            try {
-                if (typeof window.initTicker === 'function') {
-                    window.initTicker({ includeHoldings: false });
-                }
-            } catch (e) { console.warn('ticker init failed', e); }
         }
 
         // Demo mode initialization
@@ -3469,12 +3459,6 @@
             clearTimeout(window.__loadingTimeout);
             document.getElementById('loadingScreen').style.display = 'none';
             document.getElementById('mainContent').style.display = 'block';
-
-            try {
-                if (typeof window.initTicker === 'function') {
-                    window.initTicker({ includeHoldings: false });
-                }
-            } catch (e) { console.warn('ticker init failed', e); }
         }
 
         function updateReportPeriodSelector() {

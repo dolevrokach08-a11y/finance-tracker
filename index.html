@@ -271,6 +271,222 @@
             direction: ltr;
         }
 
+        /* ==================== LOVABLE-STYLE DASHBOARD ==================== */
+
+        /* Top KPI strip — 3 prominent numbers */
+        .top-kpis {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .top-kpi {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 18px 20px 20px;
+            text-align: center;
+            transition: border-color .25s ease, transform .25s ease;
+        }
+        .top-kpi:hover { border-color: hsla(0, 0%, 100%, 0.12); }
+        .top-kpi .label {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .top-kpi .value {
+            font-family: 'JetBrains Mono', 'Space Grotesk', monospace;
+            font-size: 1.85rem;
+            font-weight: 700;
+            line-height: 1.05;
+            letter-spacing: -0.5px;
+            direction: ltr;
+            display: inline-block;
+        }
+        .top-kpi .value.muted { color: var(--text-muted); font-size: 1.4rem; }
+
+        /* Entry grid — 4 large app cards with sparklines */
+        .entry-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+        .entry-card {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            padding: 22px 24px 20px;
+            border-radius: 16px;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            text-decoration: none;
+            color: inherit;
+            overflow: hidden;
+            transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+            min-height: 240px;
+            text-align: right;
+        }
+        .entry-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(ellipse at bottom left, var(--card-accent, hsl(142, 60%, 50%)), transparent 65%);
+            opacity: 0.09;
+            transition: opacity .25s ease;
+            pointer-events: none;
+        }
+        .entry-card:hover {
+            transform: translateY(-3px);
+            border-color: var(--card-accent, hsl(142, 60%, 50%));
+            box-shadow: 0 8px 32px -12px hsla(var(--card-accent-hsl, 142 60% 50%), 0.25);
+        }
+        .entry-card:hover::before { opacity: 0.16; }
+
+        .entry-card.green { --card-accent: hsl(142, 60%, 50%); --card-accent-hsl: 142 60% 50%; }
+        .entry-card.blue { --card-accent: hsl(210, 80%, 58%); --card-accent-hsl: 210 80% 58%; }
+        .entry-card.orange { --card-accent: hsl(38, 92%, 55%); --card-accent-hsl: 38 92% 55%; }
+        .entry-card.purple { --card-accent: hsl(270, 65%, 60%); --card-accent-hsl: 270 65% 60%; }
+
+        .entry-card-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        .entry-card-eyebrow {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--card-accent);
+            opacity: 0.85;
+        }
+        .entry-card-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: hsla(var(--card-accent-hsl), 0.15);
+            color: var(--card-accent);
+            flex-shrink: 0;
+        }
+        .entry-card-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            position: relative;
+            z-index: 1;
+        }
+        .entry-card-desc {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 14px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.5;
+        }
+        .entry-card-sparkline {
+            height: 44px;
+            margin: 4px 0 10px;
+            position: relative;
+            z-index: 1;
+        }
+        .entry-card-sparkline svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .entry-card-footer {
+            margin-top: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            position: relative;
+            z-index: 1;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .entry-card-kpi {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .entry-card-kpi .kpi-label {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+        .entry-card-kpi .kpi-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--card-accent);
+            direction: ltr;
+        }
+        .entry-card-link {
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: color .2s ease, transform .2s ease;
+            white-space: nowrap;
+        }
+        .entry-card:hover .entry-card-link {
+            color: var(--card-accent);
+            transform: translateX(-3px);
+        }
+
+        /* Feature badges row */
+        .feature-badges {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .feature-badge {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px 14px;
+            text-align: center;
+            transition: border-color .2s ease;
+        }
+        .feature-badge:hover { border-color: hsla(0, 0%, 100%, 0.10); }
+        .feature-badge .fb-icon {
+            width: 36px;
+            height: 36px;
+            margin: 0 auto 8px;
+            border-radius: 10px;
+            background: hsla(142, 60%, 50%, 0.12);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .feature-badge .fb-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+        .feature-badge .fb-sub {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+        }
+
+        /* Hide the old dashboard / buttons blocks since we replaced them */
+        .buttons-container, #dashboardSection { display: none !important; }
+
         @media (max-width: 768px) {
             .dashboard-grid {
                 grid-template-columns: repeat(2, 1fr);
@@ -291,6 +507,13 @@
             .app-button {
                 padding: 32px 20px 24px;
             }
+
+            .top-kpis { grid-template-columns: 1fr; gap: 10px; }
+            .top-kpi .value { font-size: 1.55rem; }
+            .entry-grid { grid-template-columns: 1fr; gap: 14px; }
+            .entry-card { min-height: 220px; padding: 20px; }
+            .entry-card-title { font-size: 1.2rem; }
+            .feature-badges { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
 </head>
@@ -311,44 +534,129 @@
         <!-- Live Market Ticker Bar -->
         <div class="ticker-bar" id="liveTicker" aria-label="Live market ticker" style="margin-bottom: 18px; border-radius: 10px;"></div>
 
-        <div class="page-hero" style="text-align:center; margin-bottom: 20px;">
+        <div class="page-hero" style="text-align:center; margin-bottom: 22px;">
             <span class="hero-eyebrow">HOME · SUMMARY</span>
             <h1 style="margin-top:4px;">💰 ניהול פיננסי אישי 📊</h1>
-            <p class="subtitle">בחר את המערכת שברצונך להשתמש</p>
+            <p class="subtitle">מרכז השליטה הפיננסי שלך במקום אחד</p>
         </div>
-        
-        <div class="buttons-container">
-            <a href="finance.html" class="app-button finance-button">
-                <div class="icon">💵</div>
-                <div class="button-content">
-                    <div class="button-title">מעקב כספי</div>
-                    <div class="button-description">הכנסות • הוצאות • מעשרות</div>
+
+        <!-- Top KPI strip -->
+        <div class="top-kpis" id="topKpis">
+            <div class="top-kpi">
+                <div class="label">הון נטו</div>
+                <div class="value" id="kpiNetWorth" style="color: var(--info);">—</div>
+            </div>
+            <div class="top-kpi">
+                <div class="label">תשואה YTD</div>
+                <div class="value" id="kpiYtd" style="color: var(--profit);">—</div>
+            </div>
+            <div class="top-kpi">
+                <div class="label">שווי תיק כולל</div>
+                <div class="value" id="kpiPortfolio" style="color: var(--profit);">—</div>
+            </div>
+        </div>
+
+        <!-- Big entry cards -->
+        <div class="entry-grid">
+            <a href="portfolio.html" class="entry-card green">
+                <div class="entry-card-head">
+                    <span class="entry-card-eyebrow">PORTFOLIO</span>
+                    <div class="entry-card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                    </div>
+                </div>
+                <h2 class="entry-card-title">תיק השקעות</h2>
+                <p class="entry-card-desc">מניות, אג"ח, מדדים, TWR/MWR ותכנון איזון</p>
+                <div class="entry-card-sparkline"><svg id="sparkPortfolio" viewBox="0 0 200 44" preserveAspectRatio="none"></svg></div>
+                <div class="entry-card-footer">
+                    <div class="entry-card-kpi">
+                        <span class="kpi-label">תשואה שנתית</span>
+                        <span class="kpi-value" id="cardKpiPortfolio">—</span>
+                    </div>
+                    <span class="entry-card-link">היכנס למערכת ←</span>
                 </div>
             </a>
 
-            <a href="portfolio.html" class="app-button portfolio-button">
-                <div class="icon">📈</div>
-                <div class="button-content">
-                    <div class="button-title">תיק השקעות</div>
-                    <div class="button-description">מניות • אג"ח • מדדים</div>
+            <a href="finance.html" class="entry-card blue">
+                <div class="entry-card-head">
+                    <span class="entry-card-eyebrow">FINANCE TRACKING</span>
+                    <div class="entry-card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>
+                    </div>
+                </div>
+                <h2 class="entry-card-title">מעקב כספי</h2>
+                <p class="entry-card-desc">ניהול הכנסות, הוצאות, מעשרות ודוחות חכמים</p>
+                <div class="entry-card-sparkline"><svg id="sparkFinance" viewBox="0 0 200 44" preserveAspectRatio="none"></svg></div>
+                <div class="entry-card-footer">
+                    <div class="entry-card-kpi">
+                        <span class="kpi-label">חיסכון חודשי</span>
+                        <span class="kpi-value" id="cardKpiFinance">—</span>
+                    </div>
+                    <span class="entry-card-link">היכנס למערכת ←</span>
                 </div>
             </a>
 
-            <a href="tax-optimizer.html" class="app-button tax-button">
-                <div class="icon">🧮</div>
-                <div class="button-content">
-                    <div class="button-title">אופטימיזציית מס</div>
-                    <div class="button-description">נקודות זיכוי • מענקים • רווחי הון</div>
+            <a href="tax-optimizer.html" class="entry-card orange">
+                <div class="entry-card-head">
+                    <span class="entry-card-eyebrow">TAX OPTIMIZER</span>
+                    <div class="entry-card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="12" y1="10" x2="14" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="12" y1="14" x2="14" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="12" y1="18" x2="16" y2="18"/></svg>
+                    </div>
+                </div>
+                <h2 class="entry-card-title">אופטימיזציית מס</h2>
+                <p class="entry-card-desc">מדרגות מס, נקודות זיכוי, רווחי הון ודיבידנדים</p>
+                <div class="entry-card-sparkline"><svg id="sparkTax" viewBox="0 0 200 44" preserveAspectRatio="none"></svg></div>
+                <div class="entry-card-footer">
+                    <div class="entry-card-kpi">
+                        <span class="kpi-label">חיסכון פוטנציאלי</span>
+                        <span class="kpi-value" id="cardKpiTax">—</span>
+                    </div>
+                    <span class="entry-card-link">היכנס למערכת ←</span>
                 </div>
             </a>
 
-            <a href="mortgage.html" class="app-button mortgage-button">
-                <div class="icon">🏠</div>
-                <div class="button-content">
-                    <div class="button-title">מחשבון משכנתא</div>
-                    <div class="button-description">תמהיל • שיטות החזר • מבחן לחץ</div>
+            <a href="mortgage.html" class="entry-card purple">
+                <div class="entry-card-head">
+                    <span class="entry-card-eyebrow">MORTGAGE</span>
+                    <div class="entry-card-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    </div>
+                </div>
+                <h2 class="entry-card-title">מחשבון משכנתא</h2>
+                <p class="entry-card-desc">תמהיל, שיטות החזר, השוואת מחזור ומבחן לחץ</p>
+                <div class="entry-card-sparkline"><svg id="sparkMortgage" viewBox="0 0 200 44" preserveAspectRatio="none"></svg></div>
+                <div class="entry-card-footer">
+                    <div class="entry-card-kpi">
+                        <span class="kpi-label">תשלום חודשי</span>
+                        <span class="kpi-value" id="cardKpiMortgage">—</span>
+                    </div>
+                    <span class="entry-card-link">היכנס למערכת ←</span>
                 </div>
             </a>
+        </div>
+
+        <!-- Feature badges -->
+        <div class="feature-badges">
+            <div class="feature-badge">
+                <div class="fb-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+                <div class="fb-title">Lightning Fast</div>
+                <div class="fb-sub">מהירות בזק</div>
+            </div>
+            <div class="feature-badge">
+                <div class="fb-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <div class="fb-title">Secure</div>
+                <div class="fb-sub">מאובטח מקומית</div>
+            </div>
+            <div class="feature-badge">
+                <div class="fb-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                <div class="fb-title">Advanced Charts</div>
+                <div class="fb-sub">גרפים מתקדמים</div>
+            </div>
+            <div class="feature-badge">
+                <div class="fb-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+                <div class="fb-title">Real-Time</div>
+                <div class="fb-sub">נתונים חיים</div>
+            </div>
         </div>
 
         <!-- Dashboard Summary -->
@@ -433,6 +741,15 @@
             return (value < 0 ? '-' : '') + '₪' + formatted;
         }
 
+        function formatCompact(value) {
+            if (value == null || !isFinite(value)) return '—';
+            const abs = Math.abs(value);
+            const sign = value < 0 ? '-' : '';
+            if (abs >= 1e6) return sign + '₪' + (abs / 1e6).toFixed(1) + 'M';
+            if (abs >= 1e3) return sign + '₪' + (abs / 1e3).toFixed(abs >= 1e4 ? 0 : 1) + 'K';
+            return sign + '₪' + Math.round(abs).toLocaleString('he-IL');
+        }
+
         function setDashValue(id, value) {
             const el = document.getElementById(id);
             if (!el) return;
@@ -440,59 +757,170 @@
             el.style.color = value > 0 ? 'var(--profit)' : value < 0 ? 'var(--loss)' : 'var(--text-primary)';
         }
 
+        // --- Sparkline utility: renders a smooth SVG line with gradient fill ---
+        function drawSparkline(svgId, values, color) {
+            const svg = document.getElementById(svgId);
+            if (!svg) return;
+            const width = 200, height = 44;
+            let vs = Array.isArray(values) && values.length >= 2
+                ? values.slice(-30).map(v => Number(v) || 0)
+                : null;
+            if (!vs) {
+                // Synthetic pleasing line (gentle up-trend) when no data
+                vs = [10, 12, 11, 14, 13, 16, 18, 17, 20, 22, 21, 25, 24, 28];
+            }
+            const min = Math.min(...vs);
+            const max = Math.max(...vs);
+            const range = (max - min) || 1;
+            const step = width / (vs.length - 1);
+            const pts = vs.map((v, i) => [i * step, height - ((v - min) / range) * (height - 6) - 3]);
+            let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+            for (let i = 1; i < pts.length; i++) {
+                const p = pts[i - 1], c = pts[i];
+                const cx1 = (p[0] + c[0]) / 2;
+                d += ` C ${cx1.toFixed(1)},${p[1].toFixed(1)} ${cx1.toFixed(1)},${c[1].toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
+            }
+            const last = pts[pts.length - 1];
+            const gradId = 'g_' + svgId;
+            svg.innerHTML = `
+                <defs>
+                    <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${color}" stop-opacity="0.45"/>
+                        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <path d="${d} L ${width},${height} L 0,${height} Z" fill="url(#${gradId})"/>
+                <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/>
+            `;
+        }
+
         function loadDashboard() {
             const financeRaw = localStorage.getItem('financeTrackerData');
             const portfolioRaw = localStorage.getItem('portfolio');
+            const mortgageRaw = localStorage.getItem('mortgageData') || localStorage.getItem('mortgage');
 
-            if (!financeRaw && !portfolioRaw) return;
+            const finance = financeRaw ? safeParse(financeRaw) : null;
+            const portfolio = portfolioRaw ? safeParse(portfolioRaw) : null;
+            const mortgage = mortgageRaw ? safeParse(mortgageRaw) : null;
 
-            document.getElementById('dashboardSection').style.display = 'block';
-
-            const finance = financeRaw ? JSON.parse(financeRaw) : null;
-            const portfolio = portfolioRaw ? JSON.parse(portfolioRaw) : null;
-
-            let totalIncome = 0;
-            let totalExpenses = 0;
-            let totalBills = 0;
-            let assetsTotal = 0;
-            let liabilitiesTotal = 0;
-            let portfolioValue = 0;
-
+            // ---------- FINANCE aggregates ----------
+            let totalIncome = 0, totalExpenses = 0, assetsTotal = 0, liabilitiesTotal = 0;
             if (finance) {
-                if (Array.isArray(finance.fixedIncomes)) {
-                    totalIncome = finance.fixedIncomes.reduce((s, item) => s + (Number(item.amount) || 0), 0);
-                }
-                if (Array.isArray(finance.fixedExpenses)) {
-                    totalExpenses = finance.fixedExpenses.reduce((s, item) => s + (Number(item.amount) || 0), 0);
-                }
-                if (Array.isArray(finance.bills)) {
-                    totalBills = finance.bills.reduce((s, item) => s + (Number(item.amount) || 0), 0);
-                }
-                if (Array.isArray(finance.netWorthAssets)) {
-                    assetsTotal = finance.netWorthAssets.reduce((s, a) => s + (Number(a.value) || 0), 0);
-                }
-                if (Array.isArray(finance.netWorthLiabilities)) {
-                    liabilitiesTotal = finance.netWorthLiabilities.reduce((s, a) => s + (Number(a.value) || 0), 0);
+                if (Array.isArray(finance.fixedIncomes)) totalIncome = finance.fixedIncomes.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+                if (Array.isArray(finance.fixedExpenses)) totalExpenses = finance.fixedExpenses.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+                if (Array.isArray(finance.netWorthAssets)) assetsTotal = finance.netWorthAssets.reduce((s, a) => s + (Number(a.value) || 0), 0);
+                if (Array.isArray(finance.netWorthLiabilities)) liabilitiesTotal = finance.netWorthLiabilities.reduce((s, a) => s + (Number(a.value) || 0), 0);
+            }
+
+            // ---------- PORTFOLIO aggregates (with currency conversion) ----------
+            let portfolioValue = 0;
+            if (portfolio && Array.isArray(portfolio.holdings)) {
+                const usd = portfolio.rates?.USD || 3.7;
+                const eur = portfolio.rates?.EUR || 4.1;
+                portfolioValue = portfolio.holdings.reduce((s, h) => {
+                    const rate = h.currency === 'USD' ? usd : h.currency === 'EUR' ? eur : 1;
+                    return s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0) * rate);
+                }, 0);
+                // Add cash balance if tracked
+                if (portfolio.cash && typeof portfolio.cash === 'object') {
+                    portfolioValue += (Number(portfolio.cash.ILS) || 0);
+                    portfolioValue += (Number(portfolio.cash.USD) || 0) * usd;
+                    portfolioValue += (Number(portfolio.cash.EUR) || 0) * eur;
                 }
             }
 
-            if (portfolio) {
-                if (Array.isArray(portfolio.holdings)) {
-                    portfolioValue = portfolio.holdings.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
-                } else if (Array.isArray(portfolio)) {
-                    portfolioValue = portfolio.reduce((s, h) => s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0)), 0);
-                }
+            // ---------- YTD return from portfolioSnapshots ----------
+            let ytdPct = null;
+            const snapshots = Array.isArray(portfolio?.portfolioSnapshots) ? portfolio.portfolioSnapshots.slice() : [];
+            if (snapshots.length >= 2) {
+                snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
+                const yearStart = new Date(new Date().getFullYear(), 0, 1);
+                const startSnap = snapshots.find(s => new Date(s.date) >= yearStart) || snapshots[0];
+                const lastSnap = snapshots[snapshots.length - 1];
+                const startVal = Number(startSnap?.value) || 0;
+                const endVal = Number(lastSnap?.value) || portfolioValue;
+                if (startVal > 0) ytdPct = ((endVal - startVal) / startVal) * 100;
             }
 
-            // netWorthAssets already includes portfolio value (synced from portfolio page),
-            // so don't add portfolioValue again to avoid double-counting
+            // ---------- Top KPIs ----------
             const netWorth = assetsTotal - liabilitiesTotal;
-            const monthlySavings = totalIncome - totalExpenses;
+            const el = (id) => document.getElementById(id);
+            if (netWorth !== 0) el('kpiNetWorth').textContent = formatCurrency(netWorth);
+            if (portfolioValue > 0) el('kpiPortfolio').textContent = formatCurrency(portfolioValue);
+            if (ytdPct != null) {
+                el('kpiYtd').textContent = (ytdPct >= 0 ? '+' : '') + ytdPct.toFixed(1) + '%';
+                el('kpiYtd').style.color = ytdPct >= 0 ? 'var(--profit)' : 'var(--loss)';
+            } else {
+                el('kpiYtd').classList.add('muted');
+                el('kpiYtd').textContent = 'אין היסטוריה';
+            }
 
-            setDashValue('dashNetWorth', netWorth);
-            setDashValue('dashPortfolio', portfolioValue);
-            setDashValue('dashSavings', monthlySavings);
-            setDashValue('dashBills', totalBills > 0 ? -totalBills : 0);
+            // ---------- Entry card KPIs ----------
+            // Portfolio: annual return (use YTD as proxy)
+            if (ytdPct != null) {
+                el('cardKpiPortfolio').textContent = (ytdPct >= 0 ? '+' : '') + ytdPct.toFixed(1) + '%';
+            } else if (portfolioValue > 0) {
+                el('cardKpiPortfolio').textContent = formatCompact(portfolioValue);
+                el('cardKpiPortfolio').previousElementSibling.textContent = 'שווי תיק';
+            }
+
+            // Finance: monthly savings
+            const monthlySavings = totalIncome - totalExpenses;
+            if (totalIncome > 0 || totalExpenses > 0) {
+                el('cardKpiFinance').textContent = formatCompact(monthlySavings);
+                el('cardKpiFinance').style.color = monthlySavings >= 0 ? 'var(--info)' : 'var(--loss)';
+            }
+
+            // Tax: savings estimate (if stored) or show count of optimizations
+            const taxRaw = localStorage.getItem('taxOptimizerData') || localStorage.getItem('taxData');
+            const tax = taxRaw ? safeParse(taxRaw) : null;
+            const taxSavings = Number(tax?.potentialSavings || tax?.totalSavings || 0);
+            if (taxSavings > 0) {
+                el('cardKpiTax').textContent = formatCompact(taxSavings);
+            }
+
+            // Mortgage: monthly payment
+            const mPayment = Number(mortgage?.monthlyPayment || mortgage?.current?.monthlyPayment || 0);
+            if (mPayment > 0) {
+                el('cardKpiMortgage').textContent = formatCompact(mPayment);
+            }
+
+            // ---------- Sparklines ----------
+            const portfolioSpark = snapshots.length >= 2 ? snapshots.map(s => Number(s.value) || 0) : null;
+            drawSparkline('sparkPortfolio', portfolioSpark, 'hsl(142, 60%, 50%)');
+
+            // Finance sparkline: monthly savings from transactions (last 12 months)
+            let financeSpark = null;
+            if (finance && Array.isArray(finance.transactions)) {
+                const byMonth = {};
+                finance.transactions.forEach(t => {
+                    if (!t.month) return;
+                    const amt = Number(t.amount) || 0;
+                    byMonth[t.month] = byMonth[t.month] || { inc: 0, exp: 0 };
+                    if (t.type === 'income') byMonth[t.month].inc += amt;
+                    else byMonth[t.month].exp += amt;
+                });
+                const keys = Object.keys(byMonth).sort().slice(-12);
+                if (keys.length >= 2) {
+                    financeSpark = keys.map(k => byMonth[k].inc - byMonth[k].exp);
+                }
+            }
+            drawSparkline('sparkFinance', financeSpark, 'hsl(210, 80%, 58%)');
+
+            // Tax sparkline: synthetic gentle downward bracket shape (tax savings typically accumulate)
+            drawSparkline('sparkTax', null, 'hsl(38, 92%, 55%)');
+
+            // Mortgage sparkline: amortization schedule if available, else synthetic
+            let mortSpark = null;
+            if (mortgage && Array.isArray(mortgage.schedule) && mortgage.schedule.length >= 2) {
+                mortSpark = mortgage.schedule.slice(0, 120).map(r => Number(r.balance) || 0);
+            }
+            drawSparkline('sparkMortgage', mortSpark, 'hsl(270, 65%, 60%)');
+        }
+
+        function safeParse(raw) {
+            try { return JSON.parse(raw); } catch { return null; }
         }
 
         // Check demo mode first
