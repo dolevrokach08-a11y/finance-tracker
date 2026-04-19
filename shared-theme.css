@@ -1,0 +1,260 @@
+/* =========================================================================
+   Shared Theme — Lovable-inspired additions
+   Only additive: extends existing per-page CSS without overriding working styles.
+   Load via: <link rel="stylesheet" href="shared-theme.css">
+   ========================================================================= */
+
+:root {
+    /* Gradient mesh for page-hero backgrounds — subtle, not distracting */
+    --gradient-mesh:
+        radial-gradient(at 20% 10%, hsla(142, 72%, 48%, 0.10) 0px, transparent 50%),
+        radial-gradient(at 80% 30%, hsla(199, 89%, 56%, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 80%, hsla(270, 75%, 65%, 0.07) 0px, transparent 50%);
+
+    /* Stronger card shadow for elevation */
+    --shadow-card-lg: 0 4px 24px -8px hsla(222, 50%, 2%, 0.6), 0 1px 2px hsla(222, 50%, 2%, 0.3);
+
+    /* Ticker bar height */
+    --ticker-height: 40px;
+}
+
+[data-theme="light"] {
+    --gradient-mesh:
+        radial-gradient(at 20% 10%, hsla(142, 55%, 40%, 0.08) 0px, transparent 50%),
+        radial-gradient(at 80% 30%, hsla(199, 89%, 46%, 0.06) 0px, transparent 50%),
+        radial-gradient(at 50% 80%, hsla(270, 60%, 55%, 0.05) 0px, transparent 50%);
+    --shadow-card-lg: 0 4px 24px -8px hsla(220, 15%, 50%, 0.18), 0 1px 2px hsla(220, 15%, 50%, 0.08);
+}
+
+/* ==================== LIVE TICKER BAR ==================== */
+.ticker-bar {
+    position: relative;
+    width: 100%;
+    height: var(--ticker-height);
+    background: var(--bg-surface, hsl(220, 18%, 10%));
+    border-bottom: 1px solid var(--border, hsl(220, 14%, 16%));
+    border-top: 1px solid var(--border, hsl(220, 14%, 16%));
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    direction: ltr; /* ticker flows LTR even in RTL layout */
+    font-family: 'JetBrains Mono', 'Heebo', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    user-select: none;
+}
+
+.ticker-bar .market-status {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 100%;
+    background: var(--bg-elevated, hsl(220, 16%, 13%));
+    border-inline-end: 1px solid var(--border, hsl(220, 14%, 16%));
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary, hsl(210, 20%, 75%));
+    z-index: 2;
+}
+
+.ticker-bar .market-status .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--profit, hsl(142, 60%, 50%));
+    box-shadow: 0 0 8px hsla(142, 60%, 50%, 0.6);
+}
+
+.ticker-bar .market-status.closed .dot {
+    background: var(--text-muted, hsl(215, 12%, 52%));
+    box-shadow: none;
+}
+
+.ticker-bar .market-status .dot.pulse {
+    animation: ticker-pulse 2s ease-in-out infinite;
+}
+
+@keyframes ticker-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.ticker-viewport {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    mask-image: linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%);
+}
+
+.ticker-scroll {
+    display: inline-flex;
+    gap: 32px;
+    white-space: nowrap;
+    animation: ticker-scroll 90s linear infinite;
+    padding: 0 16px;
+    align-items: center;
+    height: 100%;
+}
+
+.ticker-bar:hover .ticker-scroll {
+    animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+
+.ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-primary, hsl(210, 20%, 92%));
+}
+
+.ticker-item .symbol {
+    font-weight: 600;
+    color: var(--text-secondary, hsl(210, 20%, 75%));
+    letter-spacing: 0.3px;
+}
+
+.ticker-item .price {
+    font-weight: 600;
+    color: var(--text-primary, hsl(210, 20%, 92%));
+}
+
+.ticker-item .change {
+    font-weight: 500;
+    font-size: 0.78rem;
+}
+
+.ticker-item .change.up {
+    color: var(--profit, hsl(142, 60%, 50%));
+}
+
+.ticker-item .change.down {
+    color: var(--loss, hsl(0, 72%, 55%));
+}
+
+.ticker-item .change.flat {
+    color: var(--text-muted, hsl(215, 12%, 52%));
+}
+
+.ticker-item .arrow {
+    font-size: 0.7rem;
+}
+
+.ticker-item.stale {
+    opacity: 0.55;
+}
+
+/* ==================== PAGE HERO ==================== */
+.page-hero {
+    position: relative;
+    padding: 24px 28px 20px;
+    margin-bottom: 20px;
+    border-radius: var(--radius-lg, 12px);
+    background: var(--gradient-mesh), var(--bg-surface, hsl(220, 18%, 10%));
+    border: 1px solid var(--border, hsl(220, 14%, 16%));
+    overflow: hidden;
+}
+
+.page-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at top right, hsla(142, 60%, 50%, 0.06), transparent 60%);
+    pointer-events: none;
+}
+
+.page-hero .hero-eyebrow {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: var(--accent, hsl(142, 60%, 50%));
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    opacity: 0.85;
+}
+
+.page-hero h1 {
+    margin: 0 0 6px 0;
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: var(--text-primary, hsl(210, 20%, 92%));
+    letter-spacing: -0.3px;
+}
+
+.page-hero p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-muted, hsl(215, 12%, 52%));
+}
+
+/* ==================== KPI NUMBER EMPHASIS ==================== */
+/* Utility for big mono numbers — opt-in via class */
+.kpi-number-lg {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.35rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+}
+
+.kpi-number-xl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2.75rem;
+    font-weight: 700;
+    line-height: 1.05;
+    letter-spacing: -1px;
+}
+
+/* Sparkline container — fixed height so it doesn't blow up cards */
+.kpi-sparkline {
+    position: relative;
+    height: 40px;
+    margin-top: 8px;
+    width: 100%;
+}
+
+.kpi-sparkline canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+    .ticker-bar {
+        height: 36px;
+        font-size: 0.78rem;
+    }
+    .ticker-bar .market-status {
+        padding: 0 10px;
+        font-size: 0.68rem;
+    }
+    .ticker-bar .market-status .label-text {
+        display: none;
+    }
+    .page-hero {
+        padding: 18px 18px 16px;
+    }
+    .page-hero h1 {
+        font-size: 1.35rem;
+    }
+    .page-hero .hero-eyebrow {
+        font-size: 0.65rem;
+        letter-spacing: 1.5px;
+    }
+    .kpi-number-lg {
+        font-size: 1.85rem;
+    }
+    .kpi-number-xl {
+        font-size: 2.1rem;
+    }
+}

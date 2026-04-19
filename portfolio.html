@@ -23,9 +23,13 @@
     
     <!-- Chart.js - Fixed CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
+    <link rel="stylesheet" href="shared-theme.css">
+    <script src="ticker.js" defer></script>
     
     <style>
         /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
@@ -706,12 +710,17 @@
         .summary-card .card-icon.red { background: hsla(0, 72%, 55%, 0.12); color: var(--loss); }
 
         .summary-card .value {
-            font-size: 1.6rem;
+            font-size: 2.35rem;
             font-weight: 700;
-            margin-bottom: 4px;
+            line-height: 1.1;
+            margin-bottom: 6px;
             font-family: 'JetBrains Mono', monospace;
             font-variant-numeric: tabular-nums;
+            letter-spacing: -0.5px;
             color: var(--text-primary);
+        }
+        @media (max-width: 768px) {
+            .summary-card .value { font-size: 1.8rem; }
         }
 
         .summary-card .sub {
@@ -2053,6 +2062,9 @@
             </div>
         </nav>
 
+        <!-- Live Market Ticker Bar -->
+        <div class="ticker-bar" id="liveTicker" aria-label="Live market ticker"></div>
+
         <!-- Main Content Area -->
         <main class="main-content">
             <!-- Hidden old header -->
@@ -2078,9 +2090,10 @@
 
                 <!-- ===== TAB: OVERVIEW ===== -->
                 <div id="tab-overview" class="tab-content active">
-                    <div class="page-header">
-                        <h1 style="font-size: 1.4rem; font-weight: 700;">סיכום תיק ההשקעות</h1>
-                        <p style="color: var(--text-muted); font-size: 0.9rem;">מבט על הביצועים והתשואות שלך</p>
+                    <div class="page-hero">
+                        <span class="hero-eyebrow">PORTFOLIO · OVERVIEW</span>
+                        <h1>סיכום תיק ההשקעות</h1>
+                        <p>מבט על הביצועים והתשואות שלך</p>
                     </div>
 
                     <!-- Main Summary Cards - Lovable Style -->
@@ -12877,6 +12890,14 @@ ${msg}`, 'warning');
             });
             
             notify('💼 מערכת מוכנה עם גרפים מתקדמים!', 'success');
+
+            // Initialize live ticker bar (holdings + market indices + FX)
+            try {
+                if (typeof window.initTicker === 'function') {
+                    window.initTicker({ includeHoldings: true, maxHoldings: 5 });
+                }
+            } catch (e) { console.warn('ticker init failed', e); }
+
             console.log('✅ Portfolio initialized successfully');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('📋 Debug Info:');
