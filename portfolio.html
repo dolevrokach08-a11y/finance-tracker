@@ -10206,9 +10206,18 @@ ${msg}`, 'warning');
             // =============================================
             if (totalTWR !== null) {
                 const color = totalTWR.total >= 0 ? '#10b981' : '#ef4444';
-                document.getElementById('main-twr-display').textContent = 
+                document.getElementById('main-twr-display').textContent =
                     `${totalTWR.total >= 0 ? '+' : ''}${totalTWR.total.toFixed(1)}%`;
                 document.getElementById('main-twr-display').style.color = color;
+
+                // Cache TWR so index.html can show the same number (avoids
+                // re-implementing the full snapshot-based TWR there).
+                try {
+                    localStorage.setItem('portfolio_cachedTWR', JSON.stringify({
+                        total: totalTWR.total,
+                        timestamp: Date.now()
+                    }));
+                } catch (e) {}
                 
                 // TWR Breakdown (Base + Live)
                 if (totalTWR.base !== undefined && totalTWR.live !== undefined) {

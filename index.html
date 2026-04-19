@@ -873,12 +873,28 @@
             }
 
             // ---------- Return calculation ----------
-            // Prefer YTD from snapshots; fall back to Total Return from cost basis.
-            // We always have *something* meaningful to show as long as there are holdings.
+            // Priority:
+            //   1. TWR cached by portfolio.html — guarantees the home page shows
+            //      the exact same % as the portfolio page (e.g. 16.8% not 16.6%).
+            //   2. YTD from snapshots
+            //   3. Total return from cost basis (fallback only)
             let returnPct = null;
             let returnLabel = 'תשואה YTD';
+
+            try {
+                const twrRaw = localStorage.getItem('portfolio_cachedTWR');
+                if (twrRaw) {
+                    const twr = JSON.parse(twrRaw);
+                    // Accept within 24h — portfolio page refreshes this on every load
+                    if (twr && typeof twr.total === 'number' && (Date.now() - (twr.timestamp || 0)) < 24 * 60 * 60 * 1000) {
+                        returnPct = twr.total;
+                        returnLabel = 'תשואה כוללת (TWR)';
+                    }
+                }
+            } catch (e) {}
+
             const snapshots = Array.isArray(portfolio?.portfolioSnapshots) ? portfolio.portfolioSnapshots.slice() : [];
-            if (snapshots.length >= 2) {
+            if (returnPct == null && snapshots.length >= 2) {
                 snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const yearStart = new Date(new Date().getFullYear(), 0, 1);
                 const startSnap = snapshots.find(s => new Date(s.date) >= yearStart) || snapshots[0];
