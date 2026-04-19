@@ -15,6 +15,8 @@
 
     <!-- Shared theme -->
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared-theme.css">
+    <script src="ticker.js" defer></script>
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -306,8 +308,14 @@
             <button class="logout-btn" id="logoutBtn">🚪 התנתק</button>
         </div>
 
-        <h1>💰 ניהול פיננסי אישי 📊</h1>
-        <p class="subtitle">בחר את המערכת שברצונך להשתמש</p>
+        <!-- Live Market Ticker Bar -->
+        <div class="ticker-bar" id="liveTicker" aria-label="Live market ticker" style="margin-bottom: 18px; border-radius: 10px;"></div>
+
+        <div class="page-hero" style="text-align:center; margin-bottom: 20px;">
+            <span class="hero-eyebrow">HOME · SUMMARY</span>
+            <h1 style="margin-top:4px;">💰 ניהול פיננסי אישי 📊</h1>
+            <p class="subtitle">בחר את המערכת שברצונך להשתמש</p>
+        </div>
         
         <div class="buttons-container">
             <a href="finance.html" class="app-button finance-button">
@@ -411,6 +419,13 @@
             loadingScreen.style.display = 'none';
             mainContainer.style.display = 'block';
             loadDashboard();
+
+            // Initialize live ticker bar (includes top holdings if the user has any)
+            try {
+                if (typeof window.initTicker === 'function') {
+                    window.initTicker({ includeHoldings: true, maxHoldings: 3 });
+                }
+            } catch (e) { console.warn('ticker init failed', e); }
         }
 
         function formatCurrency(value) {
