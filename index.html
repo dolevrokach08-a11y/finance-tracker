@@ -834,18 +834,37 @@
             }
 
             // ---------- PORTFOLIO aggregates (with currency conversion) ----------
-            let portfolioValue = 0;
-            let portfolioCost = 0;
-            if (portfolio && Array.isArray(portfolio.holdings)) {
+            // NOTE: in portfolio.html, `costBasis` is **per-unit** in the holding's native currency
+            // (see e.g. line ~5175/5218: `h.shares * h.costBasis`). So we must multiply by shares
+            // AND convert to ILS via the user's saved FX rates — same as getTotalPortfolioValue().
+            let portfolioValue = 0;      // holdings + bonds + cash  (for "total net worth" style display)
+            let investedValue = 0;       // holdings + bonds ONLY    (what we compare against cost)
+            let portfolioCost = 0;       // cost basis of holdings + bonds
+            if (portfolio) {
                 const usd = portfolio.rates?.USD || 3.7;
                 const eur = portfolio.rates?.EUR || 4.1;
-                portfolio.holdings.forEach(h => {
-                    const rate = h.currency === 'USD' ? usd : h.currency === 'EUR' ? eur : 1;
-                    portfolioValue += ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0) * rate);
-                    // costBasis is already stored in ILS in this app
-                    portfolioCost += (Number(h.costBasis) || 0);
-                });
-                // Add cash balance if tracked
+                const rateOf = (cur) => cur === 'USD' ? usd : cur === 'EUR' ? eur : 1;
+
+                // Stocks
+                if (Array.isArray(portfolio.holdings)) {
+                    portfolio.holdings.forEach(h => {
+                        const rate = rateOf(h.currency);
+                        const shares = Number(h.shares) || 0;
+                        investedValue += shares * (Number(h.currentPrice) || 0) * rate;
+                        portfolioCost += shares * (Number(h.costBasis) || 0) * rate;
+                    });
+                }
+                // Bonds (same schema: units * price, cost = units * costBasis, native currency)
+                if (Array.isArray(portfolio.bonds)) {
+                    portfolio.bonds.forEach(b => {
+                        const rate = rateOf(b.currency);
+                        const units = Number(b.units) || 0;
+                        investedValue += units * (Number(b.currentPrice) || 0) * rate;
+                        portfolioCost += units * (Number(b.costBasis) || 0) * rate;
+                    });
+                }
+                portfolioValue = investedValue;
+                // Cash balance (goes into displayed portfolio value, but NOT into return calc)
                 if (portfolio.cash && typeof portfolio.cash === 'object') {
                     portfolioValue += (Number(portfolio.cash.ILS) || 0);
                     portfolioValue += (Number(portfolio.cash.USD) || 0) * usd;
@@ -871,9 +890,10 @@
                     returnLabel = 'תשואה YTD';
                 }
             }
-            // Fallback: total return from cost basis vs current value
-            if (returnPct == null && portfolioCost > 0 && portfolioValue > 0) {
-                returnPct = ((portfolioValue - portfolioCost) / portfolioCost) * 100;
+            // Fallback: total return from cost basis vs current value of invested assets
+            // (exclude cash — cash has no cost basis and would skew the %)
+            if (returnPct == null && portfolioCost > 0 && investedValue > 0) {
+                returnPct = ((investedValue - portfolioCost) / portfolioCost) * 100;
                 returnLabel = 'תשואה כוללת';
             }
 

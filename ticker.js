@@ -60,9 +60,15 @@
             const result = data?.chart?.result?.[0];
             if (!result) return null;
             const meta = result.meta || {};
-            const price = meta.regularMarketPrice;
-            const prevClose = meta.chartPreviousClose || meta.previousClose;
+            let price = meta.regularMarketPrice;
+            let prevClose = meta.chartPreviousClose || meta.previousClose;
             if (!price) return null;
+            // TASE stocks (.TA) come back in agorot — convert to shekels when price > 100.
+            // Same heuristic portfolio.html uses in fetchStockPrice.
+            if (/\.TA$/i.test(symbol) && price > 100) {
+                price = price / 100;
+                if (prevClose) prevClose = prevClose / 100;
+            }
             const change = prevClose ? ((price - prevClose) / prevClose) * 100 : 0;
             return { price, change, currency: meta.currency || 'USD' };
         } catch (e) {
@@ -93,6 +99,17 @@
     }
 
     // ================= HOLDINGS FROM LOCALSTORAGE =================
+    // Build a Yahoo-friendly symbol. Israeli 7-digit security IDs need `.TA`.
+    // Mirrors the convention used by portfolio.html's fetchStockPrice (Strategy 4).
+    function toYahooSymbol(h) {
+        const altRaw = (h.altTicker || '').trim();
+        const sym = (h.symbol || '').trim();
+        if (altRaw) return altRaw.toUpperCase();
+        // Pure 7-digit Israeli security number → append .TA
+        if (/^\d{7}$/.test(sym)) return `${sym}.TA`;
+        return sym.toUpperCase();
+    }
+
     function getUserHoldings(max) {
         try {
             const raw = localStorage.getItem('portfolio');
@@ -102,8 +119,11 @@
             return holdings
                 .filter(h => h.symbol && (h.shares || 0) > 0)
                 .map(h => ({
-                    symbol: (h.altTicker || h.symbol).trim(),
+                    symbol: toYahooSymbol(h),
                     display: h.symbol,
+                    // Keep cached price/currency so we can render even if Yahoo fetch fails
+                    cachedPrice: Number(h.currentPrice) || 0,
+                    currency: h.currency || 'ILS',
                     value: (h.shares || 0) * (h.currentPrice || 0)
                 }))
                 .sort((a, b) => b.value - a.value)
@@ -208,12 +228,21 @@
                 renderTicker(scrollEl, cached.data.map(d => ({ ...d, stale: true })));
             }
 
-            // Fetch all in parallel (Promise.allSettled to tolerate failures)
+            // Fetch all in parallel (Promise.allSettled to tolerate failures).
+            // For user holdings we fall back to the price cached by portfolio.html
+            // (which has a multi-strategy Israeli-stock fetcher) so the row still
+            // shows up even when Yahoo doesn't know the symbol.
             const results = await Promise.allSettled(
                 symbolsToFetch.map(async s => {
                     const data = await fetchYahooPrice(s.symbol);
-                    if (!data) return null;
-                    return { symbol: s.symbol, display: s.display, price: data.price, change: data.change };
+                    if (data) {
+                        return { symbol: s.symbol, display: s.display, price: data.price, change: data.change };
+                    }
+                    // Fallback: user holding with a cached price → show it, no change %
+                    if (s.cachedPrice && s.cachedPrice > 0) {
+                        return { symbol: s.symbol, display: s.display, price: s.cachedPrice, change: 0, fallback: true };
+                    }
+                    return null;
                 })
             );
             items = results
