@@ -6862,6 +6862,7 @@ function calculateTWRv3() {
                 try { localStorage.setItem('portfolio', JSON.stringify(dataToSave)); } catch(e) {}
                 if (window.SyncWidget) window.SyncWidget.markPending();
                 notify('⚠️ אופליין - נשמר מקומית בלבד', 'warning');
+                notifyHoldingsChanged(dataToSave.holdings);
                 return;
             }
 
@@ -6886,7 +6887,27 @@ function calculateTWRv3() {
                 if (window.SyncWidget) window.SyncWidget.markError();
                 notify('⚠️ שגיאה בשמירה בענן, נשמר מקומית', 'error');
             }
+
+            notifyHoldingsChanged(dataToSave.holdings);
         }
+
+        // Ticker live-update hook: fire a custom event whenever the set of owned
+        // symbols changes so ticker.js can invalidate its cache and re-fetch.
+        // We hash just the symbol list (not full holding objects) to avoid churn
+        // on price/metadata updates that wouldn't change what the ticker shows.
+        let _lastHoldingsHash = null;
+        function notifyHoldingsChanged(holdings) {
+            try {
+                const hash = (Array.isArray(holdings) ? holdings : [])
+                    .filter(h => h && h.symbol && (Number(h.shares) || 0) > 0)
+                    .map(h => `${h.altTicker || h.symbol}:${h.shares}`)
+                    .sort().join('|');
+                if (hash === _lastHoldingsHash) return;
+                _lastHoldingsHash = hash;
+                window.dispatchEvent(new CustomEvent('holdingsChanged'));
+            } catch (e) { /* non-critical */ }
+        }
+
         // Expose for the sync widget retry button
         window.saveData = saveData;
         

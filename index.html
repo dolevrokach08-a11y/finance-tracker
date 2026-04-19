@@ -327,9 +327,14 @@
             text-decoration: none;
             color: inherit;
             overflow: hidden;
-            transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+            /* spring-like ease — feels closer to the Lovable hover */
+            transition:
+                transform .35s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+                border-color .25s ease,
+                box-shadow .35s ease;
             min-height: 240px;
             text-align: right;
+            will-change: transform;
         }
         .entry-card::before {
             content: '';
@@ -337,15 +342,30 @@
             inset: 0;
             background: radial-gradient(ellipse at bottom left, var(--card-accent, hsl(142, 60%, 50%)), transparent 65%);
             opacity: 0.09;
-            transition: opacity .25s ease;
+            transition: opacity .35s ease;
             pointer-events: none;
         }
         .entry-card:hover {
-            transform: translateY(-3px);
+            transform: translateY(-6px) scale(1.01);
             border-color: var(--card-accent, hsl(142, 60%, 50%));
-            box-shadow: 0 8px 32px -12px hsla(var(--card-accent-hsl, 142 60% 50%), 0.25);
+            box-shadow:
+                0 18px 40px -14px hsla(var(--card-accent-hsl, 142 60% 50%), 0.45),
+                0 6px 14px -6px hsla(220, 50%, 2%, 0.5);
         }
-        .entry-card:hover::before { opacity: 0.16; }
+        .entry-card:hover::before { opacity: 0.22; }
+        .entry-card:active { transform: translateY(-3px) scale(1.0); transition-duration: .12s; }
+
+        /* Icon micro-interaction — a little tilt + scale on hover */
+        .entry-card-icon {
+            transition: transform .35s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+        }
+        .entry-card:hover .entry-card-icon {
+            transform: scale(1.08) rotate(-4deg);
+        }
+
+        /* Sparkline brightens on hover */
+        .entry-card-sparkline { transition: opacity .3s ease; opacity: 0.92; }
+        .entry-card:hover .entry-card-sparkline { opacity: 1; }
 
         .entry-card.green { --card-accent: hsl(142, 60%, 50%); --card-accent-hsl: 142 60% 50%; }
         .entry-card.blue { --card-accent: hsl(210, 80%, 58%); --card-accent-hsl: 210 80% 58%; }
@@ -815,13 +835,16 @@
 
             // ---------- PORTFOLIO aggregates (with currency conversion) ----------
             let portfolioValue = 0;
+            let portfolioCost = 0;
             if (portfolio && Array.isArray(portfolio.holdings)) {
                 const usd = portfolio.rates?.USD || 3.7;
                 const eur = portfolio.rates?.EUR || 4.1;
-                portfolioValue = portfolio.holdings.reduce((s, h) => {
+                portfolio.holdings.forEach(h => {
                     const rate = h.currency === 'USD' ? usd : h.currency === 'EUR' ? eur : 1;
-                    return s + ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0) * rate);
-                }, 0);
+                    portfolioValue += ((Number(h.shares) || 0) * (Number(h.currentPrice) || 0) * rate);
+                    // costBasis is already stored in ILS in this app
+                    portfolioCost += (Number(h.costBasis) || 0);
+                });
                 // Add cash balance if tracked
                 if (portfolio.cash && typeof portfolio.cash === 'object') {
                     portfolioValue += (Number(portfolio.cash.ILS) || 0);
@@ -830,8 +853,11 @@
                 }
             }
 
-            // ---------- YTD return from portfolioSnapshots ----------
-            let ytdPct = null;
+            // ---------- Return calculation ----------
+            // Prefer YTD from snapshots; fall back to Total Return from cost basis.
+            // We always have *something* meaningful to show as long as there are holdings.
+            let returnPct = null;
+            let returnLabel = 'תשואה YTD';
             const snapshots = Array.isArray(portfolio?.portfolioSnapshots) ? portfolio.portfolioSnapshots.slice() : [];
             if (snapshots.length >= 2) {
                 snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -840,7 +866,15 @@
                 const lastSnap = snapshots[snapshots.length - 1];
                 const startVal = Number(startSnap?.value) || 0;
                 const endVal = Number(lastSnap?.value) || portfolioValue;
-                if (startVal > 0) ytdPct = ((endVal - startVal) / startVal) * 100;
+                if (startVal > 0) {
+                    returnPct = ((endVal - startVal) / startVal) * 100;
+                    returnLabel = 'תשואה YTD';
+                }
+            }
+            // Fallback: total return from cost basis vs current value
+            if (returnPct == null && portfolioCost > 0 && portfolioValue > 0) {
+                returnPct = ((portfolioValue - portfolioCost) / portfolioCost) * 100;
+                returnLabel = 'תשואה כוללת';
             }
 
             // ---------- Top KPIs ----------
@@ -848,21 +882,30 @@
             const el = (id) => document.getElementById(id);
             if (netWorth !== 0) el('kpiNetWorth').textContent = formatCurrency(netWorth);
             if (portfolioValue > 0) el('kpiPortfolio').textContent = formatCurrency(portfolioValue);
-            if (ytdPct != null) {
-                el('kpiYtd').textContent = (ytdPct >= 0 ? '+' : '') + ytdPct.toFixed(1) + '%';
-                el('kpiYtd').style.color = ytdPct >= 0 ? 'var(--profit)' : 'var(--loss)';
+
+            const ytdEl = el('kpiYtd');
+            const ytdLabelEl = ytdEl?.parentElement?.querySelector('.label');
+            if (returnPct != null) {
+                ytdEl.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
+                ytdEl.style.color = returnPct >= 0 ? 'var(--profit)' : 'var(--loss)';
+                if (ytdLabelEl) ytdLabelEl.textContent = returnLabel;
             } else {
-                el('kpiYtd').classList.add('muted');
-                el('kpiYtd').textContent = 'אין היסטוריה';
+                // No portfolio at all — hide the KPI entirely rather than showing "—"
+                const card = ytdEl?.closest('.top-kpi');
+                if (card) card.style.display = 'none';
+                el('topKpis').style.gridTemplateColumns = 'repeat(2, 1fr)';
             }
 
             // ---------- Entry card KPIs ----------
-            // Portfolio: annual return (use YTD as proxy)
-            if (ytdPct != null) {
-                el('cardKpiPortfolio').textContent = (ytdPct >= 0 ? '+' : '') + ytdPct.toFixed(1) + '%';
+            // Portfolio card: show the same return (YTD or Total) with matching label
+            if (returnPct != null) {
+                el('cardKpiPortfolio').textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
+                const lbl = el('cardKpiPortfolio').previousElementSibling;
+                if (lbl) lbl.textContent = returnLabel === 'תשואה YTD' ? 'תשואה שנתית' : 'תשואה כוללת';
             } else if (portfolioValue > 0) {
                 el('cardKpiPortfolio').textContent = formatCompact(portfolioValue);
-                el('cardKpiPortfolio').previousElementSibling.textContent = 'שווי תיק';
+                const lbl = el('cardKpiPortfolio').previousElementSibling;
+                if (lbl) lbl.textContent = 'שווי תיק';
             }
 
             // Finance: monthly savings

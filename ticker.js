@@ -82,9 +82,13 @@
         } catch (e) { return null; }
     }
 
-    function saveCache(data) {
+    function saveCache(data, symbolsHash) {
         try {
-            localStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data }));
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                timestamp: Date.now(),
+                symbolsHash: symbolsHash || '',
+                data
+            }));
         } catch (e) {}
     }
 
@@ -149,7 +153,16 @@
         statusEl.innerHTML = `<span class="dot${status.open ? ' pulse' : ''}"></span><span class="label-text">${status.label}</span>`;
     }
 
+    // Hash the current set of symbols — cache is keyed on this so that when
+    // holdings change (buy/sell), we don't reuse stale entries from a different symbol list.
+    function hashSymbols(symbols) {
+        return symbols.map(s => s.symbol).sort().join('|');
+    }
+
     // ================= MAIN INIT =================
+    // Module-level handle so window.refreshTicker() can force a re-fetch from outside.
+    let activeRefresh = null;
+
     async function initTicker(options) {
         options = options || {};
         const includeHoldings = options.includeHoldings !== false;
@@ -169,7 +182,7 @@
         updateMarketStatus(statusEl);
         setInterval(() => updateMarketStatus(statusEl), 60 * 1000);
 
-        async function refresh() {
+        async function refresh(force) {
             const cached = loadCache();
             const now = Date.now();
             let items = [];
@@ -177,16 +190,21 @@
             // Build symbol list
             const holdings = includeHoldings ? getUserHoldings(maxHoldings) : [];
             const symbolsToFetch = [...holdings, ...DEFAULT_SYMBOLS];
+            const currentHash = hashSymbols(symbolsToFetch);
 
-            // If cache fresh, use it directly
-            if (cached && (now - cached.timestamp) < CACHE_TTL && cached.data && cached.data.length > 0) {
+            const cacheValid = cached
+                && cached.data && cached.data.length > 0
+                && cached.symbolsHash === currentHash;
+
+            // If cache is fresh AND covers the same symbol set, use it directly
+            if (!force && cacheValid && (now - cached.timestamp) < CACHE_TTL) {
                 items = cached.data.map(d => ({ ...d, stale: false }));
                 renderTicker(scrollEl, items);
                 return;
             }
 
-            // Render cached (stale) immediately while we fetch
-            if (cached && cached.data && cached.data.length > 0) {
+            // Render cached (stale) immediately while we fetch — only if symbol set matches
+            if (cacheValid) {
                 renderTicker(scrollEl, cached.data.map(d => ({ ...d, stale: true })));
             }
 
@@ -203,17 +221,37 @@
                 .map(r => r.value);
 
             if (items.length > 0) {
-                saveCache(items);
+                saveCache(items, currentHash);
                 renderTicker(scrollEl, items);
-            } else if (cached && cached.data) {
+            } else if (cacheValid) {
                 // All failed — keep showing stale cache
                 renderTicker(scrollEl, cached.data.map(d => ({ ...d, stale: true })));
             }
         }
 
+        activeRefresh = refresh;
         refresh();
         setInterval(refresh, REFRESH_INTERVAL);
     }
 
+    // Public refresh API: called from outside (e.g. portfolio.html after saveData)
+    // to pick up new holdings immediately. We don't force a hard refetch — the
+    // refresh() function automatically busts the cache when the symbol set hash
+    // differs, so unchanged saves remain cheap (no Yahoo hit).
+    function refreshTicker() {
+        if (typeof activeRefresh === 'function') {
+            activeRefresh(false).catch(e => console.warn('refreshTicker failed', e));
+        }
+    }
+
+    // React to holdings changes in the same tab (dispatched from portfolio.html)
+    window.addEventListener('holdingsChanged', () => refreshTicker());
+
+    // React to holdings changes from other tabs (multi-tab sync)
+    window.addEventListener('storage', (e) => {
+        if (e && e.key === 'portfolio') refreshTicker();
+    });
+
     window.initTicker = initTicker;
+    window.refreshTicker = refreshTicker;
 })(window);
