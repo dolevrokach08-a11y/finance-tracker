@@ -2783,8 +2783,15 @@
 
                     <div class="form-group">
                         <label>מס רווחי הון (אופציונלי)</label>
-                        <input type="number" id="sell-bond-tax" placeholder="0" step="0.01" value="0">
-                        <small style="color: var(--text-secondary); font-size: 0.8rem;">מס שנוכה — יופחת מהתמורה ומהרווח</small>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="sell-bond-tax" placeholder="0" step="0.01" value="0" style="flex: 1;">
+                            <select id="sell-bond-tax-currency" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary);">
+                                <option value="ILS">₪ ILS</option>
+                                <option value="USD">$ USD</option>
+                                <option value="EUR">€ EUR</option>
+                            </select>
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">ברוקר ישראלי מנכה בשקלים — השאר ILS. ברוקר זר במטבע המקור — בחר בהתאם.</small>
                     </div>
 
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -2831,8 +2838,15 @@
 
                     <div class="form-group">
                         <label>מס רווחי הון (אופציונלי)</label>
-                        <input type="number" id="sell-shares-tax" placeholder="0" step="0.01" value="0">
-                        <small style="color: var(--text-secondary); font-size: 0.8rem;">מס שנוכה — יופחת מהתמורה ומהרווח (במטבע המכירה)</small>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="number" id="sell-shares-tax" placeholder="0" step="0.01" value="0" style="flex: 1;">
+                            <select id="sell-shares-tax-currency" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary);">
+                                <option value="ILS">₪ ILS</option>
+                                <option value="USD">$ USD</option>
+                                <option value="EUR">€ EUR</option>
+                            </select>
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">ברוקר ישראלי מנכה בשקלים גם על מניה זרה — השאר ILS. ברוקר זר שמנכה במטבע המקור — בחר בהתאם.</small>
                     </div>
 
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -4638,6 +4652,18 @@ function calculateTWRv3() {
             if (currency === 'ILS') return amount;
             const rate = rates[currency] || portfolio.rates[currency] || 1;
             return amount * rate;
+        }
+
+        // Convert between any two currencies using portfolio.rates.
+        // Useful for tax that's paid in ILS but needs to be reflected
+        // as part of a profit calculation denominated in USD/EUR.
+        function convertBetweenCurrencies(amount, fromCur, toCur) {
+            if (!amount || fromCur === toCur) return amount || 0;
+            const rates = portfolio.rates || {};
+            const inILS = fromCur === 'ILS' ? amount : amount * (rates[fromCur] || 1);
+            if (toCur === 'ILS') return inILS;
+            const toRate = rates[toCur] || 1;
+            return toRate ? inILS / toRate : 0;
         }
 
         /**
@@ -8061,6 +8087,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-bond-date').value = new Date().toISOString().split('T')[0];
             document.getElementById('sell-bond-commission').value = 0;
             document.getElementById('sell-bond-tax').value = 0;
+            document.getElementById('sell-bond-tax-currency').value = 'ILS';
             
             document.getElementById('sell-bond-units-modal').style.display = 'flex';
         }
@@ -8079,6 +8106,7 @@ ${msg}`, 'warning');
             const dateInput = document.getElementById('sell-bond-date').value;
             const commission = parseFloat(document.getElementById('sell-bond-commission').value) || 0;
             const tax = parseFloat(document.getElementById('sell-bond-tax').value) || 0;
+            const taxCurrency = document.getElementById('sell-bond-tax-currency').value || 'ILS';
 
             if (isNaN(unitsNum) || unitsNum <= 0) return notify('❌ כמות לא תקינה', 'error');
             if (unitsNum > bond.units) return notify('❌ אין מספיק יחידות למכירה', 'error');
@@ -8087,19 +8115,23 @@ ${msg}`, 'warning');
             if (commission < 0 || tax < 0) return notify('❌ עמלה/מס לא יכולים להיות שליליים', 'error');
 
             const saleDate = new Date(dateInput + 'T12:00:00.000Z').toISOString();
-            // Gross proceeds minus commission and capital-gains tax → what actually hits the account
+            const bondCurrency = bond.currency || 'ILS';
             const grossAmount = unitsNum * priceNum;
-            const saleAmount = grossAmount - commission - tax;
-            const profit = (priceNum - bond.costBasis) * unitsNum - commission - tax;
+            // Commission is in bond's currency. Tax may be in a different currency;
+            // if it is, it's handled separately via the cash ledger.
+            const taxInBondCurrency = convertBetweenCurrencies(tax, taxCurrency, bondCurrency);
+            const taxDeductedFromProceeds = (taxCurrency === bondCurrency) ? tax : 0;
+            const saleAmount = grossAmount - commission - taxDeductedFromProceeds;
+            const profit = (priceNum - bond.costBasis) * unitsNum - commission - taxInBondCurrency;
             
             const keepInPortfolio = confirm(`תמורת המכירה: ₪${saleAmount.toLocaleString()}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
             
             portfolio.sales.push({
                 id: Date.now(),
                 date: saleDate,
-                amount: saleAmount,  // בשקלים — נטו אחרי עמלה ומס
-                originalAmount: saleAmount,  // במטבע המקורי
-                currency: bond.currency || 'ILS',
+                amount: saleAmount,  // נטו אחרי עמלה ומס (במטבע האג"ח)
+                originalAmount: saleAmount,
+                currency: bondCurrency,
                 profit: profit,
                 assetType: 'bonds',
                 assetId: bond.id,
@@ -8108,7 +8140,8 @@ ${msg}`, 'warning');
                 salePrice: priceNum,   // מחיר ברוטו ליחידה (לפני עמלה/מס)
                 costBasis: bond.costBasis,
                 commission: commission,
-                tax: tax
+                tax: tax,
+                taxCurrency: taxCurrency
             });
             
             if (!keepInPortfolio) {
@@ -8128,10 +8161,16 @@ ${msg}`, 'warning');
             }
             
             bond.units -= unitsNum;
-            
+
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
             if (keepInPortfolio) {
-                if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
-                portfolio.cash.ILS = (portfolio.cash.ILS || 0) + saleAmount;
+                portfolio.cash[bondCurrency] = (portfolio.cash[bondCurrency] || 0) + saleAmount;
+            }
+            // אם המס במטבע שונה מהאג"ח — הוא לא הופחת מ-saleAmount, אז מפחיתים אותו
+            // בנפרד מיתרת המזומן של מטבע המס (גם אם בחרת משיכה מיידית).
+            if (tax > 0 && taxCurrency !== bondCurrency) {
+                portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
+                console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} מיתרת המזומן`);
             }
             
             bond.lastUpdate = new Date().toISOString();
@@ -8526,6 +8565,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-shares-quantity').value = '';
             document.getElementById('sell-shares-commission').value = '0';
             document.getElementById('sell-shares-tax').value = '0';
+            document.getElementById('sell-shares-tax-currency').value = 'ILS';
 
             // Set date to today
             const today = new Date().toISOString().split('T')[0];
@@ -8553,6 +8593,7 @@ ${msg}`, 'warning');
             const dateInput = document.getElementById('sell-shares-date').value;
             const commission = parseFloat(document.getElementById('sell-shares-commission').value) || 0;
             const tax = parseFloat(document.getElementById('sell-shares-tax').value) || 0;
+            const taxCurrency = document.getElementById('sell-shares-tax-currency').value || 'ILS';
 
             // Validation
             if (isNaN(sharesToSell) || sharesToSell <= 0) {
@@ -8582,27 +8623,35 @@ ${msg}`, 'warning');
             // Convert date to ISO format
             const saleDate = new Date(dateInput + 'T12:00:00.000Z').toISOString();
 
-            // Calculate amounts — commission AND capital-gains tax are subtracted
-            // from the gross proceeds. Both in the holding's native currency.
-            const grossAmount = sharesToSell * salePrice;                  // ברוטו
-            const saleAmountForeign = grossAmount - commission - tax;      // נטו שהגיע לחשבון
-            const netPricePerShare = saleAmountForeign / sharesToSell;     // מחיר נטו ליחידה
+            // Calculate amounts.
+            // Commission is always in the holding's native currency and subtracts from
+            // the foreign proceeds. Tax may be in a different currency (e.g. ILS on a
+            // USD position, typical for Israeli brokers). In that case the foreign
+            // proceeds are NOT reduced — instead the tax is deducted from the cash
+            // ledger of its own currency (below).
+            const grossAmount = sharesToSell * salePrice;                              // ברוטו במטבע ההחזקה
+            const taxInHoldingCurrency = convertBetweenCurrencies(tax, taxCurrency, holding.currency);
+            const taxDeductedFromForeign = (taxCurrency === holding.currency) ? tax : 0;
+            const saleAmountForeign = grossAmount - commission - taxDeductedFromForeign;
+            const netPricePerShare = saleAmountForeign / sharesToSell;
             const saleAmountILS = convertToILS(saleAmountForeign, holding.currency);
-            const profit = (netPricePerShare - holding.costBasis) * sharesToSell;  // רווח נטו
+            // Profit always reflects the *real* net after commission + tax (regardless of tax currency)
+            const profit = (salePrice - holding.costBasis) * sharesToSell - commission - taxInHoldingCurrency;
             const profitILS = convertToILS(profit, holding.currency);
 
             // שאלה: מה לעשות עם התמורה?
             const curSym = getCurrencySymbol(holding.currency);
+            const taxSym = getCurrencySymbol(taxCurrency);
             const feesParts = [];
             if (commission > 0) feesParts.push(`עמלה: ${curSym}${commission.toFixed(2)}`);
-            if (tax > 0)        feesParts.push(`מס: ${curSym}${tax.toFixed(2)}`);
+            if (tax > 0)        feesParts.push(`מס: ${taxSym}${tax.toFixed(2)}${taxCurrency !== holding.currency ? ` (יופחת מיתרת ${taxCurrency})` : ''}`);
             const feesText = feesParts.length ? `\n${feesParts.join(' | ')}` : '';
             const keepInPortfolio = confirm(`תמורת המכירה (נטו): ${curSym}${saleAmountForeign.toFixed(2)} (₪${Math.round(saleAmountILS).toLocaleString()})${feesText}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
 
             // רישום המכירה — עם מידע מלא
             const deductionParts = [];
             if (commission > 0) deductionParts.push(`עמלה ${curSym}${commission.toFixed(2)}`);
-            if (tax > 0)        deductionParts.push(`מס ${curSym}${tax.toFixed(2)}`);
+            if (tax > 0)        deductionParts.push(`מס ${taxSym}${tax.toFixed(2)}`);
             const deductionText = deductionParts.length ? ` - ${deductionParts.join(' - ')}` : '';
             const noteText = `מכירה: ${sharesToSell} × ${curSym}${salePrice.toFixed(2)}${deductionText} = ${curSym}${saleAmountForeign.toFixed(2)}`;
             
@@ -8618,8 +8667,9 @@ ${msg}`, 'warning');
                 net_price: netPricePerShare,  // מחיר נטו למניה (אחרי עמלה)
                 original_amount: saleAmountForeign,  // סכום נטו במטבע מקורי
                 gross_amount: grossAmount,  // סכום ברוטו לפני עמלה ומס
-                commission: commission,  // עמלת מכירה
-                tax: tax,  // מס רווחי הון שנוכה (במטבע המכירה)
+                commission: commission,  // עמלת מכירה (במטבע ההחזקה)
+                tax: tax,  // מס רווחי הון שנוכה (במטבע שלו — ראה taxCurrency)
+                taxCurrency: taxCurrency,  // מטבע המס (לרוב ILS לברוקר ישראלי)
                 
                 // עלות ורווח
                 costBasis: holding.costBasis,
@@ -8656,11 +8706,23 @@ ${msg}`, 'warning');
                 })();
             }
             
-            // עדכן portfolio.cash - הוסף את תמורת המכירה הנטו (אם נשאר בתיק)
+            // עדכן portfolio.cash — הוסף את תמורת המכירה ליתרת המטבע של ההחזקה.
+            // אם המס שולם במטבע אחר (למשל ILS על מכירת USD) — הוא לא כבר הופחת
+            // מ-saleAmountForeign, אז נפחית אותו מיתרת המטבע הנכונה בנפרד.
             if (keepInPortfolio) {
                 if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
                 portfolio.cash[holding.currency] = (portfolio.cash[holding.currency] || 0) + saleAmountForeign;
-                console.log(`💰 מכירה: נוסף ${saleAmountForeign.toFixed(2)} ${holding.currency} ליתרת המזומן (נטו אחרי עמלה)`);
+                console.log(`💰 מכירה: נוסף ${saleAmountForeign.toFixed(2)} ${holding.currency} ליתרת המזומן`);
+
+                if (tax > 0 && taxCurrency !== holding.currency) {
+                    portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
+                    console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} מיתרת המזומן`);
+                }
+            } else if (tax > 0 && taxCurrency !== holding.currency) {
+                // גם במצב "משיכה מיידית" המס משולם ממטבע נפרד — נרשום אותו כמשיכה נוספת
+                if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+                portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
+                console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} (גם במצב משיכה)`);
             }
             
             // Update holding
