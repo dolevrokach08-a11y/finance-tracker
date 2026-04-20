@@ -2826,9 +2826,15 @@
                     <div class="form-group">
                         <label>עמלה (אופציונלי)</label>
                         <input type="number" id="sell-shares-commission" placeholder="0" step="0.01" value="0">
-                        <small style="color: var(--text-secondary); font-size: 0.8rem;">עמלת מכירה - תופחת מהתמורה</small>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">עמלת מכירה — תופחת מהתמורה</small>
                     </div>
-                    
+
+                    <div class="form-group">
+                        <label>מס רווחי הון (אופציונלי)</label>
+                        <input type="number" id="sell-shares-tax" placeholder="0" step="0.01" value="0">
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">מס שנוכה — יופחת מהתמורה ומהרווח (במטבע המכירה)</small>
+                    </div>
+
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                         <button onclick="hideSellSharesModal()" class="btn" style="background: var(--text-muted);">ביטול</button>
                         <button onclick="submitSellShares()" class="btn" style="background: var(--warning); color: white;">💸 מכור</button>
@@ -8519,7 +8525,8 @@ ${msg}`, 'warning');
             document.getElementById('sell-shares-price').value = holding.currentPrice;
             document.getElementById('sell-shares-quantity').value = '';
             document.getElementById('sell-shares-commission').value = '0';
-            
+            document.getElementById('sell-shares-tax').value = '0';
+
             // Set date to today
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('sell-shares-date').value = today;
@@ -8545,7 +8552,8 @@ ${msg}`, 'warning');
             const salePrice = parseFloat(document.getElementById('sell-shares-price').value);
             const dateInput = document.getElementById('sell-shares-date').value;
             const commission = parseFloat(document.getElementById('sell-shares-commission').value) || 0;
-            
+            const tax = parseFloat(document.getElementById('sell-shares-tax').value) || 0;
+
             // Validation
             if (isNaN(sharesToSell) || sharesToSell <= 0) {
                 notify('❌ כמות לא תקינה', 'error');
@@ -8566,26 +8574,37 @@ ${msg}`, 'warning');
                 notify('❌ אנא בחר תאריך', 'error');
                 return;
             }
-            
+            if (commission < 0 || tax < 0) {
+                notify('❌ עמלה/מס לא יכולים להיות שליליים', 'error');
+                return;
+            }
+
             // Convert date to ISO format
             const saleDate = new Date(dateInput + 'T12:00:00.000Z').toISOString();
-            
-            // Calculate amounts - עמלה מופחתת מהתמורה
-            const grossAmount = sharesToSell * salePrice;  // סכום ברוטו
-            const saleAmountForeign = grossAmount - commission;  // סכום נטו (אחרי עמלה)
-            const netPricePerShare = saleAmountForeign / sharesToSell;  // מחיר נטו למניה
+
+            // Calculate amounts — commission AND capital-gains tax are subtracted
+            // from the gross proceeds. Both in the holding's native currency.
+            const grossAmount = sharesToSell * salePrice;                  // ברוטו
+            const saleAmountForeign = grossAmount - commission - tax;      // נטו שהגיע לחשבון
+            const netPricePerShare = saleAmountForeign / sharesToSell;     // מחיר נטו ליחידה
             const saleAmountILS = convertToILS(saleAmountForeign, holding.currency);
-            const profit = (netPricePerShare - holding.costBasis) * sharesToSell;  // רווח לפי מחיר נטו
+            const profit = (netPricePerShare - holding.costBasis) * sharesToSell;  // רווח נטו
             const profitILS = convertToILS(profit, holding.currency);
-            
+
             // שאלה: מה לעשות עם התמורה?
-            const commissionText = commission > 0 ? `\nעמלה: ${getCurrencySymbol(holding.currency)}${commission.toFixed(2)}` : '';
-            const keepInPortfolio = confirm(`תמורת המכירה (נטו): ${getCurrencySymbol(holding.currency)}${saleAmountForeign.toFixed(2)} (₪${Math.round(saleAmountILS).toLocaleString()})${commissionText}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
-            
-            // רישום המכירה - עם מידע מלא
-            const noteText = commission > 0 
-                ? `מכירה: ${sharesToSell} × ${getCurrencySymbol(holding.currency)}${salePrice.toFixed(2)} - עמלה ${getCurrencySymbol(holding.currency)}${commission.toFixed(2)} = ${getCurrencySymbol(holding.currency)}${saleAmountForeign.toFixed(2)}`
-                : `מכירה: ${sharesToSell} × ${getCurrencySymbol(holding.currency)}${salePrice.toFixed(2)} = ${getCurrencySymbol(holding.currency)}${saleAmountForeign.toFixed(2)}`;
+            const curSym = getCurrencySymbol(holding.currency);
+            const feesParts = [];
+            if (commission > 0) feesParts.push(`עמלה: ${curSym}${commission.toFixed(2)}`);
+            if (tax > 0)        feesParts.push(`מס: ${curSym}${tax.toFixed(2)}`);
+            const feesText = feesParts.length ? `\n${feesParts.join(' | ')}` : '';
+            const keepInPortfolio = confirm(`תמורת המכירה (נטו): ${curSym}${saleAmountForeign.toFixed(2)} (₪${Math.round(saleAmountILS).toLocaleString()})${feesText}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
+
+            // רישום המכירה — עם מידע מלא
+            const deductionParts = [];
+            if (commission > 0) deductionParts.push(`עמלה ${curSym}${commission.toFixed(2)}`);
+            if (tax > 0)        deductionParts.push(`מס ${curSym}${tax.toFixed(2)}`);
+            const deductionText = deductionParts.length ? ` - ${deductionParts.join(' - ')}` : '';
+            const noteText = `מכירה: ${sharesToSell} × ${curSym}${salePrice.toFixed(2)}${deductionText} = ${curSym}${saleAmountForeign.toFixed(2)}`;
             
             const sale = {
                 id: Date.now(),
@@ -8598,8 +8617,9 @@ ${msg}`, 'warning');
                 original_price: salePrice,  // מחיר מכירה למניה (ברוטו)
                 net_price: netPricePerShare,  // מחיר נטו למניה (אחרי עמלה)
                 original_amount: saleAmountForeign,  // סכום נטו במטבע מקורי
-                gross_amount: grossAmount,  // סכום ברוטו לפני עמלה
+                gross_amount: grossAmount,  // סכום ברוטו לפני עמלה ומס
                 commission: commission,  // עמלת מכירה
+                tax: tax,  // מס רווחי הון שנוכה (במטבע המכירה)
                 
                 // עלות ורווח
                 costBasis: holding.costBasis,
