@@ -12,7 +12,11 @@
 class FinancialAIAssistant {
     constructor(options = {}) {
         this.apiKey = options.apiKey || localStorage.getItem('ai_api_key') || null;
-        this.model = options.model || localStorage.getItem('ai_model') || 'claude-sonnet-4-6';
+        // Default to claude-sonnet-4-5 (stable alias). If the user previously
+        // saved an invalid name like 'claude-sonnet-4-6' we silently upgrade.
+        const stored = localStorage.getItem('ai_model');
+        const invalidLegacy = stored === 'claude-sonnet-4-6';
+        this.model = options.model || (invalidLegacy ? null : stored) || 'claude-sonnet-4-5';
         this.getFinanceData = options.getFinanceData || (() => ({}));
         this.getPortfolioData = options.getPortfolioData || (() => ({}));
         this.isOpen = false;
@@ -427,9 +431,9 @@ class FinancialAIAssistant {
                 <input type="password" id="aiApiKeyInput" placeholder="sk-ant-api03-..." value="${maskedKey}" autocomplete="off">
                 <label for="aiModelSelect">מודל</label>
                 <select id="aiModelSelect">
-                    <option value="claude-sonnet-4-6" ${this.model === 'claude-sonnet-4-6' ? 'selected' : ''}>Claude Sonnet 4.6 (מהיר, מומלץ)</option>
-                    <option value="claude-haiku-4-5-20251001" ${this.model === 'claude-haiku-4-5-20251001' ? 'selected' : ''}>Claude Haiku 4.5 (מהיר מאוד, זול)</option>
-                    <option value="claude-opus-4-6" ${this.model === 'claude-opus-4-6' ? 'selected' : ''}>Claude Opus 4.6 (חכם ביותר, יקר)</option>
+                    <option value="claude-sonnet-4-5" ${this.model === 'claude-sonnet-4-5' ? 'selected' : ''}>Claude Sonnet 4.5 (מהיר, מומלץ)</option>
+                    <option value="claude-haiku-4-5" ${this.model === 'claude-haiku-4-5' ? 'selected' : ''}>Claude Haiku 4.5 (מהיר מאוד, זול)</option>
+                    <option value="claude-opus-4-5" ${this.model === 'claude-opus-4-5' ? 'selected' : ''}>Claude Opus 4.5 (חכם ביותר, יקר)</option>
                 </select>
                 <button class="ai-settings-save" id="aiSettingsSave">שמור הגדרות</button>
                 <button class="ai-settings-clear" id="aiSettingsClear">מחק API Key</button>
@@ -590,6 +594,152 @@ class FinancialAIAssistant {
         });
     }
 
+    // ---- Analytics helpers (compute performance before sending to Claude) ----
+
+    _toILS(amount, currency, rates) {
+        if (!amount) return 0;
+        if (currency === 'ILS' || !currency) return amount;
+        const rate = (rates && rates[currency]) || 1;
+        return amount * rate;
+    }
+
+    /**
+     * Build a concise, number-heavy analytics summary of the portfolio so
+     * Claude doesn't have to re-derive everything from raw JSON. Includes:
+     * - Totals in ILS (stocks, bonds, cash, invested, gain/loss)
+     * - Per-holding P/L (absolute + %) in both native and ILS
+     * - Per-bond P/L
+     * - Allocation groups: current % vs target %, diff
+     * - TWR from the cached computation saved by portfolio.html
+     */
+    _buildPortfolioAnalytics(p) {
+        if (!p) return '';
+        const rates = p.rates || {};
+        const holdings = Array.isArray(p.holdings) ? p.holdings : [];
+        const bonds = Array.isArray(p.bonds) ? p.bonds : [];
+
+        // Totals
+        let stocksValueILS = 0, stocksCostILS = 0;
+        const holdingRows = holdings.map(h => {
+            const shares = Number(h.shares) || 0;
+            const price  = Number(h.currentPrice) || 0;
+            const cost   = Number(h.costBasis) || 0;
+            const cur    = h.currency || 'ILS';
+            const valueNative = shares * price;
+            const costNative  = shares * cost;
+            const plNative    = valueNative - costNative;
+            const plPct       = costNative > 0 ? (plNative / costNative) * 100 : 0;
+            const valueILS    = this._toILS(valueNative, cur, rates);
+            const costILS     = this._toILS(costNative, cur, rates);
+            stocksValueILS += valueILS;
+            stocksCostILS  += costILS;
+            return {
+                symbol: h.symbol,
+                currency: cur,
+                shares,
+                costBasis: cost,
+                currentPrice: price,
+                valueNative: +valueNative.toFixed(2),
+                plNative: +plNative.toFixed(2),
+                plPct: +plPct.toFixed(2),
+                valueILS: Math.round(valueILS),
+                plILS: Math.round(valueILS - costILS),
+                assetGroupId: h.assetGroupId
+            };
+        });
+
+        let bondsValueILS = 0, bondsCostILS = 0;
+        const bondRows = bonds.map(b => {
+            const units = Number(b.units) || 0;
+            const price = Number(b.currentPrice) || 0;
+            const cost  = Number(b.costBasis) || 0;
+            const cur   = b.currency || 'ILS';
+            const valueNative = units * price;
+            const costNative  = units * cost;
+            const plPct = costNative > 0 ? ((valueNative - costNative) / costNative) * 100 : 0;
+            bondsValueILS += this._toILS(valueNative, cur, rates);
+            bondsCostILS  += this._toILS(costNative, cur, rates);
+            return {
+                symbol: b.symbol,
+                currency: cur,
+                units,
+                costBasis: cost,
+                currentPrice: price,
+                valueNative: +valueNative.toFixed(2),
+                plPct: +plPct.toFixed(2),
+                assetGroupId: b.assetGroupId
+            };
+        });
+
+        // Cash (all three currencies → ILS)
+        const cashILS = this._toILS(p.cash?.ILS || 0, 'ILS', rates)
+                      + this._toILS(p.cash?.USD || 0, 'USD', rates)
+                      + this._toILS(p.cash?.EUR || 0, 'EUR', rates);
+
+        const investedValueILS = stocksValueILS + bondsValueILS;
+        const investedCostILS  = stocksCostILS  + bondsCostILS;
+        const totalValueILS    = investedValueILS + cashILS;
+        const totalPL          = investedValueILS - investedCostILS;
+        const totalPLPct       = investedCostILS > 0 ? (totalPL / investedCostILS) * 100 : 0;
+
+        // Allocation groups: match holdings + bonds by assetGroupId, compare to target
+        const groups = Array.isArray(p.groups) ? p.groups : [];
+        const allocationSummary = groups.map(g => {
+            let valueILS = 0;
+            holdings.forEach(h => {
+                if (h.assetGroupId === g.id) {
+                    valueILS += this._toILS((h.shares || 0) * (h.currentPrice || 0), h.currency || 'ILS', rates);
+                }
+            });
+            bonds.forEach(b => {
+                if (b.assetGroupId === g.id) {
+                    valueILS += this._toILS((b.units || 0) * (b.currentPrice || 0), b.currency || 'ILS', rates);
+                }
+            });
+            const currentPct = investedValueILS > 0 ? (valueILS / investedValueILS) * 100 : 0;
+            return {
+                group: g.name,
+                targetPct: g.target,
+                currentPct: +currentPct.toFixed(2),
+                diffPct: +(currentPct - g.target).toFixed(2),
+                valueILS: Math.round(valueILS)
+            };
+        });
+
+        // TWR — read from the cache portfolio.html writes on every overview render
+        let twrInfo = null;
+        try {
+            const raw = localStorage.getItem('portfolio_cachedTWR');
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (typeof cached.total === 'number') {
+                    const ageMin = Math.round((Date.now() - (cached.timestamp || 0)) / 60000);
+                    twrInfo = { totalPct: +cached.total.toFixed(2), ageMinutes: ageMin };
+                }
+            }
+        } catch (e) {}
+
+        return `
+=== ANALYTICS מחושב (סיכום ביצועים) ===
+סה"כ שווי תיק (כולל מזומן): ₪${Math.round(totalValueILS).toLocaleString()}
+שווי מושקע (מניות+אג"ח): ₪${Math.round(investedValueILS).toLocaleString()}  | עלות: ₪${Math.round(investedCostILS).toLocaleString()}
+רווח/הפסד כולל: ₪${Math.round(totalPL).toLocaleString()} (${totalPLPct.toFixed(2)}%)
+מניות: ₪${Math.round(stocksValueILS).toLocaleString()} (עלות ₪${Math.round(stocksCostILS).toLocaleString()})
+אג"ח: ₪${Math.round(bondsValueILS).toLocaleString()} (עלות ₪${Math.round(bondsCostILS).toLocaleString()})
+מזומן: ₪${Math.round(cashILS).toLocaleString()} (ILS=${p.cash?.ILS||0}, USD=${p.cash?.USD||0}, EUR=${p.cash?.EUR||0})
+TWR: ${twrInfo ? `${twrInfo.totalPct}% (מ-cache לפני ${twrInfo.ageMinutes} דק')` : '—  (טרם חושב; המשתמש צריך לפתוח את טאב סיכום)'}
+
+-- ביצועים לפי אחזקה (per-holding P/L) --
+${holdingRows.map(r => `${r.symbol}: ${r.shares} יח' × ${r.currentPrice} ${r.currency} = ${r.valueNative} ${r.currency} (₪${r.valueILS.toLocaleString()}) | P/L: ${r.plNative} ${r.currency} (${r.plPct}%)`).join('\n') || '—'}
+
+-- ביצועים לפי אג"ח --
+${bondRows.map(r => `${r.symbol}: ${r.units} יח' × ${r.currentPrice} ${r.currency} | P/L: ${r.plPct}%`).join('\n') || '—'}
+
+-- הקצאה מול יעד (allocation vs target) --
+${allocationSummary.map(a => `${a.group}: נוכחי ${a.currentPct}% vs יעד ${a.targetPct}% (סטייה ${a.diffPct > 0 ? '+' : ''}${a.diffPct}%) — ₪${a.valueILS.toLocaleString()}`).join('\n') || '—'}
+=== סוף ANALYTICS ===`;
+    }
+
     // ---- Claude API Integration ----
     async _callClaudeAPI(userMessage) {
         const financeData = this.getFinanceData();
@@ -615,16 +765,24 @@ class FinancialAIAssistant {
         }
 
         if (hasPortfolio) {
+            // The computed analytics section gives Claude the answers it
+            // would otherwise have to derive from raw JSON (P/L, TWR,
+            // allocation vs target). Cheap to compute here, saves the
+            // model from doing arithmetic on dozens of rows.
+            dataSection += this._buildPortfolioAnalytics(portfolioData);
             dataSection += `
-=== נתוני תיק השקעות ===
+=== נתוני תיק השקעות (גלם) ===
 אחזקות מניות: ${JSON.stringify(portfolioData.holdings || [])}
 אגרות חוב: ${JSON.stringify(portfolioData.bonds || [])}
 מזומן בתיק: ${JSON.stringify(portfolioData.cash || {})}
 שערי מט"ח: ${JSON.stringify(portfolioData.rates || {})}
+קבוצות הקצאה (groups): ${JSON.stringify(portfolioData.groups || [])}
 פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
 רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
 מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}
 תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12))}
+רשימת מעקב (watchlist): ${JSON.stringify(portfolioData.watchlist || [])}
+דיבידנדים: ${JSON.stringify((portfolioData.dividends || []).slice(-20))}
 === סוף נתוני השקעות ===`;
         }
 
@@ -636,17 +794,21 @@ class FinancialAIAssistant {
         }
 
         const systemPrompt = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי ותיק השקעות.
-יש לך גישה מלאה לנתונים של המשתמש - הם מועברים אליך ישירות מהאפליקציה.
+יש לך גישה מלאה לנתונים של המשתמש — הם מועברים אליך ישירות מהאפליקציה.
 
-חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש. אל תגיד שאין לך גישה - הנתונים כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש. אל תגיד שאין לך גישה — הנתונים כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+
+**העדף את סקשן ה-ANALYTICS המחושב** על פני חישוב מחדש מ-JSON הגלם: שם כבר יש לך TWR, P/L לכל אחזקה, הקצאה מול יעד, ותרגומי מטבע. השתמש ב-JSON הגלם רק כשצריך פרט ספציפי שלא מופיע ב-ANALYTICS.
+
 ${dataSection}
 
 הנחיות:
 - תגיב בעברית, בצורה קצרה וברורה
-- השתמש במספרים מדויקים מהנתונים למעלה
+- השתמש במספרים מדויקים מהנתונים למעלה (מעדיף את סקשן ANALYTICS)
 - הצע פעולות קונקרטיות לשיפור המצב הפיננסי
 - אם יש נתוני השקעות, נתח ביצועים, הקצאה, וחשיפה למט"ח
-- אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים`;
+- אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים
+- אם TWR מראה '—' — ציין למשתמש שעליו לפתוח את טאב "סיכום" פעם אחת כדי שה-TWR יחושב וייקושש`;
 
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
@@ -658,7 +820,7 @@ ${dataSection}
             },
             body: JSON.stringify({
                 model: this.model,
-                max_tokens: 1024,
+                max_tokens: 1500,
                 system: systemPrompt,
                 messages: [
                     ...this.messages.slice(-10).map(m => ({
@@ -671,7 +833,8 @@ ${dataSection}
         });
 
         if (!response.ok) {
-            throw new Error(`API Error: ${response.status}`);
+            const errText = await response.text().catch(() => '');
+            throw new Error(`API Error ${response.status}: ${errText.slice(0, 200)}`);
         }
 
         const data = await response.json();
@@ -1153,12 +1316,12 @@ ${dataSection}
         this.apiKey = null;
         localStorage.removeItem('ai_api_key');
         localStorage.removeItem('ai_model');
-        this.model = 'claude-sonnet-4-6';
+        this.model = 'claude-sonnet-4-5';
 
         const keyInput = this.panel.querySelector('#aiApiKeyInput');
         const modelSelect = this.panel.querySelector('#aiModelSelect');
         if (keyInput) keyInput.value = '';
-        if (modelSelect) modelSelect.value = 'claude-sonnet-4-6';
+        if (modelSelect) modelSelect.value = 'claude-sonnet-4-5';
 
         this._updateStatus();
         this.settingsOpen = false;
@@ -1180,9 +1343,9 @@ ${dataSection}
 
     _modelDisplayName() {
         const names = {
-            'claude-sonnet-4-6': 'Claude Sonnet 4.6',
-            'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
-            'claude-opus-4-6': 'Claude Opus 4.6'
+            'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+            'claude-haiku-4-5':  'Claude Haiku 4.5',
+            'claude-opus-4-5':   'Claude Opus 4.5'
         };
         return names[this.model] || this.model;
     }
