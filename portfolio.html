@@ -12879,6 +12879,25 @@ ${msg}`, 'warning');
                 console.log('📊 Indices:', Object.entries(indexResults).map(([k, v]) => `${k}: ${v.toFixed(1)}%`).join(' | '));
             }
 
+            // Cache benchmark comparison so external consumers (e.g. the AI
+            // assistant, the home page) can read the same numbers the chart
+            // shows without re-running the full fetch pipeline.
+            try {
+                const labelByKey = Object.fromEntries(indexConfig.map(c => [c.key, c.label]));
+                localStorage.setItem('portfolio_cachedBenchmarks', JSON.stringify({
+                    timestamp: Date.now(),
+                    portfolioReturn: +portfolioReturn.toFixed(2),
+                    comparisonNote: comparisonNote,
+                    dataSource: dataSource,
+                    indices: Object.fromEntries(
+                        Object.entries(indexResults).map(([k, v]) => [k, {
+                            label: labelByKey[k] || k,
+                            returnPct: +Number(v).toFixed(2)
+                        }])
+                    )
+                }));
+            } catch (e) { console.warn('Failed to cache benchmarks', e); }
+
             // הרס גרף קיים אם יש
             if (advancedCharts.performanceComparison) {
                 advancedCharts.performanceComparison.destroy();

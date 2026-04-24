@@ -719,6 +719,26 @@ class FinancialAIAssistant {
             }
         } catch (e) {}
 
+        // Benchmark TWR — portfolio.html caches these when the user opens
+        // the performance tab. Lets the AI compare portfolio vs ACWI/SPY/etc.
+        let benchmarksInfo = null;
+        try {
+            const raw = localStorage.getItem('portfolio_cachedBenchmarks');
+            if (raw) {
+                const cached = JSON.parse(raw);
+                if (cached && cached.indices) {
+                    const ageMin = Math.round((Date.now() - (cached.timestamp || 0)) / 60000);
+                    benchmarksInfo = {
+                        ageMinutes: ageMin,
+                        portfolioReturn: cached.portfolioReturn,
+                        comparisonNote: cached.comparisonNote || '',
+                        dataSource: cached.dataSource || '',
+                        indices: cached.indices
+                    };
+                }
+            }
+        } catch (e) {}
+
         return `
 === ANALYTICS מחושב (סיכום ביצועים) ===
 סה"כ שווי תיק (כולל מזומן): ₪${Math.round(totalValueILS).toLocaleString()}
@@ -737,6 +757,11 @@ ${bondRows.map(r => `${r.symbol}: ${r.units} יח' × ${r.currentPrice} ${r.curr
 
 -- הקצאה מול יעד (allocation vs target) --
 ${allocationSummary.map(a => `${a.group}: נוכחי ${a.currentPct}% vs יעד ${a.targetPct}% (סטייה ${a.diffPct > 0 ? '+' : ''}${a.diffPct}%) — ₪${a.valueILS.toLocaleString()}`).join('\n') || '—'}
+
+-- השוואה למדדי ייחוס (benchmark TWR) --
+${benchmarksInfo
+    ? `תיק: ${benchmarksInfo.portfolioReturn}%\n${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v.returnPct}%`).join('\n')}${benchmarksInfo.comparisonNote ? `\nהערה: ${benchmarksInfo.comparisonNote}` : ''}${benchmarksInfo.dataSource ? `\nמקור נתונים: ${benchmarksInfo.dataSource}` : ''}\n(מ-cache לפני ${benchmarksInfo.ageMinutes} דק')`
+    : '— (טרם חושב; המשתמש צריך לפתוח את טאב ביצועים)'}
 === סוף ANALYTICS ===`;
     }
 
