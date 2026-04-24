@@ -1,0 +1,19 @@
+# Claude Code local state
+.claude/
+
+# Cloudflare Wrangler cache
+worker/.wrangler/
+
+# Local dev setup (Vite / npm) — not needed for GitHub Pages deploy
+vite.config.js
+package.json
+package-lock.json
+node_modules/
+run-dev.cmd
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
