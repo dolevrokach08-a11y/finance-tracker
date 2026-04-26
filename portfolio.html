@@ -4656,7 +4656,16 @@ function calculateTWRv3() {
         window.fetchHistoricalRatesForModal = fetchHistoricalRatesForModal;
         window.handleAutomaticSnapshot = handleAutomaticSnapshot;
         window.fillCurrentPrices = fillCurrentPrices;
-        
+
+        // Expose MWR + benchmark helpers for console debugging. Function
+        // declarations are hoisted, so they're available even though the
+        // declarations sit lower in the file.
+        window.calculateMWR = calculateMWR;
+        window.calculateIndexMWRFromHistory = calculateIndexMWRFromHistory;
+        window.calculateIndexTWRFromHistory = calculateIndexTWRFromHistory;
+        window.fetchIndexHistoryFromFirebase = fetchIndexHistoryFromFirebase;
+        window.calculateTWRv3 = calculateTWRv3;
+
         console.log('✅ TWR Complete System v3.0 loaded');
 
         
