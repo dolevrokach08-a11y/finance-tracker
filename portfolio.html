@@ -13134,12 +13134,22 @@ ${msg}`, 'warning');
             // Same indices as TWR chart, but each bar is "annualized return YOUR money
             // would have earned if invested in that index on YOUR deposit dates".
             const mwrCanvas = document.getElementById('performance-comparison-mwr-chart');
-            if (mwrCanvas && portfolioMWR !== null && Object.keys(indexMWRResults).length > 0) {
+            const mwrIndexCount = Object.keys(indexMWRResults).length;
+            console.log('💰 MWR chart status:', { portfolioMWR, mwrIndexCount, hasCanvas: !!mwrCanvas });
+            // Render the chart whenever we have at least one bar (portfolio or any index)
+            const canRenderMWRChart = mwrCanvas && (portfolioMWR !== null || mwrIndexCount > 0);
+            if (canRenderMWRChart) {
                 const mwrCtx = mwrCanvas.getContext('2d');
-                const mwrLabels = ['התיק שלך'];
-                const mwrData = [+portfolioMWR.toFixed(2)];
-                const mwrBg = [portfolioMWR >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'];
-                const mwrBorder = [portfolioMWR >= 0 ? '#10b981' : '#ef4444'];
+                const mwrLabels = [];
+                const mwrData = [];
+                const mwrBg = [];
+                const mwrBorder = [];
+                if (portfolioMWR !== null) {
+                    mwrLabels.push('התיק שלך');
+                    mwrData.push(+portfolioMWR.toFixed(2));
+                    mwrBg.push(portfolioMWR >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)');
+                    mwrBorder.push(portfolioMWR >= 0 ? '#10b981' : '#ef4444');
+                }
                 for (const idx of indexConfig) {
                     if (indexMWRResults[idx.key] === undefined) continue;
                     mwrLabels.push(idx.label);
@@ -13208,8 +13218,10 @@ ${msg}`, 'warning');
                 mwrCtx.fillStyle = textColor;
                 mwrCtx.font = '14px Heebo, sans-serif';
                 mwrCtx.textAlign = 'center';
-                mwrCtx.fillText('אין מספיק נתונים ל-MWR (דרושות היסטוריות מחירים מ-Firebase)',
-                    mwrCanvas.width / 2, mwrCanvas.height / 2);
+                const reason = portfolioMWR === null
+                    ? 'לא ניתן לחשב MWR לתיק (חסרים נתוני הפקדות/משיכות)'
+                    : 'דרושות היסטוריות מחירים מ-Firebase לחישוב MWR של מדדים';
+                mwrCtx.fillText(reason, mwrCanvas.width / 2, mwrCanvas.height / 2);
             }
         }
 
