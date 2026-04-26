@@ -4662,7 +4662,9 @@ function calculateTWRv3() {
         // declarations sit lower in the file.
         window.calculateMWR = calculateMWR;
         window.calculateIndexMWRFromHistory = calculateIndexMWRFromHistory;
+        window.calculateIndexMWR = calculateIndexMWR;
         window.calculateIndexTWRFromHistory = calculateIndexTWRFromHistory;
+        window.calculateIndexTWR = calculateIndexTWR;
         window.fetchIndexHistoryFromFirebase = fetchIndexHistoryFromFirebase;
         window.calculateTWRv3 = calculateTWRv3;
 
@@ -5871,15 +5873,143 @@ function calculateTWRv3() {
                 const totalTWR = (1 + baseTWR) * (1 + liveReturn) - 1;
                 
                 console.log(`✅ [TWR] ${symbol}: Base=${(baseTWR * 100).toFixed(2)}%, Live=${(liveReturn * 100).toFixed(2)}%, Total=${(totalTWR * 100).toFixed(2)}%`);
-                
+
                 return totalTWR * 100;
-                
+
             } catch (error) {
                 console.error(`❌ calculateIndexTWR failed for ${symbol}:`, error);
                 return null;
             }
         }
-        
+
+        // ✅ פונקציה: חישוב MWR (XIRR) של אינדקס עם נתונים שנשלפים מ-CF Worker (לא Firebase).
+        // משתמשת באותו cache של calculateIndexTWR (TWR_${symbol}), כך ששאיבה אחת של
+        // ה-Worker משרתת גם TWR וגם MWR בלי בקשה כפולה.
+        async function calculateIndexMWR(symbol, isILSDenominated) {
+            try {
+                if (!Array.isArray(portfolio.snapshots) || portfolio.snapshots.length === 0) return null;
+                if (typeof XIRR !== 'function') return null;
+
+                const snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                // Reuse the TWR cache to avoid double-fetching
+                let priceHistory = null;
+                let timestamps = null;
+                const cached = (typeof getCachedIndexHistory === 'function')
+                    ? getCachedIndexHistory(`TWR_${symbol}`)
+                    : null;
+
+                if (cached) {
+                    priceHistory = cached.prices;
+                    timestamps = cached.timestamps;
+                } else {
+                    // Fetch the full chart history (mirrors calculateIndexTWR's fetch logic)
+                    const start = Math.floor(new Date(snapshots[0].date).getTime() / 1000) - (7 * 24 * 60 * 60);
+                    const end = Math.floor(Date.now() / 1000);
+                    const proxies = CORS_PROXIES;
+                    for (let pi = 0; pi < proxies.length; pi++) {
+                        try {
+                            if (pi > 0) await new Promise(r => setTimeout(r, 500));
+                            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${start}&period2=${end}&interval=1d`;
+                            const data = await safeFetchJSON(proxies[pi] + encodeURIComponent(url), {}, 20000);
+                            const result = data.chart?.result?.[0];
+                            if (!result) continue;
+                            priceHistory = result.indicators?.quote?.[0]?.close;
+                            timestamps = result.timestamp;
+                            if (priceHistory && timestamps && priceHistory.length > 0) {
+                                if (typeof setCachedIndexHistory === 'function') {
+                                    setCachedIndexHistory(`TWR_${symbol}`, { prices: priceHistory, timestamps });
+                                }
+                                break;
+                            }
+                        } catch (e) {
+                            console.log(`Failed to fetch ${symbol} for MWR:`, e.message);
+                        }
+                    }
+                }
+
+                if (!priceHistory || !timestamps) {
+                    console.log(`❌ [MWR] No history for ${symbol}`);
+                    return null;
+                }
+
+                function getPriceForDate(targetDate) {
+                    const targetTime = new Date(targetDate).getTime() / 1000;
+                    let closestIdx = 0;
+                    let minDiff = Math.abs(timestamps[0] - targetTime);
+                    for (let i = 1; i < timestamps.length; i++) {
+                        const diff = Math.abs(timestamps[i] - targetTime);
+                        if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+                    }
+                    let price = priceHistory[closestIdx];
+                    if (price === null || price <= 0) {
+                        for (let offset = 1; offset < 10; offset++) {
+                            if (closestIdx + offset < priceHistory.length && priceHistory[closestIdx + offset] > 0) { price = priceHistory[closestIdx + offset]; break; }
+                            if (closestIdx - offset >= 0 && priceHistory[closestIdx - offset] > 0) { price = priceHistory[closestIdx - offset]; break; }
+                        }
+                    }
+                    return price;
+                }
+
+                const xirrValues = [];
+                const xirrDates = [];
+                let totalShares = 0;
+
+                for (const snap of snapshots) {
+                    const cashFlow = snap.cash_flow || 0;
+                    if (!cashFlow) continue;
+                    const indexPrice = getPriceForDate(snap.date);
+                    if (!indexPrice || indexPrice <= 0) continue;
+
+                    let priceNIS;
+                    if (isILSDenominated) {
+                        priceNIS = indexPrice;
+                    } else {
+                        const usdRate = snap.exchange_rates?.USD;
+                        if (!usdRate || usdRate <= 0) continue;
+                        priceNIS = indexPrice * usdRate;
+                    }
+                    totalShares += cashFlow / priceNIS;
+                    xirrValues.push(-cashFlow);
+                    xirrDates.push(new Date(snap.date));
+                }
+
+                if (xirrValues.length < 2) return null;
+
+                const validPrices = priceHistory.filter(p => p !== null && p > 0);
+                const currentIndexPrice = validPrices[validPrices.length - 1];
+                if (!currentIndexPrice || currentIndexPrice <= 0) return null;
+
+                let finalPriceNIS;
+                if (isILSDenominated) {
+                    finalPriceNIS = currentIndexPrice;
+                } else {
+                    finalPriceNIS = currentIndexPrice * (portfolio.rates?.USD || 3.5);
+                }
+                const finalValue = totalShares * finalPriceNIS;
+                xirrValues.push(finalValue);
+                xirrDates.push(new Date());
+
+                const combined = (typeof combineCashFlows === 'function')
+                    ? combineCashFlows(xirrValues, xirrDates)
+                    : { values: xirrValues, dates: xirrDates };
+
+                const result = XIRR(combined.values, combined.dates);
+                if (result === null || !isFinite(result)) {
+                    if (typeof calculateFallbackReturns === 'function') {
+                        const fb = calculateFallbackReturns(combined.values, combined.dates);
+                        return fb.compoundAnnualized365 * 100;
+                    }
+                    return null;
+                }
+                return result * 100;
+
+            } catch (error) {
+                console.error(`❌ calculateIndexMWR failed for ${symbol}:`, error);
+                return null;
+            }
+        }
+
         // ✅ פונקציה: קריאת היסטוריית אינדקסים מ-Firebase (fallback)
         async function fetchIndexHistoryFromFirebase() {
             try {
@@ -12940,6 +13070,22 @@ ${msg}`, 'warning');
                                     console.log(`✅ ${key} TWR: ${result.toFixed(2)}%`);
                                 }
                             }
+
+                            // MWR via the same CF Worker fetch — the calculateIndexMWR
+                            // call reuses the price cache that calculateIndexTWR just
+                            // populated (TWR_${symbol}), so this is effectively free.
+                            const mwrPromises = indexConfig.map(idx =>
+                                calculateIndexMWR(idx.symbol || idx.key, idx.key === 'TA125')
+                                    .then(mwr => ({ key: idx.key, mwr }))
+                                    .catch(e => { console.log(`❌ ${idx.key} MWR failed:`, e.message); return { key: idx.key, mwr: null }; })
+                            );
+                            const mwrResults = await Promise.all(mwrPromises);
+                            for (const { key, mwr } of mwrResults) {
+                                if (mwr !== null && isFinite(mwr)) {
+                                    indexMWRResults[key] = mwr;
+                                    console.log(`💰 ${key} MWR: ${mwr.toFixed(2)}%/yr`);
+                                }
+                            }
                         } else {
                             // בלי CF Worker - סדרתי עם דיליי כדי לא להעמיס על פרוקסים חינמיים
                             for (const idx of indexConfig) {
@@ -12952,8 +13098,14 @@ ${msg}`, 'warning');
                                     } else {
                                         console.log(`❌ ${idx.key} TWR failed`);
                                     }
+                                    // MWR using same cache
+                                    const mwr = await calculateIndexMWR(idx.symbol || idx.key, idx.key === 'TA125');
+                                    if (mwr !== null && isFinite(mwr)) {
+                                        indexMWRResults[idx.key] = mwr;
+                                        console.log(`💰 ${idx.key} MWR: ${mwr.toFixed(2)}%/yr`);
+                                    }
                                 } catch (e) {
-                                    console.log(`❌ ${idx.key} TWR failed:`, e.message);
+                                    console.log(`❌ ${idx.key} TWR/MWR failed:`, e.message);
                                 }
                                 await new Promise(r => setTimeout(r, 1000));
                             }
