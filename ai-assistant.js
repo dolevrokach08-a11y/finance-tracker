@@ -617,6 +617,8 @@ class FinancialAIAssistant {
         const rates = p.rates || {};
         const holdings = Array.isArray(p.holdings) ? p.holdings : [];
         const bonds = Array.isArray(p.bonds) ? p.bonds : [];
+        const groupMap = {};
+        (Array.isArray(p.groups) ? p.groups : []).forEach(g => { groupMap[g.id] = g.name; });
 
         // Totals
         let stocksValueILS = 0, stocksCostILS = 0;
@@ -644,7 +646,7 @@ class FinancialAIAssistant {
                 plPct: +plPct.toFixed(2),
                 valueILS: Math.round(valueILS),
                 plILS: Math.round(valueILS - costILS),
-                assetGroupId: h.assetGroupId
+                group: groupMap[h.assetGroupId] || h.assetGroupId || '—'
             };
         });
 
@@ -667,7 +669,7 @@ class FinancialAIAssistant {
                 currentPrice: price,
                 valueNative: +valueNative.toFixed(2),
                 plPct: +plPct.toFixed(2),
-                assetGroupId: b.assetGroupId
+                group: groupMap[b.assetGroupId] || b.assetGroupId || '—'
             };
         });
 
@@ -855,7 +857,7 @@ ${dataSection}
             },
             body: JSON.stringify({
                 model: this.model,
-                max_tokens: 1500,
+                max_tokens: 4096,
                 system: systemPrompt,
                 messages: [
                     ...this.messages.slice(-10).map(m => ({
