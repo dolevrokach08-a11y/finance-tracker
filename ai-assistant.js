@@ -731,6 +731,7 @@ class FinancialAIAssistant {
                     benchmarksInfo = {
                         ageMinutes: ageMin,
                         portfolioReturn: cached.portfolioReturn,
+                        portfolioMWR: cached.portfolioMWR ?? null,
                         comparisonNote: cached.comparisonNote || '',
                         dataSource: cached.dataSource || '',
                         indices: cached.indices
@@ -758,9 +759,18 @@ ${bondRows.map(r => `${r.symbol}: ${r.units} יח' × ${r.currentPrice} ${r.curr
 -- הקצאה מול יעד (allocation vs target) --
 ${allocationSummary.map(a => `${a.group}: נוכחי ${a.currentPct}% vs יעד ${a.targetPct}% (סטייה ${a.diffPct > 0 ? '+' : ''}${a.diffPct}%) — ₪${a.valueILS.toLocaleString()}`).join('\n') || '—'}
 
--- השוואה למדדי ייחוס (benchmark TWR) --
+-- השוואה למדדי ייחוס --
 ${benchmarksInfo
-    ? `תיק: ${benchmarksInfo.portfolioReturn}%\n${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v.returnPct}%`).join('\n')}${benchmarksInfo.comparisonNote ? `\nהערה: ${benchmarksInfo.comparisonNote}` : ''}${benchmarksInfo.dataSource ? `\nמקור נתונים: ${benchmarksInfo.dataSource}` : ''}\n(מ-cache לפני ${benchmarksInfo.ageMinutes} דק')`
+    ? `[TWR — איכות ההרכב, מנוטרל מתזמון הפקדות]
+תיק: ${benchmarksInfo.portfolioReturn}%
+${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v.returnPct}%`).join('\n')}
+
+[MWR — תשואה אמיתית של הכסף, אנואלי, כולל תזמון הפקדות]
+${benchmarksInfo.portfolioMWR !== null ? `תיק: ${benchmarksInfo.portfolioMWR}%/שנה` : 'תיק: —'}
+${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v.mwrAnnualPct !== null && v.mwrAnnualPct !== undefined ? v.mwrAnnualPct + '%/שנה' : '—'}`).join('\n')}
+
+⚠️ הבחנה חשובה: TWR מודד אסטרטגיה אבסטרקטית; MWR מודד את הכסף האמיתי. הפער בין שניהם בתיק נובע ממתי בפועל נכנסו ההפקדות. כשמשווים מציאות-למציאות (MWR) הפער בד"כ קטן בהרבה.${benchmarksInfo.comparisonNote ? `\nהערה: ${benchmarksInfo.comparisonNote}` : ''}${benchmarksInfo.dataSource ? `\nמקור: ${benchmarksInfo.dataSource}` : ''}
+(מ-cache לפני ${benchmarksInfo.ageMinutes} דק')`
     : '— (טרם חושב; המשתמש צריך לפתוח את טאב ביצועים)'}
 === סוף ANALYTICS ===`;
     }

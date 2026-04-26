@@ -2103,6 +2103,10 @@
                             <h3>תשואה כוללת (TWR)</h3>
                             <div class="value" id="main-twr-display">--</div>
                             <div class="sub" id="twr-breakdown">בטעינה...</div>
+                            <div class="sub" id="main-mwr-display" style="margin-top: 6px; color: var(--text-secondary);">
+                                MWR אנואלי: <span id="main-mwr-value">--</span>
+                                <span style="opacity: 0.6; font-size: 0.75rem;">· הכסף האמיתי</span>
+                            </div>
                             <div class="sub" id="twr-period-info" style="margin-top: 8px; opacity: 0.7;">
                                 מתחילת התיק
                             </div>
@@ -2279,15 +2283,27 @@
                             <canvas id="currency-distribution-chart"></canvas>
                         </div>
 
-                        <!-- Performance Comparison -->
+                        <!-- Performance Comparison — TWR (strategy quality, ignores deposit timing) -->
                         <div class="chart-container">
                             <div class="chart-title">
                                 <i data-lucide="activity"></i>
-                                ביצועים יחסית לאינדקס
+                                ביצועים יחסית לאינדקס (TWR)
                             </div>
                             <canvas id="performance-comparison-chart"></canvas>
                             <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
-                                📌 השוואה הוגנת: מה היה קורה אם היית משקיע באינדקס באותם תאריכים וסכומים שהפקדת לתיק.
+                                📌 <strong>TWR</strong> — איכות ההרכב/אסטרטגיה, מנוטרל מתזמון הפקדות. שווה ערך ל-buy-and-hold של האינדקס מהתאריך הראשון.
+                            </div>
+                        </div>
+
+                        <!-- Performance Comparison — MWR (real money outcome, includes deposit timing) -->
+                        <div class="chart-container">
+                            <div class="chart-title">
+                                <i data-lucide="coins"></i>
+                                ביצועים יחסית לאינדקס (MWR · אנואלי)
+                            </div>
+                            <canvas id="performance-comparison-mwr-chart"></canvas>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
+                                💰 <strong>MWR</strong> — מה הכסף שלך באמת הניב. סימולציה: לו היית קונה את האינדקס באותם תאריכים וסכומים שהפקדת בפועל.
                             </div>
                         </div>
                     </div>
@@ -5933,10 +5949,103 @@ function calculateTWRv3() {
                 : 0;
             
             const totalTWR = (1 + baseTWR) * (1 + liveReturn) - 1;
-            
+
             return totalTWR * 100;
         }
-        
+
+        // ✅ פונקציה: חישוב MWR (XIRR) של אינדקס מהיסטוריה שמורה
+        // בניגוד ל-TWR שמשרשר תשואות יומיות (ולכן זהה ל-buy&hold), כאן אנחנו
+        // מדמים "מה היה קורה אם בכל הפקדה היית קונה את האינדקס במקום את התיק שלך".
+        // זה בדיוק ה-MWR המקביל של האינדקס — ההשוואה הכלכלית האמיתית כסף-לכסף.
+        // isILSDenominated=true עבור TA125 (כבר בשקלים), false עבור ACWI/SPY/QQQ (USD).
+        function calculateIndexMWRFromHistory(indexHistory, snapshots, isILSDenominated) {
+            if (!indexHistory || !indexHistory.history || !snapshots || snapshots.length === 0) {
+                return null;
+            }
+            if (typeof XIRR !== 'function') {
+                console.warn('XIRR not available for index MWR');
+                return null;
+            }
+
+            const history = indexHistory.history;
+            const sortedSnapshots = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            function getPriceForDate(targetDate) {
+                const dateStr = new Date(targetDate).toISOString().split('T')[0];
+                if (history[dateStr]) return history[dateStr];
+                const dates = Object.keys(history).sort();
+                let closest = dates[0];
+                let minDiff = Math.abs(new Date(dates[0]) - new Date(targetDate));
+                for (const d of dates) {
+                    const diff = Math.abs(new Date(d) - new Date(targetDate));
+                    if (diff < minDiff) { minDiff = diff; closest = d; }
+                }
+                return history[closest];
+            }
+
+            // Simulate buying the index with each cash flow (NIS amount → NIS-priced index shares)
+            const xirrValues = [];
+            const xirrDates = [];
+            let totalShares = 0;
+
+            for (const snap of sortedSnapshots) {
+                const cashFlow = snap.cash_flow || 0; // NIS, +ve deposit / -ve withdrawal
+                if (!cashFlow) continue;
+                const indexPrice = getPriceForDate(snap.date);
+                if (!indexPrice || indexPrice <= 0) continue;
+
+                let priceNIS;
+                if (isILSDenominated) {
+                    priceNIS = indexPrice;
+                } else {
+                    const usdRate = snap.exchange_rates?.USD;
+                    if (!usdRate || usdRate <= 0) continue;
+                    priceNIS = indexPrice * usdRate;
+                }
+
+                const sharesBought = cashFlow / priceNIS;
+                totalShares += sharesBought;
+
+                // XIRR convention: deposit = money out of investor (negative), withdrawal = positive
+                xirrValues.push(-cashFlow);
+                xirrDates.push(new Date(snap.date));
+            }
+
+            if (xirrValues.length < 2) return null;
+
+            // Final value: total shares × current NIS price
+            const dates = Object.keys(history).sort();
+            const currentIndexPrice = history[dates[dates.length - 1]];
+            if (!currentIndexPrice || currentIndexPrice <= 0) return null;
+
+            let finalPriceNIS;
+            if (isILSDenominated) {
+                finalPriceNIS = currentIndexPrice;
+            } else {
+                const currentUSDRate = portfolio.rates?.USD || 3.5;
+                finalPriceNIS = currentIndexPrice * currentUSDRate;
+            }
+            const finalValue = totalShares * finalPriceNIS;
+
+            xirrValues.push(finalValue);
+            xirrDates.push(new Date());
+
+            // Combine same-date flows (XIRR Newton-Raphson can be sensitive)
+            const combined = (typeof combineCashFlows === 'function')
+                ? combineCashFlows(xirrValues, xirrDates)
+                : { values: xirrValues, dates: xirrDates };
+
+            const result = XIRR(combined.values, combined.dates);
+            if (result === null || !isFinite(result)) {
+                if (typeof calculateFallbackReturns === 'function') {
+                    const fb = calculateFallbackReturns(combined.values, combined.dates);
+                    return fb.compoundAnnualized365 * 100;
+                }
+                return null;
+            }
+            return result * 100; // annualized %
+        }
+
         // ✅ פונקציה חדשה: שליפת נתונים היסטוריים
         async function fetchHistoricalReturn(symbol, startDate) {
             try {
@@ -10343,11 +10452,29 @@ ${msg}`, 'warning');
                     document.getElementById('twr-period-info').textContent =
                         `מתחילת התיק: ${totalTWR.years.toFixed(1)} שנים (${days} ימים)`;
                 }
+
+                // MWR — annualized money-weighted return. Shown next to TWR so the
+                // user sees the "real money" number alongside the strategy number.
+                try {
+                    const mwrEl = document.getElementById('main-mwr-value');
+                    if (mwrEl && typeof calculateMWR === 'function') {
+                        const mwr = calculateMWR();
+                        if (typeof mwr === 'number' && isFinite(mwr)) {
+                            mwrEl.textContent = `${mwr >= 0 ? '+' : ''}${mwr.toFixed(2)}%/שנה`;
+                            mwrEl.style.color = mwr >= 0 ? 'var(--profit)' : 'var(--loss)';
+                            mwrEl.style.fontWeight = '600';
+                        } else {
+                            mwrEl.textContent = '—';
+                        }
+                    }
+                } catch (e) { console.warn('MWR display failed', e); }
             } else {
                 document.getElementById('main-twr-display').textContent = '--';
                 document.getElementById('twr-breakdown').textContent = 'צבור נתונים...';
                 document.getElementById('main-profit-display').textContent = '₪0';
                 document.getElementById('twr-period-info').textContent = 'הוסף הפקדה או משיכה לחישוב TWR';
+                const mwrEl = document.getElementById('main-mwr-value');
+                if (mwrEl) mwrEl.textContent = '--';
             }
             
             // =============================================
@@ -12736,6 +12863,10 @@ ${msg}`, 'warning');
             
             // ✅ חישוב TWR של אינדקסים - השוואה הוגנת! (עם retry והצגה חלקית)
             const indexResults = {};
+            // MWR (XIRR) per index — only populated when we have Firebase price history.
+            // This is the "real money" comparison: how would your actual deposits have
+            // grown if invested in the index, with the same timing.
+            const indexMWRResults = {};
             let dataSource = 'ממוצע היסטורי';
             let useTWR = false;
 
@@ -12767,6 +12898,14 @@ ${msg}`, 'warning');
                                     indexResults[idx.key] = result;
                                     useTWR = true;
                                     console.log(`✅ ${idx.key} TWR (Firebase): ${result.toFixed(2)}%`);
+                                }
+
+                                // MWR — only TA125 is treated as ILS-denominated; others (ACWI/SPY/QQQ) are USD.
+                                const isILS = idx.key === 'TA125';
+                                const mwr = calculateIndexMWRFromHistory(firebaseData[fbKey], portfolio.snapshots, isILS);
+                                if (mwr !== null && isFinite(mwr)) {
+                                    indexMWRResults[idx.key] = mwr;
+                                    console.log(`💰 ${idx.key} MWR (Firebase): ${mwr.toFixed(2)}%/yr`);
                                 }
                             }
                         }
@@ -12879,6 +13018,16 @@ ${msg}`, 'warning');
                 console.log('📊 Indices:', Object.entries(indexResults).map(([k, v]) => `${k}: ${v.toFixed(1)}%`).join(' | '));
             }
 
+            // Compute portfolio MWR for cache + MWR chart. calculateMWR() returns
+            // annualized %, falls back to compound annualized when XIRR doesn't converge.
+            let portfolioMWR = null;
+            try {
+                if (typeof calculateMWR === 'function') {
+                    const m = calculateMWR();
+                    if (typeof m === 'number' && isFinite(m)) portfolioMWR = m;
+                }
+            } catch (e) { console.warn('Portfolio MWR calc failed', e); }
+
             // Cache benchmark comparison so external consumers (e.g. the AI
             // assistant, the home page) can read the same numbers the chart
             // shows without re-running the full fetch pipeline.
@@ -12887,12 +13036,16 @@ ${msg}`, 'warning');
                 localStorage.setItem('portfolio_cachedBenchmarks', JSON.stringify({
                     timestamp: Date.now(),
                     portfolioReturn: +portfolioReturn.toFixed(2),
+                    portfolioMWR: portfolioMWR !== null ? +portfolioMWR.toFixed(2) : null,
                     comparisonNote: comparisonNote,
                     dataSource: dataSource,
                     indices: Object.fromEntries(
                         Object.entries(indexResults).map(([k, v]) => [k, {
                             label: labelByKey[k] || k,
-                            returnPct: +Number(v).toFixed(2)
+                            returnPct: +Number(v).toFixed(2),
+                            mwrAnnualPct: indexMWRResults[k] !== undefined
+                                ? +Number(indexMWRResults[k]).toFixed(2)
+                                : null
                         }])
                     )
                 }));
@@ -12976,8 +13129,90 @@ ${msg}`, 'warning');
                     }
                 }
             });
+
+            // ===== MWR comparison chart =====
+            // Same indices as TWR chart, but each bar is "annualized return YOUR money
+            // would have earned if invested in that index on YOUR deposit dates".
+            const mwrCanvas = document.getElementById('performance-comparison-mwr-chart');
+            if (mwrCanvas && portfolioMWR !== null && Object.keys(indexMWRResults).length > 0) {
+                const mwrCtx = mwrCanvas.getContext('2d');
+                const mwrLabels = ['התיק שלך'];
+                const mwrData = [+portfolioMWR.toFixed(2)];
+                const mwrBg = [portfolioMWR >= 0 ? 'rgba(16, 185, 129, 0.8)' : 'rgba(239, 68, 68, 0.8)'];
+                const mwrBorder = [portfolioMWR >= 0 ? '#10b981' : '#ef4444'];
+                for (const idx of indexConfig) {
+                    if (indexMWRResults[idx.key] === undefined) continue;
+                    mwrLabels.push(idx.label);
+                    mwrData.push(+indexMWRResults[idx.key].toFixed(2));
+                    mwrBg.push(idx.color);
+                    mwrBorder.push(idx.border);
+                }
+
+                if (advancedCharts.performanceComparisonMWR) {
+                    advancedCharts.performanceComparisonMWR.destroy();
+                }
+                advancedCharts.performanceComparisonMWR = new Chart(mwrCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: mwrLabels,
+                        datasets: [{
+                            label: 'MWR (אנואלי)',
+                            data: mwrData,
+                            backgroundColor: mwrBg,
+                            borderColor: mwrBorder,
+                            borderWidth: 2,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'MWR: ' + (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) + '%/שנה';
+                                    },
+                                    afterLabel: function(context) {
+                                        return context.dataIndex === 0
+                                            ? 'הכסף האמיתי שלך'
+                                            : 'אילו אותם הפקדות הושקעו באינדקס';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'אינדקס', color: textColor, font: { size: 14, weight: 'bold' } },
+                                ticks: { color: textColor },
+                                grid: { display: false }
+                            },
+                            y: {
+                                beginAtZero: true,
+                                title: { display: true, text: 'תשואה שנתית (%)', color: textColor, font: { size: 14, weight: 'bold' } },
+                                ticks: {
+                                    color: textColor,
+                                    callback: function(value) { return (value >= 0 ? '+' : '') + value + '%'; }
+                                },
+                                grid: { color: gridColor, drawBorder: false }
+                            }
+                        }
+                    }
+                });
+            } else if (mwrCanvas) {
+                // Render a simple message in the canvas so the user understands why the chart is empty
+                const mwrCtx = mwrCanvas.getContext('2d');
+                mwrCtx.clearRect(0, 0, mwrCanvas.width, mwrCanvas.height);
+                mwrCtx.fillStyle = textColor;
+                mwrCtx.font = '14px Heebo, sans-serif';
+                mwrCtx.textAlign = 'center';
+                mwrCtx.fillText('אין מספיק נתונים ל-MWR (דרושות היסטוריות מחירים מ-Firebase)',
+                    mwrCanvas.width / 2, mwrCanvas.height / 2);
+            }
         }
-        
+
         // ==================== END ADVANCED CHARTS ====================
         
         window.onload = function() {
