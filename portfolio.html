@@ -2325,9 +2325,9 @@
 
                         <!-- Performance Comparison — MWR (real money outcome, includes deposit timing) -->
                         <div class="chart-container">
-                            <div class="chart-title">
-                                <i data-lucide="coins"></i>
-                                ביצועים יחסית לאינדקס (MWR · אנואלי)
+                            <div class="chart-title" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span><i data-lucide="coins"></i> ביצועים יחסית לאינדקס (MWR)</span>
+                                <button id="mwr-chart-mode-toggle" class="twr-fx-btn">מצטבר</button>
                             </div>
                             <canvas id="performance-comparison-mwr-chart"></canvas>
                             <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
@@ -13406,7 +13406,7 @@ ${msg}`, 'warning');
             if (canRenderMWRChart) {
                 const mwrCtx = mwrCanvas.getContext('2d');
                 const mwrLabels = [];
-                const mwrData = [];
+                const mwrData = [];   // annualized
                 const mwrBg = [];
                 const mwrBorder = [];
                 if (portfolioMWR !== null) {
@@ -13423,6 +13423,18 @@ ${msg}`, 'warning');
                     mwrBorder.push(idx.border);
                 }
 
+                // Cumulative version: (1 + annual/100)^years - 1
+                // Uses portfolio's holding period (same as KPI card).
+                const mwrAllDates = [...(portfolio.deposits || []), ...(portfolio.withdrawals || [])]
+                    .map(d => new Date(d.date)).filter(d => !isNaN(d));
+                const mwrFirstDate = mwrAllDates.length ? new Date(Math.min(...mwrAllDates)) : null;
+                const mwrYears = mwrFirstDate ? (Date.now() - mwrFirstDate.getTime()) / (365.25 * 86400000) : null;
+                const mwrDataCumulative = mwrYears
+                    ? mwrData.map(v => +((Math.pow(1 + v / 100, mwrYears) - 1) * 100).toFixed(2))
+                    : mwrData;
+
+                let mwrChartMode = 'annual'; // toggled by button below
+
                 if (advancedCharts.performanceComparisonMWR) {
                     advancedCharts.performanceComparisonMWR.destroy();
                 }
@@ -13431,7 +13443,7 @@ ${msg}`, 'warning');
                     data: {
                         labels: mwrLabels,
                         datasets: [{
-                            label: 'MWR (אנואלי)',
+                            label: 'MWR (שנתי)',
                             data: mwrData,
                             backgroundColor: mwrBg,
                             borderColor: mwrBorder,
@@ -13448,7 +13460,8 @@ ${msg}`, 'warning');
                                 backgroundColor: 'rgba(0, 0, 0, 0.8)',
                                 callbacks: {
                                     label: function(context) {
-                                        return 'MWR: ' + (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) + '%/שנה';
+                                        const suffix = mwrChartMode === 'annual' ? '%/שנה' : '%';
+                                        return 'MWR: ' + (context.parsed.y >= 0 ? '+' : '') + context.parsed.y.toFixed(2) + suffix;
                                     },
                                     afterLabel: function(context) {
                                         return context.dataIndex === 0
@@ -13476,6 +13489,26 @@ ${msg}`, 'warning');
                         }
                     }
                 });
+
+                // Wire toggle button (annual ↔ cumulative)
+                const mwrChartBtn = document.getElementById('mwr-chart-mode-toggle');
+                if (mwrChartBtn) {
+                    const freshMwrBtn = mwrChartBtn.cloneNode(true);
+                    mwrChartBtn.parentNode.replaceChild(freshMwrBtn, mwrChartBtn);
+                    freshMwrBtn.textContent = 'מצטבר';
+                    freshMwrBtn.disabled = !mwrYears;
+                    freshMwrBtn.onclick = () => {
+                        const goingCumulative = mwrChartMode === 'annual';
+                        mwrChartMode = goingCumulative ? 'cumulative' : 'annual';
+                        const chart = advancedCharts.performanceComparisonMWR;
+                        chart.data.datasets[0].data = goingCumulative ? mwrDataCumulative : mwrData;
+                        chart.data.datasets[0].label = goingCumulative ? 'MWR (מצטבר)' : 'MWR (שנתי)';
+                        chart.options.scales.y.title.text = goingCumulative ? 'תשואה מצטברת (%)' : 'תשואה שנתית (%)';
+                        chart.update();
+                        freshMwrBtn.textContent = goingCumulative ? 'שנתי' : 'מצטבר';
+                        freshMwrBtn.classList.toggle('active', goingCumulative);
+                    };
+                }
             } else if (mwrCanvas) {
                 // Render a simple message in the canvas so the user understands why the chart is empty
                 const mwrCtx = mwrCanvas.getContext('2d');
