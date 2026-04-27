@@ -901,6 +901,20 @@
             align-items: center;
             gap: 10px;
         }
+        .twr-fx-btn {
+            font-size: 0.78rem;
+            padding: 4px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color, #334155);
+            cursor: pointer;
+            background: var(--bg-tertiary, #1e293b);
+            color: var(--text-secondary, #94a3b8);
+            transition: background 0.2s, color 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .twr-fx-btn:hover { opacity: 0.85; }
+        .twr-fx-btn.active { background: var(--profit, #10b981); color: #fff; border-color: transparent; }
         
         canvas {
             max-height: 100%;
@@ -2104,7 +2118,8 @@
                             <div class="value" id="main-twr-display">--</div>
                             <div class="sub" id="twr-breakdown">בטעינה...</div>
                             <div class="sub" id="main-mwr-display" style="margin-top: 6px; color: var(--text-secondary);">
-                                MWR אנואלי: <span id="main-mwr-value">--</span>
+                                MWR: <span id="main-mwr-value">--</span>
+                                <span id="main-mwr-annual" style="opacity: 0.55; font-size: 0.72rem; margin-right: 4px;"></span>
                                 <span style="opacity: 0.6; font-size: 0.75rem;">· הכסף האמיתי</span>
                             </div>
                             <div class="sub" id="twr-period-info" style="margin-top: 8px; opacity: 0.7;">
@@ -2285,9 +2300,9 @@
 
                         <!-- Performance Comparison — TWR (strategy quality, ignores deposit timing) -->
                         <div class="chart-container">
-                            <div class="chart-title">
-                                <i data-lucide="activity"></i>
-                                ביצועים יחסית לאינדקס (TWR)
+                            <div class="chart-title" style="display:flex; justify-content:space-between; align-items:center;">
+                                <span><i data-lucide="activity"></i> ביצועים יחסית לאינדקס (TWR)</span>
+                                <button id="twr-fx-toggle" class="twr-fx-btn">נרמל למדדים בשקלים</button>
                             </div>
                             <canvas id="performance-comparison-chart"></canvas>
                             <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
@@ -10592,18 +10607,34 @@ ${msg}`, 'warning');
                         `מתחילת התיק: ${totalTWR.years.toFixed(1)} שנים (${days} ימים)`;
                 }
 
-                // MWR — annualized money-weighted return. Shown next to TWR so the
-                // user sees the "real money" number alongside the strategy number.
+                // MWR — displayed as cumulative % (same scale as TWR) with annualized
+                // in small sub-text so both can be compared at a glance.
                 try {
                     const mwrEl = document.getElementById('main-mwr-value');
+                    const mwrAnnualEl = document.getElementById('main-mwr-annual');
                     if (mwrEl && typeof calculateMWR === 'function') {
-                        const mwr = calculateMWR();
+                        const mwr = calculateMWR(); // returns annualized %
                         if (typeof mwr === 'number' && isFinite(mwr)) {
-                            mwrEl.textContent = `${mwr >= 0 ? '+' : ''}${mwr.toFixed(2)}%/שנה`;
+                            // Compute holding period in years from first deposit/withdrawal
+                            const allDates = [...(portfolio.deposits || []), ...(portfolio.withdrawals || [])]
+                                .map(d => new Date(d.date)).filter(d => !isNaN(d));
+                            const firstDate = allDates.length ? new Date(Math.min(...allDates)) : null;
+                            const years = firstDate ? (Date.now() - firstDate.getTime()) / (365.25 * 86400000) : null;
+                            const mwrCumulative = (years && years > 0)
+                                ? (Math.pow(1 + mwr / 100, years) - 1) * 100
+                                : null;
+                            if (mwrCumulative !== null) {
+                                mwrEl.textContent = `${mwrCumulative >= 0 ? '+' : ''}${mwrCumulative.toFixed(1)}%`;
+                                if (mwrAnnualEl) mwrAnnualEl.textContent = `(≈${mwr >= 0 ? '+' : ''}${mwr.toFixed(1)}%/שנה)`;
+                            } else {
+                                mwrEl.textContent = `${mwr >= 0 ? '+' : ''}${mwr.toFixed(1)}%/שנה`;
+                                if (mwrAnnualEl) mwrAnnualEl.textContent = '';
+                            }
                             mwrEl.style.color = mwr >= 0 ? 'var(--profit)' : 'var(--loss)';
                             mwrEl.style.fontWeight = '600';
                         } else {
                             mwrEl.textContent = '—';
+                            if (mwrAnnualEl) mwrAnnualEl.textContent = '';
                         }
                     }
                 } catch (e) { console.warn('MWR display failed', e); }
@@ -13167,6 +13198,23 @@ ${msg}`, 'warning');
                 chartBorderColors.push(hasReal ? idx.border : idx.border + '80');
             }
 
+            // FX-adjusted version of chartData: convert USD-denominated indices to NIS
+            // by applying the USD/ILS change from the first snapshot to today.
+            // TA-125 and the portfolio itself are already in NIS — left unchanged.
+            const sortedSnaps = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const startUSDRate = sortedSnaps.find(s => s.exchange_rates?.USD)?.exchange_rates?.USD;
+            const endUSDRate = portfolio.rates?.USD;
+            const fxFactor = (startUSDRate && endUSDRate) ? endUSDRate / startUSDRate : null;
+
+            const chartDataNIS = fxFactor
+                ? chartData.map((val, i) => {
+                    if (i === 0) return val; // portfolio — already NIS
+                    const idx = indexConfig[i - 1];
+                    if (!idx || idx.key === 'TA125') return val; // already ILS
+                    return ((1 + val / 100) * fxFactor - 1) * 100;
+                })
+                : chartData;
+
             // עדכון dataSource אם חלק מהאינדקסים הם fallback
             if (loadedCount > 0 && loadedCount < indexConfig.length) {
                 dataSource += ` (${loadedCount}/${indexConfig.length} אמיתי)`;
@@ -13290,6 +13338,25 @@ ${msg}`, 'warning');
                     }
                 }
             });
+
+            // Wire up FX-normalization toggle button on the TWR chart
+            const fxBtn = document.getElementById('twr-fx-toggle');
+            if (fxBtn) {
+                // Remove any previous listener by replacing the element clone
+                const freshBtn = fxBtn.cloneNode(true);
+                fxBtn.parentNode.replaceChild(freshBtn, fxBtn);
+                freshBtn.disabled = !fxFactor;
+                freshBtn.title = fxFactor
+                    ? `שע"ח התחלתי: ${startUSDRate?.toFixed(3)} ← נוכחי: ${endUSDRate?.toFixed(3)} (פקטור: ${fxFactor.toFixed(3)})`
+                    : 'אין נתוני שע"ח להמרה';
+                freshBtn.onclick = () => {
+                    const active = freshBtn.classList.toggle('active');
+                    advancedCharts.performanceComparison.data.datasets[0].data =
+                        active ? chartDataNIS : chartData;
+                    advancedCharts.performanceComparison.update();
+                    freshBtn.textContent = active ? 'בטל נרמול שקלי' : 'נרמל למדדים בשקלים';
+                };
+            }
 
             // ===== MWR comparison chart =====
             // Same indices as TWR chart, but each bar is "annualized return YOUR money
