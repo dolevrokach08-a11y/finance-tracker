@@ -922,8 +922,11 @@
             overflow: hidden;
         }
         .twr-milestone-btn {
-            font-size: 0.78rem;
-            padding: 4px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1px;
+            padding: 5px 12px 4px;
             border: none;
             background: var(--bg-tertiary, #1e293b);
             color: var(--text-secondary, #94a3b8);
@@ -935,7 +938,10 @@
         .twr-milestone-btn:first-child { border-left: none; }
         .twr-milestone-btn:hover:not(:disabled) { background: var(--bg-secondary, #0f172a); }
         .twr-milestone-btn.active { background: var(--accent, #3b82f6); color: #fff; }
+        .twr-milestone-btn.active .twr-milestone-date { color: rgba(255,255,255,0.6); }
         .twr-milestone-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .twr-milestone-name { font-size: 0.78rem; font-weight: 500; }
+        .twr-milestone-date { font-size: 0.6rem; color: #475569; margin-top: 1px; }
         .mwr-mode-btn {
             font-size: 0.62rem;
             padding: 1px 5px;
@@ -2338,10 +2344,22 @@
                                 <span style="display:flex; align-items:center; gap:8px;"><i data-lucide="activity"></i> ביצועים יחסית לאינדקס (TWR)</span>
                                 <div class="twr-controls" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
                                     <div class="twr-milestone-group" role="group" aria-label="תקופת השוואה">
-                                        <button class="twr-milestone-btn active" data-milestone="inception">התחלה</button>
-                                        <button class="twr-milestone-btn" data-milestone="core">Core</button>
-                                        <button class="twr-milestone-btn" data-milestone="risky">+ סיכוני</button>
-                                        <button class="twr-milestone-btn" data-milestone="ta125">+ ת"א 125</button>
+                                        <button class="twr-milestone-btn active" data-milestone="inception">
+                                            <span class="twr-milestone-name">התחלה</span>
+                                            <span class="twr-milestone-date">מהיום הראשון</span>
+                                        </button>
+                                        <button class="twr-milestone-btn" data-milestone="core">
+                                            <span class="twr-milestone-name">Core</span>
+                                            <span class="twr-milestone-date">פבר׳ 2024</span>
+                                        </button>
+                                        <button class="twr-milestone-btn" data-milestone="risky">
+                                            <span class="twr-milestone-name">+ סיכוני</span>
+                                            <span class="twr-milestone-date">פבר׳ 2025</span>
+                                        </button>
+                                        <button class="twr-milestone-btn" data-milestone="ta125">
+                                            <span class="twr-milestone-name">+ ת"א 125</span>
+                                            <span class="twr-milestone-date">ינו׳ 2026</span>
+                                        </button>
                                     </div>
                                     <button id="twr-fx-toggle" class="twr-fx-btn">נרמל שקל</button>
                                 </div>
