@@ -915,6 +915,27 @@
         }
         .twr-fx-btn:hover { opacity: 0.85; }
         .twr-fx-btn.active { background: var(--profit, #10b981); color: #fff; border-color: transparent; }
+        .twr-milestone-group {
+            display: inline-flex;
+            border: 1px solid var(--border-color, #334155);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .twr-milestone-btn {
+            font-size: 0.78rem;
+            padding: 4px 10px;
+            border: none;
+            background: var(--bg-tertiary, #1e293b);
+            color: var(--text-secondary, #94a3b8);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s, color 0.15s;
+            border-left: 1px solid var(--border-color, #334155);
+        }
+        .twr-milestone-btn:first-child { border-left: none; }
+        .twr-milestone-btn:hover:not(:disabled) { background: var(--bg-secondary, #0f172a); }
+        .twr-milestone-btn.active { background: var(--accent, #3b82f6); color: #fff; }
+        .twr-milestone-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .mwr-mode-btn {
             font-size: 0.62rem;
             padding: 1px 5px;
@@ -2313,9 +2334,17 @@
 
                         <!-- Performance Comparison — TWR (strategy quality, ignores deposit timing) -->
                         <div class="chart-container">
-                            <div class="chart-title" style="display:flex; justify-content:space-between; align-items:center;">
-                                <span><i data-lucide="activity"></i> ביצועים יחסית לאינדקס (TWR)</span>
-                                <button id="twr-fx-toggle" class="twr-fx-btn">נרמל למדדים בשקלים</button>
+                            <div class="chart-title" style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <span style="display:flex; align-items:center; gap:8px;"><i data-lucide="activity"></i> ביצועים יחסית לאינדקס (TWR)</span>
+                                <div class="twr-controls" style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                    <div class="twr-milestone-group" role="group" aria-label="תקופת השוואה">
+                                        <button class="twr-milestone-btn active" data-milestone="inception">התחלה</button>
+                                        <button class="twr-milestone-btn" data-milestone="core">Core</button>
+                                        <button class="twr-milestone-btn" data-milestone="risky">+ סיכוני</button>
+                                        <button class="twr-milestone-btn" data-milestone="ta125">+ ת"א 125</button>
+                                    </div>
+                                    <button id="twr-fx-toggle" class="twr-fx-btn">נרמל שקל</button>
+                                </div>
                             </div>
                             <canvas id="performance-comparison-chart"></canvas>
                             <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
@@ -4597,13 +4626,21 @@ function recordCurrencyExchange(fromCurrency, fromAmount, toCurrency, toAmount, 
 /**
  * Calculate TWR from snapshots
  */
-function calculateTWRv3() {
+function calculateTWRv3(startDate = null) {
     if (!Array.isArray(portfolio.snapshots) || portfolio.snapshots.length === 0) {
         console.log('⚠️ No snapshots for TWR calculation');
         return null;
     }
-    
-    const snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    let snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (startDate) {
+        const cutoff = new Date(startDate);
+        snapshots = snapshots.filter(s => new Date(s.date) >= cutoff);
+        if (snapshots.length === 0) {
+            console.log(`⚠️ No snapshots after ${startDate} for TWR calculation`);
+            return null;
+        }
+    }
     
     console.log(`📊 Calculating TWR with ${snapshots.length} snapshots`);
     
@@ -5777,15 +5814,20 @@ function calculateTWRv3() {
         }
         
         // ✅ פונקציה חדשה: חישוב TWR של אינדקס - השוואה הוגנת!
-        async function calculateIndexTWR(symbol) {
+        async function calculateIndexTWR(symbol, startDate = null) {
             try {
                 // בדיקה שיש snapshots
                 if (!Array.isArray(portfolio.snapshots) || portfolio.snapshots.length === 0) {
                     console.log(`⚠️ No snapshots for ${symbol} TWR calculation`);
                     return null;
                 }
-                
-                const snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+                let snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+                if (startDate) {
+                    const cutoff = new Date(startDate);
+                    snapshots = snapshots.filter(s => new Date(s.date) >= cutoff);
+                    if (snapshots.length === 0) return null;
+                }
                 const firstSnapshotDate = new Date(snapshots[0].date);
                 
                 // שלוף היסטוריית מחירים
@@ -6056,13 +6098,18 @@ function calculateTWRv3() {
         }
         
         // ✅ פונקציה: חישוב TWR של אינדקס מהיסטוריה שמורה
-        function calculateIndexTWRFromHistory(indexHistory, snapshots) {
+        function calculateIndexTWRFromHistory(indexHistory, snapshots, startDate = null) {
             if (!indexHistory || !indexHistory.history || !snapshots || snapshots.length === 0) {
                 return null;
             }
-            
+
             const history = indexHistory.history;
-            const sortedSnapshots = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            let sortedSnapshots = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            if (startDate) {
+                const cutoff = new Date(startDate);
+                sortedSnapshots = sortedSnapshots.filter(s => new Date(s.date) >= cutoff);
+                if (sortedSnapshots.length === 0) return null;
+            }
             
             // פונקציה למציאת מחיר לתאריך (או הכי קרוב)
             function getPriceForDate(targetDate) {
@@ -13035,17 +13082,17 @@ ${msg}`, 'warning');
             });
         }
         
-        async function createPerformanceComparisonChart(textColor, gridColor) {
+        async function createPerformanceComparisonChart(textColor, gridColor, startDate = null) {
             const canvas = document.getElementById('performance-comparison-chart');
             if (!canvas) return;
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             // ✅ חישוב TWR של התיק (תשואה משוקללת זמן - ההשוואה ההוגנת ביותר!)
             let portfolioReturn = 0;
             let comparisonNote = '';
-            
-            const twrResult = calculateTWRv3();
+
+            const twrResult = calculateTWRv3(startDate);
             if (twrResult && twrResult.total !== undefined) {
                 portfolioReturn = twrResult.total;  // כבר באחוזים
                 comparisonNote = 'TWR';
@@ -13100,7 +13147,7 @@ ${msg}`, 'warning');
                         for (const idx of indexConfig) {
                             const fbKey = idx.firebaseKey || idx.key;
                             if (firebaseData[fbKey]) {
-                                const result = calculateIndexTWRFromHistory(firebaseData[fbKey], portfolio.snapshots);
+                                const result = calculateIndexTWRFromHistory(firebaseData[fbKey], portfolio.snapshots, startDate);
                                 if (result !== null) {
                                     indexResults[idx.key] = result;
                                     useTWR = true;
@@ -13126,7 +13173,7 @@ ${msg}`, 'warning');
                         if (CF_WORKER_URL) {
                             // עם CF Worker - מקבילי, הרבה יותר מהיר
                             const indexPromises = indexConfig.map(idx =>
-                                fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000)
+                                fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key, startDate), 2, 2000)
                                     .then(result => ({ key: idx.key, result }))
                                     .catch(e => { console.log(`❌ ${idx.key} TWR failed:`, e.message); return { key: idx.key, result: null }; })
                             );
@@ -13158,7 +13205,7 @@ ${msg}`, 'warning');
                             // בלי CF Worker - סדרתי עם דיליי כדי לא להעמיס על פרוקסים חינמיים
                             for (const idx of indexConfig) {
                                 try {
-                                    const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key), 2, 2000);
+                                    const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key, startDate), 2, 2000);
                                     if (result !== null) {
                                         indexResults[idx.key] = result;
                                         useTWR = true;
@@ -13236,9 +13283,14 @@ ${msg}`, 'warning');
             }
 
             // FX-adjusted version of chartData: convert USD-denominated indices to NIS
-            // by applying the USD/ILS change from the first snapshot to today.
+            // by applying the USD/ILS change from the period's first snapshot to today.
             // TA-125 and the portfolio itself are already in NIS — left unchanged.
-            const sortedSnaps = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            // When a startDate is set (milestone view), FX baseline shifts accordingly.
+            let sortedSnaps = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+            if (startDate) {
+                const cutoff = new Date(startDate);
+                sortedSnaps = sortedSnaps.filter(s => new Date(s.date) >= cutoff);
+            }
             const startUSDRate = sortedSnaps.find(s => s.exchange_rates?.USD)?.exchange_rates?.USD;
             const endUSDRate = portfolio.rates?.USD;
             const fxFactor = (startUSDRate && endUSDRate) ? endUSDRate / startUSDRate : null;
@@ -13277,7 +13329,9 @@ ${msg}`, 'warning');
             // Cache benchmark comparison so external consumers (e.g. the AI
             // assistant, the home page) can read the same numbers the chart
             // shows without re-running the full fetch pipeline.
+            // Only cache the default (from-inception) view to avoid stale or biased numbers.
             try {
+                if (startDate) throw new Error('skip-cache-non-default');
                 const labelByKey = Object.fromEntries(indexConfig.map(c => [c.key, c.label]));
                 localStorage.setItem('portfolio_cachedBenchmarks', JSON.stringify({
                     timestamp: Date.now(),
@@ -13295,7 +13349,7 @@ ${msg}`, 'warning');
                         }])
                     )
                 }));
-            } catch (e) { console.warn('Failed to cache benchmarks', e); }
+            } catch (e) { if (e.message !== 'skip-cache-non-default') console.warn('Failed to cache benchmarks', e); }
 
             // הרס גרף קיים אם יש
             if (advancedCharts.performanceComparison) {
@@ -13376,23 +13430,61 @@ ${msg}`, 'warning');
                 }
             });
 
-            // Wire up FX-normalization toggle button on the TWR chart
+            // Wire up FX-normalization toggle button on the TWR chart.
+            // Preserve the FX active state across milestone switches so the user
+            // doesn't have to re-click after picking a different period.
             const fxBtn = document.getElementById('twr-fx-toggle');
             if (fxBtn) {
-                // Remove any previous listener by replacing the element clone
-                const freshBtn = fxBtn.cloneNode(true);
+                const wasFxActive = fxBtn.classList.contains('active');
+                const freshBtn = fxBtn.cloneNode(false);
+                freshBtn.id = 'twr-fx-toggle';
+                freshBtn.className = 'twr-fx-btn' + (wasFxActive && fxFactor ? ' active' : '');
+                freshBtn.textContent = wasFxActive && fxFactor ? 'בטל נרמול שקלי' : 'נרמל שקל';
                 fxBtn.parentNode.replaceChild(freshBtn, fxBtn);
                 freshBtn.disabled = !fxFactor;
                 freshBtn.title = fxFactor
                     ? `שע"ח התחלתי: ${startUSDRate?.toFixed(3)} ← נוכחי: ${endUSDRate?.toFixed(3)} (פקטור: ${fxFactor.toFixed(3)})`
                     : 'אין נתוני שע"ח להמרה';
+                // Apply persisted FX state to the freshly created chart
+                if (wasFxActive && fxFactor) {
+                    advancedCharts.performanceComparison.data.datasets[0].data = chartDataNIS;
+                    advancedCharts.performanceComparison.update();
+                }
                 freshBtn.onclick = () => {
                     const active = freshBtn.classList.toggle('active');
                     advancedCharts.performanceComparison.data.datasets[0].data =
                         active ? chartDataNIS : chartData;
                     advancedCharts.performanceComparison.update();
-                    freshBtn.textContent = active ? 'בטל נרמול שקלי' : 'נרמל למדדים בשקלים';
+                    freshBtn.textContent = active ? 'בטל נרמול שקלי' : 'נרמל שקל';
                 };
+            }
+
+            // Wire up milestone selector (segmented buttons). Re-renders chart with
+            // the selected start date. Avoids re-binding by checking a marker.
+            const milestoneGroup = document.querySelector('.twr-milestone-group');
+            if (milestoneGroup && !milestoneGroup.dataset.wired) {
+                milestoneGroup.dataset.wired = '1';
+                const MILESTONE_DATES = {
+                    inception: null,         // default — uses first snapshot
+                    core:      '2024-02-28', // WORLD trackers added; full WORLD+SCV+BOND core
+                    risky:     '2025-02-03', // first non-core asset still held (IBIT)
+                    ta125:     '2026-01-14'  // 1155365 (TA-125 tracker) added
+                };
+                milestoneGroup.addEventListener('click', async (ev) => {
+                    const btn = ev.target.closest('.twr-milestone-btn');
+                    if (!btn || btn.classList.contains('active') || btn.disabled) return;
+                    const ms = btn.dataset.milestone;
+                    const newStart = MILESTONE_DATES[ms];
+                    // Update active state
+                    milestoneGroup.querySelectorAll('.twr-milestone-btn').forEach(b => b.classList.toggle('active', b === btn));
+                    // Disable while computing
+                    milestoneGroup.querySelectorAll('.twr-milestone-btn').forEach(b => b.disabled = true);
+                    try {
+                        await createPerformanceComparisonChart(textColor, gridColor, newStart);
+                    } finally {
+                        milestoneGroup.querySelectorAll('.twr-milestone-btn').forEach(b => b.disabled = false);
+                    }
+                });
             }
 
             // ===== MWR comparison chart =====
