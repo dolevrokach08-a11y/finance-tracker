@@ -915,6 +915,18 @@
         }
         .twr-fx-btn:hover { opacity: 0.85; }
         .twr-fx-btn.active { background: var(--profit, #10b981); color: #fff; border-color: transparent; }
+        .mwr-mode-btn {
+            font-size: 0.62rem;
+            padding: 1px 5px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color, #334155);
+            cursor: pointer;
+            background: transparent;
+            color: var(--text-secondary, #94a3b8);
+            vertical-align: middle;
+            transition: background 0.15s, color 0.15s;
+        }
+        .mwr-mode-btn:hover { background: var(--bg-tertiary, #1e293b); }
         
         canvas {
             max-height: 100%;
@@ -2118,7 +2130,8 @@
                             <div class="value" id="main-twr-display">--</div>
                             <div class="sub" id="twr-breakdown">בטעינה...</div>
                             <div class="sub" id="main-mwr-display" style="margin-top: 6px; color: var(--text-secondary);">
-                                MWR: <span id="main-mwr-value">--</span>
+                                MWR <button id="mwr-mode-toggle" class="mwr-mode-btn" title="לחץ להחלפה בין מצטבר לשנתי">מצטבר</button>:
+                                <span id="main-mwr-value">--</span>
                                 <span id="main-mwr-annual" style="opacity: 0.55; font-size: 0.72rem; margin-right: 4px;"></span>
                                 <span style="opacity: 0.6; font-size: 0.75rem;">· הכסף האמיתי</span>
                             </div>
@@ -10608,10 +10621,11 @@ ${msg}`, 'warning');
                 }
 
                 // MWR — displayed as cumulative % (same scale as TWR) with annualized
-                // in small sub-text so both can be compared at a glance.
+                // in small sub-text. Toggle button lets user switch between the two.
                 try {
                     const mwrEl = document.getElementById('main-mwr-value');
                     const mwrAnnualEl = document.getElementById('main-mwr-annual');
+                    const mwrDisplayEl = document.getElementById('main-mwr-display');
                     if (mwrEl && typeof calculateMWR === 'function') {
                         const mwr = calculateMWR(); // returns annualized %
                         if (typeof mwr === 'number' && isFinite(mwr)) {
@@ -10623,12 +10637,35 @@ ${msg}`, 'warning');
                             const mwrCumulative = (years && years > 0)
                                 ? (Math.pow(1 + mwr / 100, years) - 1) * 100
                                 : null;
-                            if (mwrCumulative !== null) {
+
+                            // Helpers to render each mode
+                            const renderCumulative = () => {
                                 mwrEl.textContent = `${mwrCumulative >= 0 ? '+' : ''}${mwrCumulative.toFixed(1)}%`;
                                 if (mwrAnnualEl) mwrAnnualEl.textContent = `(≈${mwr >= 0 ? '+' : ''}${mwr.toFixed(1)}%/שנה)`;
-                            } else {
+                            };
+                            const renderAnnual = () => {
                                 mwrEl.textContent = `${mwr >= 0 ? '+' : ''}${mwr.toFixed(1)}%/שנה`;
                                 if (mwrAnnualEl) mwrAnnualEl.textContent = '';
+                            };
+
+                            if (mwrCumulative !== null) {
+                                renderCumulative(); // default: cumulative
+                                // Wire toggle button (replace to remove stale listeners)
+                                const oldBtn = document.getElementById('mwr-mode-toggle');
+                                if (oldBtn) {
+                                    const btn = oldBtn.cloneNode(true);
+                                    oldBtn.parentNode.replaceChild(btn, oldBtn);
+                                    btn.textContent = 'מצטבר';
+                                    btn.onclick = () => {
+                                        const isAnnual = btn.textContent === 'שנתי';
+                                        if (isAnnual) { renderCumulative(); btn.textContent = 'מצטבר'; }
+                                        else          { renderAnnual();    btn.textContent = 'שנתי'; }
+                                    };
+                                }
+                            } else {
+                                renderAnnual();
+                                const btn = document.getElementById('mwr-mode-toggle');
+                                if (btn) { btn.textContent = 'שנתי'; btn.disabled = true; }
                             }
                             mwrEl.style.color = mwr >= 0 ? 'var(--profit)' : 'var(--loss)';
                             mwrEl.style.fontWeight = '600';
