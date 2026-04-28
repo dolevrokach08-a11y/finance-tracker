@@ -988,11 +988,11 @@ function App() {
       const rows = holdings
         .map(h => {
           const lots = getRemainingLots(purchases, sales, h.symbol);
-          const { flatTax, cpiAdjTax, savings, lotsFromHistory } = calcSimulatedTax(h, lots, cpiMap, rates);
+          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory } = calcSimulatedTax(h, lots, cpiMap, rates);
           const totalValueILS = Number(h.currentPrice || 0) * Number(h.shares || 0) *
             (h.currency === 'ILS' ? 1 : (rates[h.currency] ?? 3.6));
           return { symbol: h.symbol, isCPIIndexed: !!h.isCPIIndexed, currency: h.currency,
-            flatTax, cpiAdjTax, savings, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
+            flatTax, cpiAdjTax, savings, unrealizedGain: unrealizedGain || 0, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
         })
         .filter(r => r.flatTax > 0 || r.cpiAdjTax > 0);
 
