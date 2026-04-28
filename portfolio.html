@@ -2589,7 +2589,7 @@
                                 <option value="EUR">€ יורו</option>
                             </select>
                         </div>
-                        <div class="form-group">
+                        <div class="form-group" id="purchase-date-group">
                             <label>📅 תאריך קנייה</label>
                             <input type="date" id="new-purchase-date" style="direction: ltr;">
                             <small style="color: var(--text-secondary); font-size: 0.8rem;">השאר ריק לתאריך היום</small>
@@ -7466,8 +7466,11 @@ function calculateTWRv3(startDate = null) {
         function showAddHoldingForm() {
             editingHoldingId = null; // Reset editing mode
             document.getElementById('add-holding-form').style.display = 'block';
+            // הצג שדה תאריך רק בהוספה חדשה
+            const pdGroup = document.getElementById('purchase-date-group');
+            if (pdGroup) pdGroup.style.display = '';
             updateGroupSelect();
-            
+
             // Reset form title
             const formTitle = document.querySelector('#add-holding-form h3');
             if (formTitle) formTitle.textContent = 'הוסף החזקה חדשה';
@@ -7609,7 +7612,7 @@ function calculateTWRv3(startDate = null) {
                     holding.currency = currency;
                     holding.groupId = groupId;
                     holding.altTicker = altTicker;
-                    holding.purchaseDate = purchaseDate;
+                    // purchaseDate לא משתנה בעריכה — משמש ל-TWR היסטורי
                     holding.isCPIIndexed = document.getElementById('new-cpi-indexed')?.checked || false;
                     holding.lastUpdate = new Date().toISOString();
                     console.log('✅ Holding updated:', holding);
@@ -7827,11 +7830,9 @@ function calculateTWRv3(startDate = null) {
             document.getElementById('new-alt-ticker').value = holding.altTicker || '';
             const cpiCheckbox = document.getElementById('new-cpi-indexed');
             if (cpiCheckbox) cpiCheckbox.checked = holding.isCPIIndexed || false;
-            // שחזור תאריך קנייה — קריטי לחישוב הצמדה למדד
-            const purchaseDateEl = document.getElementById('new-purchase-date');
-            if (purchaseDateEl && holding.purchaseDate) {
-                purchaseDateEl.value = new Date(holding.purchaseDate).toISOString().split('T')[0];
-            }
+            // הסתר שדה תאריך קנייה בעריכה — לא ניתן לשנות (משמש ל-TWR היסטורי)
+            const pdGroup = document.getElementById('purchase-date-group');
+            if (pdGroup) pdGroup.style.display = 'none';
 
             // Change form title
             const formTitle = document.querySelector('#add-holding-form h3');
