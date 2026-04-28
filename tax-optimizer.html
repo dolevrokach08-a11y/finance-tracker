@@ -961,10 +961,28 @@ function App() {
     setCpiError('');
     try {
       const cpiMap = await fetchCPIMap();
-      const holdings  = window.__portfolioHoldings  || [];
-      const purchases = window.__portfolioPurchases || [];
-      const sales     = window.__portfolioSales     || [];
-      const rates     = window.__portfolioRates     || { USD: 3.6, EUR: 3.9 };
+
+      // Firebase נטען? אם לא — fallback ל-localStorage (מקור האמת המקומי)
+      let holdings  = window.__portfolioHoldings;
+      let purchases = window.__portfolioPurchases;
+      let sales     = window.__portfolioSales;
+      let rates     = window.__portfolioRates;
+      if (!holdings || holdings.length === 0) {
+        try {
+          const raw = localStorage.getItem('portfolio');
+          if (raw) {
+            const p = JSON.parse(raw);
+            holdings  = p.holdings  || [];
+            purchases = p.purchases || [];
+            sales     = p.sales     || [];
+            rates     = p.rates     || { USD: 3.6, EUR: 3.9 };
+          }
+        } catch(e) {}
+      }
+      holdings  = holdings  || [];
+      purchases = purchases || [];
+      sales     = sales     || [];
+      rates     = rates     || { USD: 3.6, EUR: 3.9 };
 
       const rows = holdings
         .map(h => {
