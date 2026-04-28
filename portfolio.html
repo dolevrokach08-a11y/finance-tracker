@@ -7827,6 +7827,11 @@ function calculateTWRv3(startDate = null) {
             document.getElementById('new-alt-ticker').value = holding.altTicker || '';
             const cpiCheckbox = document.getElementById('new-cpi-indexed');
             if (cpiCheckbox) cpiCheckbox.checked = holding.isCPIIndexed || false;
+            // שחזור תאריך קנייה — קריטי לחישוב הצמדה למדד
+            const purchaseDateEl = document.getElementById('new-purchase-date');
+            if (purchaseDateEl && holding.purchaseDate) {
+                purchaseDateEl.value = new Date(holding.purchaseDate).toISOString().split('T')[0];
+            }
 
             // Change form title
             const formTitle = document.querySelector('#add-holding-form h3');

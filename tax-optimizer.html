@@ -919,6 +919,7 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
     flatTax: Math.round(flatTax),
     cpiAdjTax: Math.round(cpiAdjTax),
     savings: Math.round(Math.max(0, flatTax - cpiAdjTax)),
+    unrealizedGain: Math.round(flatTax / 0.25),   // רווח לא ממומש (בסיס לחישוב)
     lotsFromHistory: remainingLots.length > 0
   };
 }
@@ -1893,7 +1894,7 @@ function App() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-                        {["נייר ערך", "מטבע", "מוצמד?", "מס 25%", "מס עם מדד", "חיסכון"].map(h => (
+                        {["נייר ערך", "מטבע", "מוצמד?", "רווח לא ממומש", "מס 25%", "מס עם מדד", "חיסכון"].map(h => (
                           <th key={h} style={{ padding: "8px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -1908,6 +1909,7 @@ function App() {
                               ? <span style={{ color: "#5ab85a", fontWeight: 700 }}>✓</span>
                               : <span style={{ color: "#5a5a7a" }}>—</span>}
                           </td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "#a8c8a8" }}>{fm(row.unrealizedGain)} ₪</td>
                           <td style={{ padding: "7px 6px", textAlign: "center", color: "#e07070" }}>{fm(row.flatTax)} ₪</td>
                           <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(210,70%,65%)" }}>{fm(row.cpiAdjTax)} ₪</td>
                           <td style={{ padding: "7px 6px", textAlign: "center", fontWeight: row.savings > 0 ? 700 : 400, color: row.savings > 0 ? "#5ab85a" : "hsl(215, 12%, 52%)" }}>
