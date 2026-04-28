@@ -31,6 +31,28 @@ export default {
     }
 
     const requestUrl = new URL(request.url);
+
+    // ── CPI route: proxy Israeli CBS (הלמ"ס) consumer price index ──────────
+    if (requestUrl.pathname === '/cpi') {
+      try {
+        const cbsResp = await fetch(
+          'https://api.cbs.gov.il/index/data/price?id=120010&format=json&lang=en',
+          { headers: { 'User-Agent': 'FinanceTracker/1.0' }, cf: { cacheTtl: 3600, cacheEverything: true } }
+        );
+        const body = await cbsResp.arrayBuffer();
+        return new Response(body, {
+          status: cbsResp.status,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      } catch (err) {
+        return new Response(JSON.stringify({ error: 'CPI fetch failed', message: err.message }), {
+          status: 502,
+          headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     const targetUrl = requestUrl.searchParams.get('url');
 
     if (!targetUrl) {

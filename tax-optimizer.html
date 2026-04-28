@@ -336,6 +336,11 @@ a { color: var(--accent); }
           window.__financeData = data;
           window.__payslipData = { payslips: data.payslips || [], loaded: true };
           document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
+          // Portfolio data for CPI tax simulator
+          window.__portfolioHoldings = data.holdings || [];
+          window.__portfolioPurchases = data.purchases || [];
+          window.__portfolioSales     = data.sales    || [];
+          window.__portfolioRates     = data.rates    || { USD: 3.6, EUR: 3.9 };
           const transactions = data.transactions || [];
           const fixedIncomes = data.fixedIncomes || [];
 
@@ -765,6 +770,128 @@ async function extractPDFText(arrayBuffer) {
   return { ltrText, rtlText, hasText: ltrText.replace(/\s/g, '').length > 20 };
 }
 
+// ==================== CPI TAX SIMULATOR HELPERS ====================
+
+const CPI_CACHE_KEY = 'cpi_data_v1';
+const CPI_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+const CF_WORKER_BASE = 'https://finance-proxy.dolevrokach08.workers.dev';
+
+async function fetchCPIMap() {
+  try {
+    const cached = localStorage.getItem(CPI_CACHE_KEY);
+    if (cached) {
+      const { entries, fetchedAt } = JSON.parse(cached);
+      if (Date.now() - fetchedAt < CPI_CACHE_TTL) return new Map(entries);
+    }
+  } catch(e) {}
+
+  const resp = await fetch(`${CF_WORKER_BASE}/cpi`);
+  if (!resp.ok) throw new Error(`שגיאה בשליפת מדד (${resp.status})`);
+  const data = await resp.json();
+  if (data?.error) throw new Error(data.error);
+
+  const map = parseCBSCPIData(data);
+  if (map.size === 0) throw new Error('נתוני מדד ריקים — ייתכן שמבנה ה-API השתנה');
+
+  try {
+    localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now() }));
+  } catch(e) {}
+  return map;
+}
+
+function parseCBSCPIData(data) {
+  const map = new Map();
+  // CBS API returns Data.Row array; each item has X0 = "YYYYMmm", X1 = index value
+  const rows = data?.Data?.Row ?? data?.data?.Row ?? data?.rows ?? data ?? [];
+  const arr = Array.isArray(rows) ? rows : [];
+  for (const item of arr) {
+    const rawPeriod = item.X0 ?? item.period ?? item.Period ?? item.date ?? '';
+    const rawValue  = item.X1 ?? item.value ?? item.Value ?? item.indexValue ?? '';
+    const value = parseFloat(String(rawValue).replace(',', '.'));
+    if (!rawPeriod || isNaN(value)) continue;
+    const p = String(rawPeriod);
+    let key = '';
+    if (p.includes('M')) {
+      const [yr, mo] = p.split('M');
+      key = `${yr}-${String(mo).padStart(2, '0')}`;
+    } else if (/^\d{4}-\d{2}/.test(p)) {
+      key = p.substring(0, 7);
+    }
+    if (key) map.set(key, value);
+  }
+  return map;
+}
+
+function getCPIForDate(isoDateStr, cpiMap) {
+  if (!isoDateStr || !cpiMap) return null;
+  const d = new Date(isoDateStr);
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return cpiMap.get(key) ?? null;
+}
+
+function getLatestCPI(cpiMap) {
+  if (!cpiMap || cpiMap.size === 0) return null;
+  const keys = [...cpiMap.keys()].sort();
+  return { key: keys[keys.length - 1], value: cpiMap.get(keys[keys.length - 1]) };
+}
+
+function getRemainingLots(purchases, sales, symbol) {
+  const sym = (symbol || '').toUpperCase();
+  const lots = (purchases || [])
+    .filter(p => (p.symbol || '').toUpperCase() === sym)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(p => ({ date: p.date, price: Number(p.price || 0), shares: Number(p.shares || 0), currency: p.currency || 'ILS', remaining: Number(p.shares || 0) }));
+
+  for (const sale of (sales || []).filter(s => (s.symbol || '').toUpperCase() === sym).sort((a, b) => new Date(a.date) - new Date(b.date))) {
+    let toSell = Number(sale.shares || 0);
+    for (const lot of lots) {
+      if (toSell <= 0 || lot.remaining <= 0) continue;
+      const used = Math.min(toSell, lot.remaining);
+      lot.remaining -= used;
+      toSell -= used;
+    }
+  }
+  return lots.filter(l => l.remaining > 0.0001);
+}
+
+function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
+  const currentPrice = Number(holding.currentPrice || 0);
+  const currency = holding.currency || 'ILS';
+  const rate = currency === 'ILS' ? 1 : (currentRates?.[currency] ?? (currency === 'USD' ? 3.6 : 3.9));
+  const salePriceILS = currentPrice * rate;
+  const latest = getLatestCPI(cpiMap);
+
+  let flatTax = 0, cpiAdjTax = 0;
+
+  const lotsToUse = remainingLots.length > 0
+    ? remainingLots
+    : [{ date: holding.purchaseDate, price: Number(holding.costBasis || 0), shares: Number(holding.shares || 0), currency, remaining: Number(holding.shares || 0) }];
+
+  for (const lot of lotsToUse) {
+    const costILS = Number(lot.price || 0) * (lot.currency === 'ILS' ? 1 : rate);
+    const sharesUsed = lot.remaining;
+    const gainFlat = (salePriceILS - costILS) * sharesUsed;
+    flatTax += Math.max(0, gainFlat) * 0.25;
+
+    let adjustedCostILS = costILS;
+    if (holding.isCPIIndexed && currency === 'ILS') {
+      const cpiPurchase = getCPIForDate(lot.date, cpiMap);
+      if (cpiPurchase && latest?.value) adjustedCostILS = costILS * (latest.value / cpiPurchase);
+    }
+    const gainAdj = (salePriceILS - adjustedCostILS) * sharesUsed;
+    cpiAdjTax += Math.max(0, gainAdj) * 0.25;
+  }
+
+  return {
+    flatTax: Math.round(flatTax),
+    cpiAdjTax: Math.round(cpiAdjTax),
+    savings: Math.round(Math.max(0, flatTax - cpiAdjTax)),
+    lotsFromHistory: remainingLots.length > 0
+  };
+}
+
+// ====================================================================
+
 function App() {
   const taxData = window.__taxData || { loaded: false, years: {}, availableYears: [] };
   const saved = window.__taxSettings;
@@ -789,6 +916,48 @@ function App() {
   const [fRatio, setFRatio] = useState(saved?.fRatio ?? 1.0);
   const [mRatio, setMRatio] = useState(saved?.mRatio ?? 1.0);
   const [det, setDet] = useState(false);
+
+  // CPI Tax Simulator state
+  const [cpiSim, setCpiSim] = useState(null);
+  const [cpiLoading, setCpiLoading] = useState(false);
+  const [cpiError, setCpiError] = useState('');
+  const [cpiExpanded, setCpiExpanded] = useState(false);
+
+  const runCPISim = useCallback(async () => {
+    setCpiLoading(true);
+    setCpiError('');
+    try {
+      const cpiMap = await fetchCPIMap();
+      const holdings  = window.__portfolioHoldings  || [];
+      const purchases = window.__portfolioPurchases || [];
+      const sales     = window.__portfolioSales     || [];
+      const rates     = window.__portfolioRates     || { USD: 3.6, EUR: 3.9 };
+
+      const rows = holdings
+        .map(h => {
+          const lots = getRemainingLots(purchases, sales, h.symbol);
+          const { flatTax, cpiAdjTax, savings, lotsFromHistory } = calcSimulatedTax(h, lots, cpiMap, rates);
+          const totalValueILS = Number(h.currentPrice || 0) * Number(h.shares || 0) *
+            (h.currency === 'ILS' ? 1 : (rates[h.currency] ?? 3.6));
+          return { symbol: h.symbol, isCPIIndexed: !!h.isCPIIndexed, currency: h.currency,
+            flatTax, cpiAdjTax, savings, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
+        })
+        .filter(r => r.flatTax > 0 || r.cpiAdjTax > 0);
+
+      const latest = getLatestCPI(cpiMap);
+      setCpiSim({
+        rows,
+        totalFlat:    rows.reduce((s, r) => s + r.flatTax, 0),
+        totalCPI:     rows.reduce((s, r) => s + r.cpiAdjTax, 0),
+        totalSavings: rows.reduce((s, r) => s + r.savings, 0),
+        latestCPIDate: latest?.key || ''
+      });
+    } catch(e) {
+      setCpiError(e.message || 'שגיאה לא ידועה');
+    } finally {
+      setCpiLoading(false);
+    }
+  }, []);
 
   // Sync payslips from Firebase when data loads after component mount
   useEffect(() => {
@@ -1601,6 +1770,104 @@ function App() {
                 : "ניצול מלוא הזיכויים! 🎯"}
             </div>
           </div>
+        </div>
+
+        {/* CPI TAX SIMULATOR */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(100,180,255,0.25)", padding: "18px", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון עם הצמדה למדד</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {cpiSim?.latestCPIDate && (
+                <span style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>מדד עד: {cpiSim.latestCPIDate}</span>
+              )}
+              <button
+                onClick={runCPISim}
+                disabled={cpiLoading}
+                style={{ padding: "7px 14px", borderRadius: 8, cursor: cpiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700,
+                  background: cpiLoading ? "rgba(100,150,255,0.1)" : "rgba(100,150,255,0.18)",
+                  border: "1px solid rgba(100,180,255,0.35)", color: "hsl(210, 70%, 72%)" }}>
+                {cpiLoading ? "⏳ טוען מדד..." : cpiSim ? "🔄 חשב מחדש" : "▶ חשב"}
+              </button>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: "0 0 12px", lineHeight: 1.6 }}>
+            מחשב את מס רווחי ההון הריאלי על ניירות ערך צמודי מדד, בהשוואה לחישוב הפשוט של 25% (כגון אקסלנס).
+            הסימולציה מבוססת על מכירה היפותטית של כל ניירות הערך במחיר הנוכחי.
+            סמן "מוצמד למדד" על הניירות הרלוונטיים <a href="portfolio.html" style={{ color: "hsl(210,70%,65%)" }}>בדף הפורטפוליו</a>.
+          </p>
+
+          {cpiError && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,80,80,0.1)", border: "1px solid rgba(200,80,80,0.3)", color: "#e07070", fontSize: 12, marginBottom: 12 }}>
+              ❌ {cpiError}
+            </div>
+          )}
+
+          {cpiSim && cpiSim.rows.length === 0 && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,160,80,0.1)", border: "1px solid rgba(200,160,80,0.25)", color: "#c8a060", fontSize: 12 }}>
+              אין רווחים חיוביים להצגה — ייתכן שמחירי הניירות לא עודכנו, או שאין רווחים לא ממומשים.
+            </div>
+          )}
+
+          {cpiSim && cpiSim.rows.length > 0 && (
+            <>
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(200,80,80,0.08)", border: "1px solid rgba(200,80,80,0.2)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס לפי אקסלנס (25%)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#e07070" }}>{fm(cpiSim.totalFlat)} ₪</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(100,180,255,0.06)", border: "1px solid rgba(100,180,255,0.2)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס ריאלי (עם מדד)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "hsl(210,70%,65%)" }}>{fm(cpiSim.totalCPI)} ₪</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>חיסכון פוטנציאלי</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#5ab85a" }}>+{fm(cpiSim.totalSavings)} ₪</div>
+                </div>
+              </div>
+
+              {/* Per-holding table */}
+              <button onClick={() => setCpiExpanded(!cpiExpanded)} style={{ width: "100%", padding: "8px", borderRadius: 8, cursor: "pointer", fontSize: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 10 }}>
+                {cpiExpanded ? "▲ הסתר פירוט" : "▼ הצג פירוט לפי נייר ערך"}
+              </button>
+              {cpiExpanded && (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+                        {["נייר ערך", "מטבע", "מוצמד?", "מס 25%", "מס עם מדד", "חיסכון"].map(h => (
+                          <th key={h} style={{ padding: "8px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cpiSim.rows.map(row => (
+                        <tr key={row.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <td style={{ padding: "7px 6px", fontWeight: 700, color: "#c8d8f0", textAlign: "center" }}>{row.symbol}</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)" }}>{row.currency}</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center" }}>
+                            {row.isCPIIndexed
+                              ? <span style={{ color: "#5ab85a", fontWeight: 700 }}>✓</span>
+                              : <span style={{ color: "#5a5a7a" }}>—</span>}
+                          </td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "#e07070" }}>{fm(row.flatTax)} ₪</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(210,70%,65%)" }}>{fm(row.cpiAdjTax)} ₪</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", fontWeight: row.savings > 0 ? 700 : 400, color: row.savings > 0 ? "#5ab85a" : "hsl(215, 12%, 52%)" }}>
+                            {row.savings > 0 ? `+${fm(row.savings)} ₪` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p style={{ fontSize: 11, color: "#5a5a7a", margin: "10px 0 0", lineHeight: 1.6 }}>
+                    * הסימולציה מניחה מכירה של כל הניירות במחיר הנוכחי. חישוב ה-CPI מבוסס על מדד הלמ"ס 120010. עדכן מחירים בדף הפורטפוליו לפני החישוב.
+                    {cpiSim.rows.some(r => !r.lotsFromHistory) && " חלק מהניירות מחושבים לפי costBasis ממוצע (אין היסטוריית קניות מפורטת)."}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         {/* DETAIL TABLE */}

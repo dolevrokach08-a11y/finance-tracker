@@ -2598,6 +2598,11 @@
                             <label>קבוצה</label>
                             <select id="new-group"></select>
                         </div>
+                        <div class="form-group" style="display: flex; align-items: center; gap: 10px; padding-top: 22px;">
+                            <input type="checkbox" id="new-cpi-indexed" style="width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent, #4caf50);">
+                            <label for="new-cpi-indexed" style="cursor: pointer; margin: 0; font-weight: 600;">מוצמד למדד המחירים לצרכן</label>
+                            <small style="color: var(--text-secondary); font-size: 0.8rem; display: block; margin-top: 2px;">סמן אם מס רווחי ההון מחושב לאחר הצמדה למדד</small>
+                        </div>
                     </div>
                     <div style="display: flex; gap: 10px;">
                         <button onclick="addHolding()" class="btn btn-success">✅ שמור</button>
@@ -7478,6 +7483,8 @@ function calculateTWRv3(startDate = null) {
             document.getElementById('new-cost').value = '';
             document.getElementById('new-alt-ticker').value = '';
             document.getElementById('new-purchase-date').value = '';  // ← ניקוי תאריך
+            const cpiCb = document.getElementById('new-cpi-indexed');
+            if (cpiCb) cpiCb.checked = false;
             
             // Reset form title
             const formTitle = document.querySelector('#add-holding-form h3');
@@ -7603,6 +7610,7 @@ function calculateTWRv3(startDate = null) {
                     holding.groupId = groupId;
                     holding.altTicker = altTicker;
                     holding.purchaseDate = purchaseDate;
+                    holding.isCPIIndexed = document.getElementById('new-cpi-indexed')?.checked || false;
                     holding.lastUpdate = new Date().toISOString();
                     console.log('✅ Holding updated:', holding);
                 }
@@ -7647,6 +7655,7 @@ function calculateTWRv3(startDate = null) {
                     groupId,
                     altTicker: altTicker || '',
                     purchaseDate: purchaseDate,  // ← תאריך קנייה!
+                    isCPIIndexed: document.getElementById('new-cpi-indexed')?.checked || false,
                     lastUpdate: new Date().toISOString()
                 };
                 
@@ -7816,7 +7825,9 @@ function calculateTWRv3(startDate = null) {
             document.getElementById('new-currency').value = holding.currency;
             document.getElementById('new-group').value = holding.groupId;
             document.getElementById('new-alt-ticker').value = holding.altTicker || '';
-            
+            const cpiCheckbox = document.getElementById('new-cpi-indexed');
+            if (cpiCheckbox) cpiCheckbox.checked = holding.isCPIIndexed || false;
+
             // Change form title
             const formTitle = document.querySelector('#add-holding-form h3');
             if (formTitle) formTitle.textContent = `ערוך החזקה: ${holding.symbol}`;
