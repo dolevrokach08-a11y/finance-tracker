@@ -1034,44 +1034,49 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
     // Buy rate (historical): for foreign currency → look up at purchase date. For ILS → 1.
     const lotFxBuy  = lotCurrency === 'ILS' ? 1 : (getFXForDate(lot.date, fxMap, lotCurrency) ?? lotFxSell);
 
-    // Cost in NIS at the time of purchase (real historical cost):
-    const costNIS_buy = lotPrice * lotFxBuy * sharesUsed;
-    // Proceeds in NIS at the current sale rate:
-    const proceedsNIS = currentPrice * lotFxSell * sharesUsed;
-    const nominalGainNIS = proceedsNIS - costNIS_buy;
+    // ── Track A: real nominal NIS (legal nominal per §88) — uses HISTORICAL FX for cost ──
+    const costNIS_historical = lotPrice * lotFxBuy * sharesUsed;
+    const proceedsNIS         = currentPrice * lotFxSell * sharesUsed;
+    const realNominalGainNIS  = proceedsNIS - costNIS_historical;
 
-    unrealizedGain += nominalGainNIS;
-    totalGainFlat += nominalGainNIS;  // הnominalGain הוא הבסיס למס 25% הפשוט
+    // ── Track B: "naive" / Excellence-style — uses CURRENT FX for both buy and sell ──
+    // Equivalent to: (currentPrice - lotPrice) × shares × lotFxSell
+    // This matches how the portfolio app displays unrealized P&L.
+    const naiveGainNIS = (currentPrice - lotPrice) * sharesUsed * lotFxSell;
+
+    // The unrealized P&L shown in the portfolio uses current FX (Track B), so we mirror that:
+    unrealizedGain += naiveGainNIS;
+    // The "flat 25%" we compare against is the Excellence-style naive calc (Track B):
+    totalGainFlat += naiveGainNIS;
 
     let realGainLot;
     if (lotCurrency === 'ILS') {
       // === ILS asset: CPI adjustment if marked, otherwise nominal ===
+      // For ILS, Track A === Track B === naive (no FX involved).
       if (holding.isCPIIndexed) {
         const cpiPurchase = getCPIForDate(lot.date, cpiMap);
         if (cpiPurchase && latest?.value) {
           const adjustedCostNIS = lotPrice * (latest.value / cpiPurchase) * sharesUsed;
           const cpiAdjGain = proceedsNIS - adjustedCostNIS;
           // ס' 88: הצמדה לא יוצרת/מגדילה הפסד
-          realGainLot = nominalGainNIS < 0 ? nominalGainNIS : Math.max(0, cpiAdjGain);
+          realGainLot = naiveGainNIS < 0 ? naiveGainNIS : Math.max(0, cpiAdjGain);
         } else {
-          realGainLot = nominalGainNIS;  // אין CPI לתאריך - ללא הצמדה
+          realGainLot = naiveGainNIS;
         }
       } else {
-        realGainLot = nominalGainNIS;  // אין הצמדה
+        realGainLot = naiveGainNIS;
       }
     } else {
       // === Foreign currency: "Lower of the two" rule (§88) ===
-      // Currency-based gain = (FCY sale price - FCY buy price) × shares × sale rate
-      const fcyGainNIS = (currentPrice - lotPrice) * sharesUsed * lotFxSell;
-      if (nominalGainNIS <= 0) {
-        // Loss is recognized in full (regardless of FX moves)
-        realGainLot = nominalGainNIS;
-      } else if (fcyGainNIS <= 0) {
-        // Asset lost in foreign currency → "illusion" gain: tax 0, no recognized loss
-        realGainLot = 0;
+      // Real tax base = min(Track A: real nominal w/ historical FX, Track B: naive at current FX)
+      // - Loss in NIS at historical FX → recognized loss
+      // - "Illusion" gain (positive NIS at current FX but FCY went down) → tax 0, no loss
+      if (realNominalGainNIS <= 0) {
+        realGainLot = realNominalGainNIS;  // loss recognized at historical-FX nominal
+      } else if (naiveGainNIS <= 0) {
+        realGainLot = 0;                   // FCY went down → no taxable gain, no loss
       } else {
-        // Both positive → tax on the lower of the two
-        realGainLot = Math.min(nominalGainNIS, fcyGainNIS);
+        realGainLot = Math.min(realNominalGainNIS, naiveGainNIS);
       }
     }
     totalGainReal += realGainLot;
