@@ -912,7 +912,7 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
   const salePriceILS = currentPrice * rate;
   const latest = getLatestCPI(cpiMap);
 
-  let flatTax = 0, cpiAdjTax = 0, unrealizedGain = 0;
+  let totalGainFlat = 0, totalGainReal = 0, unrealizedGain = 0;
 
   const fallbackCost = Number(holding.costBasis || 0);  // עלות ממוצעת ללוטים חסרי price
 
@@ -932,16 +932,24 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
 
     const gainFlat = (salePriceILS - costILS) * sharesUsed;
     unrealizedGain += gainFlat;
-    flatTax += Math.max(0, gainFlat) * 0.25;
+    totalGainFlat += gainFlat;  // קיזוז רווח/הפסד נומינלי בין לוטים
 
+    // הצמדה לפי לוט, אבל לפי דיני המס בישראל (ס' 88) ההצמדה לא יוצרת/מגדילה הפסד:
+    // - לוט עם רווח נומינלי: רווח ריאלי = max(0, רווח לאחר הצמדה)
+    // - לוט עם הפסד נומינלי: רווח ריאלי = הפסד נומינלי (הצמדה לא חלה)
     let adjustedCostILS = costILS;
     if (holding.isCPIIndexed && lotCurrency === 'ILS') {
       const cpiPurchase = getCPIForDate(lot.date, cpiMap);
       if (cpiPurchase && latest?.value) adjustedCostILS = costILS * (latest.value / cpiPurchase);
     }
     const gainAdj = (salePriceILS - adjustedCostILS) * sharesUsed;
-    cpiAdjTax += Math.max(0, gainAdj) * 0.25;
+    const realGainLot = gainFlat < 0 ? gainFlat : Math.max(0, gainAdj);
+    totalGainReal += realGainLot;
   }
+
+  // קיזוז רווחים והפסדים בתוך הנייר, ואז max(0, ...) לפני 25%
+  const flatTax = Math.max(0, totalGainFlat) * 0.25;
+  const cpiAdjTax = Math.max(0, totalGainReal) * 0.25;
 
   return {
     flatTax: Math.round(flatTax),
