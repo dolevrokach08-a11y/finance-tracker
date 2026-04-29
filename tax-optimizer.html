@@ -772,7 +772,7 @@ async function extractPDFText(arrayBuffer) {
 
 // ==================== CPI TAX SIMULATOR HELPERS ====================
 
-const CPI_CACHE_KEY = 'cpi_data_v3';
+const CPI_CACHE_KEY = 'cpi_data_v4';
 const CPI_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CF_WORKER_BASE = 'https://finance-proxy.dolevrokach08.workers.dev';
 
@@ -815,7 +815,21 @@ async function fetchCPIMap() {
     }
   } catch(e) {}
 
-  // 2. נסה לשלוף מה-Worker (CBS API) — אם עובד, מדויק יותר
+  // 2. נסה ישירות מ-CBS (יש להם CORS פתוח לדפדפן, אבל בלוקקים את ה-Worker)
+  try {
+    const resp = await fetch('https://api.cbs.gov.il/index/data/price?id=120010&format=json&lang=en',
+      { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const map = parseCBSCPIData(data);
+      if (map.size > 50) {
+        try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'cbs' })); } catch(e) {}
+        return map;
+      }
+    }
+  } catch(e) { /* נפל — נסה דרך Worker */ }
+
+  // 3. גיבוי דרך Worker (ייתכן שייכשל - CBS חוסם את CF)
   try {
     const resp = await fetch(`${CF_WORKER_BASE}/cpi`, { signal: AbortSignal.timeout(8000) });
     if (resp.ok) {
@@ -823,22 +837,41 @@ async function fetchCPIMap() {
       if (!data?.error) {
         const map = parseCBSCPIData(data);
         if (map.size > 50) {
-          try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'cbs' })); } catch(e) {}
+          try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'cbs-worker' })); } catch(e) {}
           return map;
         }
       }
     }
-  } catch(e) { /* נפל — ממשיכים לנתונים הסטטיים */ }
+  } catch(e) {}
 
-  // 3. fallback: נתונים מובנים מאינפלציה שנתית ידועה
+  // 4. fallback: נתונים מובנים מאינפלציה שנתית ידועה
   const map = buildStaticCPIMap();
   try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'static' })); } catch(e) {}
   return map;
 }
 
+// Parses the actual CBS API response. The API publishes monthly CPI with periodic re-basing
+// (every 2 years CBS rebases to a new "Average YYYY = 100"). To produce a CONSISTENT index,
+// we chain the published monthly percent change (`item.percent`) from the earliest available
+// month forward — this gives a single base regardless of how many re-bases occurred.
 function parseCBSCPIData(data) {
   const map = new Map();
-  // CBS API returns Data.Row array; each item has X0 = "YYYYMmm", X1 = index value
+  // Modern shape: { month: [{ date: [{year, month, percent, currBase: { value }, ...}, ...] }] }
+  const rawDates = data?.month?.[0]?.date;
+  if (Array.isArray(rawDates) && rawDates.length > 0) {
+    // Sort ascending by year-month
+    const sorted = [...rawDates].sort((a,b) => (a.year - b.year) || (a.month - b.month));
+    let value = 100;  // anchor; actual ratio between dates is what matters for indexation
+    for (const item of sorted) {
+      const pct = Number(item.percent ?? 0);
+      value = value * (1 + pct / 100);
+      const key = `${item.year}-${String(item.month).padStart(2,'0')}`;
+      map.set(key, parseFloat(value.toFixed(4)));
+    }
+    return map;
+  }
+
+  // Legacy shape (X0/X1) — fallback
   const rows = data?.Data?.Row ?? data?.data?.Row ?? data?.rows ?? data ?? [];
   const arr = Array.isArray(rows) ? rows : [];
   for (const item of arr) {
