@@ -962,17 +962,37 @@ function getRemainingLots(purchases, sales, symbol) {
     .map(p => {
       const shares = Number(p.shares || 0);
       const fee = Number(p.fee || 0);
-      // Resolve actual per-share cost (including fee — per Israeli tax law cost basis includes commissions).
-      // Priority: amount/shares (already includes fee) → price+fee/shares → original_price+fee/shares
+      const lotCurrency = p.currency || 'ILS';
+      // Resolve actual per-share cost IN THE LOT'S NATIVE CURRENCY (including fee — per Israeli
+      // tax law, cost basis includes commissions).
+      //
+      // CRITICAL: for non-ILS lots, `p.amount` is stored in NIS (the actual NIS spent at the
+      // historical FX), NOT in the lot's currency. Must use `originalAmount` (with fee) or
+      // `original_amount` (without fee) for foreign-currency lots.
       let perShareCost = 0;
-      if (Number(p.amount) > 0 && shares > 0) {
-        perShareCost = Number(p.amount) / shares;
-      } else if (Number(p.price) > 0 && shares > 0) {
-        perShareCost = Number(p.price) + (fee / shares);
-      } else if (Number(p.original_price) > 0 && shares > 0) {
-        perShareCost = Number(p.original_price) + (fee / shares);
+      if (lotCurrency === 'ILS') {
+        if (Number(p.amount) > 0 && shares > 0) {
+          perShareCost = Number(p.amount) / shares;
+        } else if (Number(p.price) > 0 && shares > 0) {
+          perShareCost = Number(p.price) + (fee / shares);
+        } else if (Number(p.original_price) > 0 && shares > 0) {
+          perShareCost = Number(p.original_price) + (fee / shares);
+        }
+      } else {
+        // Foreign currency: prefer originalAmount (FCY total inc. fee) → original_amount + fee → original_price + fee
+        if (Number(p.originalAmount) > 0 && shares > 0) {
+          perShareCost = Number(p.originalAmount) / shares;
+        } else if (Number(p.original_amount) > 0 && shares > 0) {
+          const feeFCY = (p.fee_currency || 'ILS') === lotCurrency ? fee : 0;
+          perShareCost = (Number(p.original_amount) + feeFCY) / shares;
+        } else if (Number(p.original_price) > 0 && shares > 0) {
+          const feeFCY = (p.fee_currency || 'ILS') === lotCurrency ? fee : 0;
+          perShareCost = Number(p.original_price) + (feeFCY / shares);
+        } else if (Number(p.price) > 0 && shares > 0) {
+          perShareCost = Number(p.price);
+        }
       }
-      return { date: p.date, price: perShareCost, shares, currency: p.currency || 'ILS', remaining: shares };
+      return { date: p.date, price: perShareCost, shares, currency: lotCurrency, remaining: shares };
     });
 
   for (const sale of (sales || []).filter(s => (s.symbol || '').toUpperCase() === sym).sort((a, b) => new Date(a.date) - new Date(b.date))) {
