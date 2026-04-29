@@ -872,6 +872,88 @@ function getLatestCPI(cpiMap) {
   return { key: keys[keys.length - 1], value: cpiMap.get(keys[keys.length - 1]) };
 }
 
+// ==================== FX (Currency) HISTORY HELPERS ====================
+// Monthly VWAP (volume-weighted average) for USD/ILS and EUR/ILS.
+// Source: Massive Market Data (C:USDILS, C:EURILS) for 2024-04+; BoI yearly avgs for older.
+// Used to compute "real" capital gain on foreign-currency assets per Israeli Tax Ord. §88
+// (the "lower of the two" rule: tax on min(nominal NIS gain, FCY gain × sale-rate)).
+
+const FX_CACHE_KEY = 'fx_data_v1';
+const FX_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+const FX_MONTHLY_VWAP = {
+  // === Yearly approximations (BoI averages) for legacy lots pre-Massive data ===
+  '2010-01': { USD: 3.74, EUR: 4.95 }, '2011-01': { USD: 3.58, EUR: 4.98 },
+  '2012-01': { USD: 3.86, EUR: 4.96 }, '2013-01': { USD: 3.61, EUR: 4.79 },
+  '2014-01': { USD: 3.58, EUR: 4.75 }, '2015-01': { USD: 3.89, EUR: 4.32 },
+  '2016-01': { USD: 3.84, EUR: 4.25 }, '2017-01': { USD: 3.59, EUR: 4.05 },
+  '2018-01': { USD: 3.59, EUR: 4.24 }, '2019-01': { USD: 3.56, EUR: 3.99 },
+  '2020-01': { USD: 3.44, EUR: 3.93 }, '2021-01': { USD: 3.23, EUR: 3.83 },
+  '2022-01': { USD: 3.36, EUR: 3.54 }, '2023-01': { USD: 3.69, EUR: 3.99 },
+  '2024-01': { USD: 3.65, EUR: 3.99 }, '2024-02': { USD: 3.62, EUR: 3.91 },
+  '2024-03': { USD: 3.65, EUR: 3.97 },
+  // === Massive Market Data: monthly VWAP, 2024-04 → present ===
+  '2024-04': { USD: 3.7451, EUR: 4.0133 }, '2024-05': { USD: 3.7028, EUR: 3.9985 },
+  '2024-06': { USD: 3.7223, EUR: 4.0032 }, '2024-07': { USD: 3.6768, EUR: 3.9860 },
+  '2024-08': { USD: 3.7296, EUR: 4.1015 }, '2024-09': { USD: 3.7308, EUR: 4.1415 },
+  '2024-10': { USD: 3.7583, EUR: 4.0939 }, '2024-11': { USD: 3.7183, EUR: 3.9500 },
+  '2024-12': { USD: 3.6172, EUR: 3.7858 }, '2025-01': { USD: 3.6135, EUR: 3.7393 },
+  '2025-02': { USD: 3.5673, EUR: 3.7111 }, '2025-03': { USD: 3.6543, EUR: 3.9459 },
+  '2025-04': { USD: 3.6976, EUR: 4.1320 }, '2025-05': { USD: 3.5634, EUR: 4.0096 },
+  '2025-06': { USD: 3.4799, EUR: 3.9935 }, '2025-07': { USD: 3.3508, EUR: 3.9074 },
+  '2025-08': { USD: 3.3753, EUR: 3.9606 }, '2025-09': { USD: 3.3403, EUR: 3.8170 },
+  '2025-10': { USD: 3.2812, EUR: 3.8170 }, '2025-11': { USD: 3.2543, EUR: 3.7609 },
+  '2025-12': { USD: 3.2159, EUR: 3.7652 }, '2026-01': { USD: 3.1434, EUR: 3.6906 },
+  '2026-02': { USD: 3.1014, EUR: 3.6676 }, '2026-03': { USD: 3.1126, EUR: 3.5985 },
+  '2026-04': { USD: 3.0305, EUR: 3.5509 }
+};
+
+function buildStaticFXMap() {
+  return new Map(Object.entries(FX_MONTHLY_VWAP));
+}
+
+async function fetchFXMap() {
+  // Currently returns the embedded static map. Cache layer kept for future API integration.
+  try {
+    const cached = localStorage.getItem(FX_CACHE_KEY);
+    if (cached) {
+      const { entries, fetchedAt } = JSON.parse(cached);
+      if (Date.now() - fetchedAt < FX_CACHE_TTL) return new Map(entries);
+    }
+  } catch (e) {}
+  const map = buildStaticFXMap();
+  try { localStorage.setItem(FX_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'static-massive' })); } catch (e) {}
+  return map;
+}
+
+// Returns the FX rate (foreign currency → ILS) for a given date and currency.
+// Falls back to closest earlier month, or earliest available month if requested date is too old.
+function getFXForDate(isoDateStr, fxMap, currency) {
+  if (!currency || currency === 'ILS') return 1;
+  if (!isoDateStr || !fxMap) return null;
+  const d = new Date(isoDateStr);
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const exact = fxMap.get(key)?.[currency];
+  if (exact) return exact;
+  const keys = [...fxMap.keys()].sort();
+  if (keys.length === 0) return null;
+  // Latest key ≤ requested
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (keys[i] <= key) {
+      const v = fxMap.get(keys[i])?.[currency];
+      if (v) return v;
+    }
+  }
+  // Else earliest available (requested date is before our data)
+  for (let i = 0; i < keys.length; i++) {
+    const v = fxMap.get(keys[i])?.[currency];
+    if (v) return v;
+  }
+  return null;
+}
+
+// ====================================================================
+
 function getRemainingLots(purchases, sales, symbol) {
   const sym = (symbol || '').toUpperCase();
   const lots = (purchases || [])
@@ -905,14 +987,15 @@ function getRemainingLots(purchases, sales, symbol) {
   return lots.filter(l => l.remaining > 0.0001);
 }
 
-function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
+function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
   const currentPrice = Number(holding.currentPrice || 0);
   const currency = holding.currency || 'ILS';
-  const rate = currency === 'ILS' ? 1 : (currentRates?.[currency] ?? (currency === 'USD' ? 3.6 : 3.9));
-  const salePriceILS = currentPrice * rate;
+  const fxSell = currency === 'ILS' ? 1 : (currentRates?.[currency] ?? (currency === 'USD' ? 3.6 : 3.9));
+  const salePriceILS = currentPrice * fxSell;
   const latest = getLatestCPI(cpiMap);
 
   let totalGainFlat = 0, totalGainReal = 0, unrealizedGain = 0;
+  let adjustmentType = currency === 'ILS' ? (holding.isCPIIndexed ? 'cpi' : 'none') : 'fx';
 
   const fallbackCost = Number(holding.costBasis || 0);  // עלות ממוצעת ללוטים חסרי price
 
@@ -922,40 +1005,69 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
 
   for (const lot of lotsToUse) {
     const lotCurrency = lot.currency || currency;
-    const lotRate = lotCurrency === 'ILS' ? 1 : (currentRates?.[lotCurrency] ?? (lotCurrency === 'USD' ? 3.6 : 3.9));
-    // אם חסר price בקנייה - השתמש ב-costBasis הממוצע של ה-holding (לא לדלג!)
     const lotPrice = Number(lot.price) > 0 ? Number(lot.price) : fallbackCost;
-    const costILS = lotPrice * lotRate;
     const sharesUsed = lot.remaining;
+    if (lotPrice === 0 || sharesUsed <= 0) continue;
 
-    if (costILS === 0 || sharesUsed <= 0) continue;
+    // Sale rate (today): for foreign currency → use current rate. For ILS → 1.
+    const lotFxSell = lotCurrency === 'ILS' ? 1 : (currentRates?.[lotCurrency] ?? (lotCurrency === 'USD' ? 3.6 : 3.9));
+    // Buy rate (historical): for foreign currency → look up at purchase date. For ILS → 1.
+    const lotFxBuy  = lotCurrency === 'ILS' ? 1 : (getFXForDate(lot.date, fxMap, lotCurrency) ?? lotFxSell);
 
-    const gainFlat = (salePriceILS - costILS) * sharesUsed;
-    unrealizedGain += gainFlat;
-    totalGainFlat += gainFlat;  // קיזוז רווח/הפסד נומינלי בין לוטים
+    // Cost in NIS at the time of purchase (real historical cost):
+    const costNIS_buy = lotPrice * lotFxBuy * sharesUsed;
+    // Proceeds in NIS at the current sale rate:
+    const proceedsNIS = currentPrice * lotFxSell * sharesUsed;
+    const nominalGainNIS = proceedsNIS - costNIS_buy;
 
-    // הצמדה לפי לוט, אבל לפי דיני המס בישראל (ס' 88) ההצמדה לא יוצרת/מגדילה הפסד:
-    // - לוט עם רווח נומינלי: רווח ריאלי = max(0, רווח לאחר הצמדה)
-    // - לוט עם הפסד נומינלי: רווח ריאלי = הפסד נומינלי (הצמדה לא חלה)
-    let adjustedCostILS = costILS;
-    if (holding.isCPIIndexed && lotCurrency === 'ILS') {
-      const cpiPurchase = getCPIForDate(lot.date, cpiMap);
-      if (cpiPurchase && latest?.value) adjustedCostILS = costILS * (latest.value / cpiPurchase);
+    unrealizedGain += nominalGainNIS;
+    totalGainFlat += nominalGainNIS;  // הnominalGain הוא הבסיס למס 25% הפשוט
+
+    let realGainLot;
+    if (lotCurrency === 'ILS') {
+      // === ILS asset: CPI adjustment if marked, otherwise nominal ===
+      if (holding.isCPIIndexed) {
+        const cpiPurchase = getCPIForDate(lot.date, cpiMap);
+        if (cpiPurchase && latest?.value) {
+          const adjustedCostNIS = lotPrice * (latest.value / cpiPurchase) * sharesUsed;
+          const cpiAdjGain = proceedsNIS - adjustedCostNIS;
+          // ס' 88: הצמדה לא יוצרת/מגדילה הפסד
+          realGainLot = nominalGainNIS < 0 ? nominalGainNIS : Math.max(0, cpiAdjGain);
+        } else {
+          realGainLot = nominalGainNIS;  // אין CPI לתאריך - ללא הצמדה
+        }
+      } else {
+        realGainLot = nominalGainNIS;  // אין הצמדה
+      }
+    } else {
+      // === Foreign currency: "Lower of the two" rule (§88) ===
+      // Currency-based gain = (FCY sale price - FCY buy price) × shares × sale rate
+      const fcyGainNIS = (currentPrice - lotPrice) * sharesUsed * lotFxSell;
+      if (nominalGainNIS <= 0) {
+        // Loss is recognized in full (regardless of FX moves)
+        realGainLot = nominalGainNIS;
+      } else if (fcyGainNIS <= 0) {
+        // Asset lost in foreign currency → "illusion" gain: tax 0, no recognized loss
+        realGainLot = 0;
+      } else {
+        // Both positive → tax on the lower of the two
+        realGainLot = Math.min(nominalGainNIS, fcyGainNIS);
+      }
     }
-    const gainAdj = (salePriceILS - adjustedCostILS) * sharesUsed;
-    const realGainLot = gainFlat < 0 ? gainFlat : Math.max(0, gainAdj);
     totalGainReal += realGainLot;
   }
 
   // קיזוז רווחים והפסדים בתוך הנייר, ואז max(0, ...) לפני 25%
   const flatTax = Math.max(0, totalGainFlat) * 0.25;
-  const cpiAdjTax = Math.max(0, totalGainReal) * 0.25;
+  const realTax = Math.max(0, totalGainReal) * 0.25;
 
   return {
     flatTax: Math.round(flatTax),
-    cpiAdjTax: Math.round(cpiAdjTax),
-    savings: Math.round(Math.max(0, flatTax - cpiAdjTax)),
-    unrealizedGain: Math.round(unrealizedGain),   // רווח (או הפסד) לא ממומש
+    cpiAdjTax: Math.round(realTax),  // kept name for backward compat with UI
+    realTax: Math.round(realTax),
+    adjustmentType,                  // 'cpi' | 'fx' | 'none' — for UI badge
+    savings: Math.round(Math.max(0, flatTax - realTax)),
+    unrealizedGain: Math.round(unrealizedGain),
     lotsFromHistory: remainingLots.length > 0
   };
 }
@@ -997,7 +1109,7 @@ function App() {
     setCpiLoading(true);
     setCpiError('');
     try {
-      const cpiMap = await fetchCPIMap();
+      const [cpiMap, fxMap] = await Promise.all([fetchCPIMap(), fetchFXMap()]);
 
       // Firebase נטען? אם לא — fallback ל-localStorage (מקור האמת המקומי)
       let holdings  = window.__portfolioHoldings;
@@ -1024,10 +1136,11 @@ function App() {
       const rows = holdings
         .map(h => {
           const lots = getRemainingLots(purchases, sales, h.symbol);
-          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory } = calcSimulatedTax(h, lots, cpiMap, rates);
+          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory, adjustmentType } = calcSimulatedTax(h, lots, cpiMap, fxMap, rates);
           const totalValueILS = Number(h.currentPrice || 0) * Number(h.shares || 0) *
             (h.currency === 'ILS' ? 1 : (rates[h.currency] ?? 3.6));
           return { symbol: h.symbol, isCPIIndexed: !!h.isCPIIndexed, currency: h.currency,
+            adjustmentType: adjustmentType || 'none',
             flatTax, cpiAdjTax, savings, unrealizedGain: unrealizedGain ?? 0, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
         })
         .filter(r => r.flatTax > 0 || r.cpiAdjTax > 0);
@@ -1036,12 +1149,16 @@ function App() {
       // בדוק מקור הנתונים מה-cache
       let dataSource = 'static';
       try { dataSource = JSON.parse(localStorage.getItem(CPI_CACHE_KEY) || '{}').source || 'static'; } catch(e) {}
+      // FX latest month
+      const fxKeys = [...fxMap.keys()].sort();
+      const latestFXKey = fxKeys[fxKeys.length - 1] || '';
       setCpiSim({
         rows,
         totalFlat:    rows.reduce((s, r) => s + r.flatTax, 0),
         totalCPI:     rows.reduce((s, r) => s + r.cpiAdjTax, 0),
         totalSavings: rows.reduce((s, r) => s + r.savings, 0),
         latestCPIDate: latest?.key || '',
+        latestFXDate:  latestFXKey,
         dataSource
       });
     } catch(e) {
@@ -1867,11 +1984,16 @@ function App() {
         {/* CPI TAX SIMULATOR */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(100,180,255,0.25)", padding: "18px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון עם הצמדה למדד</h2>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון ריאלי (מדד / שער חליפין)</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {cpiSim?.latestCPIDate && (
                 <span style={{ fontSize: 11, color: cpiSim.dataSource === 'cbs' ? "#5ab85a" : "hsl(215, 12%, 52%)", title: cpiSim.dataSource === 'cbs' ? 'נתוני הלמ"ס בזמן אמת' : 'הערכה על בסיס אינפלציה שנתית' }}>
                   {cpiSim.dataSource === 'cbs' ? '✓ מדד הלמ"ס' : '~מדד משוער'} עד {cpiSim.latestCPIDate}
+                </span>
+              )}
+              {cpiSim?.latestFXDate && (
+                <span style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", title: "שערי חליפין מ-Massive Market Data" }}>
+                  💱 FX עד {cpiSim.latestFXDate}
                 </span>
               )}
               <button
@@ -1886,9 +2008,11 @@ function App() {
           </div>
 
           <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: "0 0 12px", lineHeight: 1.6 }}>
-            מחשב את מס רווחי ההון הריאלי על ניירות ערך צמודי מדד, בהשוואה לחישוב הפשוט של 25% (כגון אקסלנס).
-            הסימולציה מבוססת על מכירה היפותטית במחיר הנוכחי. נתוני המדד מבוססים על שיעורי האינפלציה השנתיים הרשמיים של ישראל (קירוב — שגיאה עד ~1-2%).
-            סמן "מוצמד למדד" על הניירות הרלוונטיים <a href="portfolio.html" style={{ color: "hsl(210,70%,65%)" }}>בדף הפורטפוליו</a>.
+            מחשב את מס רווחי ההון הריאלי בהשוואה לחישוב הפשוט של 25% (כגון אקסלנס). הסימולציה מבוססת על מכירה היפותטית במחיר הנוכחי.
+            <br/>
+            <span style={{ color: "#5ab85a" }}>● ניירות בש"ח</span> — סמן "מוצמד למדד" <a href="portfolio.html" style={{ color: "hsl(210,70%,65%)" }}>בדף הפורטפוליו</a> כדי להחיל הצמדה ל-CPI (אג"ח צמודות, חלק מהקרנות).
+            <br/>
+            <span style={{ color: "hsl(210,70%,65%)" }}>● ניירות במט"ח (USD/EUR)</span> — מקבלים אוטומטית הצמדה לשער החליפין לפי סעיף 88 לפקודה (כלל "הנמוך מהשניים"). אין צורך בסימון.
           </p>
 
           {cpiError && (
@@ -1912,7 +2036,7 @@ function App() {
                   <div style={{ fontSize: 20, fontWeight: 800, color: "#e07070" }}>{fm(cpiSim.totalFlat)} ₪</div>
                 </div>
                 <div style={{ padding: 12, borderRadius: 10, background: "rgba(100,180,255,0.06)", border: "1px solid rgba(100,180,255,0.2)", textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס ריאלי (עם מדד)</div>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס ריאלי (מדד + FX)</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "hsl(210,70%,65%)" }}>{fm(cpiSim.totalCPI)} ₪</div>
                 </div>
                 <div style={{ padding: 12, borderRadius: 10, background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", textAlign: "center" }}>
@@ -1930,7 +2054,7 @@ function App() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-                        {["נייר ערך", "מטבע", "מוצמד?", "רווח לא ממומש", "מס 25%", "מס עם מדד", "חיסכון"].map(h => (
+                        {["נייר ערך", "מטבע", "הצמדה", "רווח לא ממומש", "מס 25%", "מס ריאלי", "חיסכון"].map(h => (
                           <th key={h} style={{ padding: "8px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
                         ))}
                       </tr>
@@ -1941,9 +2065,11 @@ function App() {
                           <td style={{ padding: "7px 6px", fontWeight: 700, color: "#c8d8f0", textAlign: "center" }}>{row.symbol}</td>
                           <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)" }}>{row.currency}</td>
                           <td style={{ padding: "7px 6px", textAlign: "center" }}>
-                            {row.isCPIIndexed
-                              ? <span style={{ color: "#5ab85a", fontWeight: 700 }}>✓</span>
-                              : <span style={{ color: "#5a5a7a" }}>—</span>}
+                            {row.adjustmentType === 'cpi'
+                              ? <span style={{ color: "#5ab85a", fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(90,184,90,0.12)", fontSize: 10 }}>מדד</span>
+                              : row.adjustmentType === 'fx'
+                                ? <span style={{ color: "hsl(210,70%,65%)", fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(100,180,255,0.12)", fontSize: 10 }}>FX</span>
+                                : <span style={{ color: "#5a5a7a" }}>—</span>}
                           </td>
                           <td style={{ padding: "7px 6px", textAlign: "center", color: row.unrealizedGain >= 0 ? "#5ab85a" : "#e07070" }}>
                             {row.unrealizedGain >= 0 ? `+${fm(row.unrealizedGain)}` : fm(row.unrealizedGain)} ₪
