@@ -900,17 +900,20 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, currentRates) {
 
   let flatTax = 0, cpiAdjTax = 0, unrealizedGain = 0;
 
+  const fallbackCost = Number(holding.costBasis || 0);  // עלות ממוצעת ללוטים חסרי price
+
   const lotsToUse = remainingLots.length > 0
     ? remainingLots
-    : [{ date: holding.purchaseDate, price: Number(holding.costBasis || 0), shares: Number(holding.shares || 0), currency, remaining: Number(holding.shares || 0) }];
+    : [{ date: holding.purchaseDate, price: fallbackCost, shares: Number(holding.shares || 0), currency, remaining: Number(holding.shares || 0) }];
 
   for (const lot of lotsToUse) {
     const lotCurrency = lot.currency || currency;
     const lotRate = lotCurrency === 'ILS' ? 1 : (currentRates?.[lotCurrency] ?? (lotCurrency === 'USD' ? 3.6 : 3.9));
-    const costILS = Number(lot.price || 0) * lotRate;
+    // אם חסר price בקנייה - השתמש ב-costBasis הממוצע של ה-holding (לא לדלג!)
+    const lotPrice = Number(lot.price) > 0 ? Number(lot.price) : fallbackCost;
+    const costILS = lotPrice * lotRate;
     const sharesUsed = lot.remaining;
 
-    // If cost basis is missing/zero, skip this lot for tax purposes (can't calculate gain)
     if (costILS === 0 || sharesUsed <= 0) continue;
 
     const gainFlat = (salePriceILS - costILS) * sharesUsed;
