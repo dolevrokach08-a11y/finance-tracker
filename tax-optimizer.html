@@ -877,7 +877,21 @@ function getRemainingLots(purchases, sales, symbol) {
   const lots = (purchases || [])
     .filter(p => (p.symbol || '').toUpperCase() === sym)
     .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .map(p => ({ date: p.date, price: Number(p.price || 0), shares: Number(p.shares || 0), currency: p.currency || 'ILS', remaining: Number(p.shares || 0) }));
+    .map(p => {
+      const shares = Number(p.shares || 0);
+      const fee = Number(p.fee || 0);
+      // Resolve actual per-share cost (including fee — per Israeli tax law cost basis includes commissions).
+      // Priority: amount/shares (already includes fee) → price+fee/shares → original_price+fee/shares
+      let perShareCost = 0;
+      if (Number(p.amount) > 0 && shares > 0) {
+        perShareCost = Number(p.amount) / shares;
+      } else if (Number(p.price) > 0 && shares > 0) {
+        perShareCost = Number(p.price) + (fee / shares);
+      } else if (Number(p.original_price) > 0 && shares > 0) {
+        perShareCost = Number(p.original_price) + (fee / shares);
+      }
+      return { date: p.date, price: perShareCost, shares, currency: p.currency || 'ILS', remaining: shares };
+    });
 
   for (const sale of (sales || []).filter(s => (s.symbol || '').toUpperCase() === sym).sort((a, b) => new Date(a.date) - new Date(b.date))) {
     let toSell = Number(sale.shares || 0);
