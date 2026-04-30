@@ -1114,6 +1114,9 @@
                     <button onclick="showReportSubTab('savings-rate')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         📈 שיעור חיסכון
                     </button>
+                    <button onclick="showReportSubTab('spending-heatmap')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        🗓️ מפת חום הוצאות
+                    </button>
                 </div>
 
                 <!-- סקירה כללית (הגרפים הקיימים) -->
@@ -1226,6 +1229,34 @@
                         <div class="glass p-4" style="border-right: 3px solid hsl(270, 60%, 55%);">
                             <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">יעד 50/30/20</div>
                             <div id="savings-rate-target" style="font-size: 1.3rem; font-weight: 700; color: #9333ea; font-family: 'JetBrains Mono', monospace;">20%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- מפת חום הוצאות -->
+                <div id="report-spending-heatmap" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">🗓️ מפת חום הוצאות — קטגוריה × חודש</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">ויזואליזציה של הוצאות לפי קטגוריות וחודשים — אדום = הוצאה גבוהה, ירוק = הוצאה נמוכה</p>
+                        <div id="spending-heatmap-container" style="width:100%; overflow-x:auto;">
+                            <canvas id="spending-heatmap-canvas"></canvas>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="glass p-4" style="border-right: 3px solid hsl(0, 72%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">🔴 קטגוריה הכי יקרה</div>
+                            <div id="heatmap-kpi-top-cat" style="font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">-</div>
+                            <div id="heatmap-kpi-top-cat-amount" style="font-size: 0.85rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(142, 60%, 50%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">🟢 חודש הכי חסכוני</div>
+                            <div id="heatmap-kpi-low-month" style="font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">-</div>
+                            <div id="heatmap-kpi-low-month-amount" style="font-size: 0.85rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(210, 80%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">📊 מגמת הוצאות</div>
+                            <div id="heatmap-kpi-trend" style="font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">-</div>
+                            <div id="heatmap-kpi-trend-detail" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">-</div>
                         </div>
                     </div>
                 </div>
@@ -2308,6 +2339,8 @@
                 renderPredictionChart();
             } else if (subTab === 'savings-rate') {
                 renderSavingsRateChart();
+            } else if (subTab === 'spending-heatmap') {
+                renderSpendingHeatmap();
             }
         }
 
@@ -4936,6 +4969,255 @@
             const latestEl = document.getElementById('latest-savings-rate');
             if (avgEl) avgEl.textContent = avgRate.toFixed(1) + '%';
             if (latestEl) latestEl.textContent = latestRate.toFixed(1) + '%';
+        }
+
+        // ========== Spending Heatmap ==========
+        function renderSpendingHeatmap() {
+            const canvas = document.getElementById('spending-heatmap-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            // Gather last 12 months
+            const months = getReportMonths();
+            const monthKeys = months.map(m => m.key);
+            const monthLabels = months.map(m => m.name);
+
+            // Build category -> month -> amount matrix from transactions + fixedExpenses
+            const catMap = {};
+            // Regular expense transactions
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+                const cat = t.cat || 'אחר';
+                if (!catMap[cat]) catMap[cat] = {};
+                catMap[cat][t.month] = (catMap[cat][t.month] || 0) + t.amt;
+            });
+            // Fixed expenses
+            data.fixedExpenses.forEach(f => {
+                const cat = f.category || 'אחר';
+                const activeMonths = getMonthsInRange(f.start, f.end).filter(m => monthKeys.includes(m));
+                activeMonths.forEach(m => {
+                    if (!catMap[cat]) catMap[cat] = {};
+                    catMap[cat][m] = (catMap[cat][m] || 0) + f.amount;
+                });
+            });
+
+            const categories = Object.keys(catMap).sort((a, b) => {
+                const totalA = monthKeys.reduce((s, m) => s + (catMap[a][m] || 0), 0);
+                const totalB = monthKeys.reduce((s, m) => s + (catMap[b][m] || 0), 0);
+                return totalB - totalA; // highest spending first
+            });
+
+            if (categories.length === 0) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.font = '16px Heebo';
+                ctx.fillStyle = isDark ? '#888' : '#999';
+                ctx.textAlign = 'center';
+                canvas.width = canvas.parentElement.clientWidth;
+                canvas.height = 120;
+                ctx.font = '16px Heebo';
+                ctx.fillStyle = isDark ? '#888' : '#999';
+                ctx.textAlign = 'center';
+                ctx.fillText('אין נתוני הוצאות להצגה', canvas.width / 2, 60);
+                return;
+            }
+
+            // Build the data matrix (categories + summary row)
+            const matrix = []; // [row][col] = amount
+            categories.forEach(cat => {
+                const row = monthKeys.map(m => catMap[cat][m] || 0);
+                matrix.push(row);
+            });
+            // Summary row (totals)
+            const summaryRow = monthKeys.map((m, ci) => categories.reduce((s, cat) => s + (catMap[cat][m] || 0), 0));
+            matrix.push(summaryRow);
+
+            const allCategories = [...categories, '⊕ סה״כ'];
+
+            // Find global min/max for color scale (excluding summary)
+            let allVals = [];
+            matrix.slice(0, -1).forEach(row => row.forEach(v => { if (v > 0) allVals.push(v); }));
+            const maxVal = allVals.length > 0 ? Math.max(...allVals) : 1;
+            const minVal = allVals.length > 0 ? Math.min(...allVals) : 0;
+
+            // Sizing
+            const dpr = window.devicePixelRatio || 1;
+            const labelWidth = 120;
+            const cellW = Math.max(70, Math.floor((canvas.parentElement.clientWidth - labelWidth - 20) / monthKeys.length));
+            const cellH = 44;
+            const headerH = 36;
+            const totalW = labelWidth + cellW * monthKeys.length + 20;
+            const totalH = headerH + cellH * allCategories.length + 30;
+
+            canvas.style.width = totalW + 'px';
+            canvas.style.height = totalH + 'px';
+            canvas.width = totalW * dpr;
+            canvas.height = totalH * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            // Color interpolation: green (low) -> yellow (mid) -> red (high)
+            function heatColor(value, min, max) {
+                if (value === 0) return isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+                const t = max > min ? (value - min) / (max - min) : 0;
+                // green -> yellow -> red
+                const r = t < 0.5 ? Math.round(t * 2 * 255) : 255;
+                const g = t < 0.5 ? 255 : Math.round((1 - (t - 0.5) * 2) * 255);
+                const b = 30;
+                const alpha = isDark ? 0.75 : 0.55;
+                return `rgba(${r},${g},${b},${alpha})`;
+            }
+
+            // Summary row uses a blue-purple scale
+            function summaryColor(value) {
+                const summaryMax = Math.max(...summaryRow);
+                const summaryMin = Math.min(...summaryRow.filter(v => v > 0));
+                if (value === 0) return isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)';
+                const t = summaryMax > summaryMin ? (value - summaryMin) / (summaryMax - summaryMin) : 0;
+                const alpha = isDark ? 0.7 : 0.5;
+                return `rgba(${100 + Math.round(t * 80)}, ${80 + Math.round((1 - t) * 100)}, ${200 + Math.round(t * 55)}, ${alpha})`;
+            }
+
+            // Clear canvas
+            ctx.clearRect(0, 0, totalW, totalH);
+
+            // Draw column headers (month labels)
+            ctx.font = '600 11px Heebo';
+            ctx.fillStyle = isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,48%)';
+            ctx.textAlign = 'center';
+            monthLabels.forEach((label, ci) => {
+                ctx.fillText(label, labelWidth + ci * cellW + cellW / 2, headerH - 8);
+            });
+
+            // Draw rows
+            allCategories.forEach((cat, ri) => {
+                const y = headerH + ri * cellH;
+                const isSummary = ri === allCategories.length - 1;
+
+                // Row label
+                ctx.font = isSummary ? 'bold 13px Heebo' : '500 12px Heebo';
+                ctx.fillStyle = isSummary ? (isDark ? '#e2e8f0' : '#1e293b') : (isDark ? '#cbd5e1' : '#334155');
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(cat, labelWidth - 10, y + cellH / 2);
+
+                // Cells
+                monthKeys.forEach((m, ci) => {
+                    const x = labelWidth + ci * cellW;
+                    const val = matrix[ri][ci];
+
+                    // Cell background
+                    const radius = 6;
+                    const pad = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(x + pad, y + pad, cellW - pad * 2, cellH - pad * 2, radius);
+                    ctx.fillStyle = isSummary ? summaryColor(val) : heatColor(val, minVal, maxVal);
+                    ctx.fill();
+
+                    // Border for summary row
+                    if (isSummary) {
+                        ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                    }
+
+                    // Cell text
+                    if (val > 0) {
+                        ctx.font = '600 11px JetBrains Mono, monospace';
+                        // Auto text color: white on dark cells, dark on light cells
+                        const t = maxVal > minVal ? (val - minVal) / (maxVal - minVal) : 0;
+                        if (isSummary) {
+                            ctx.fillStyle = isDark ? '#fff' : '#1e1b4b';
+                        } else {
+                            ctx.fillStyle = (t > 0.3 || isDark) ? '#fff' : '#1e293b';
+                        }
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        const display = val >= 1000 ? '₪' + Math.round(val / 1000) + 'K' : '₪' + Math.round(val);
+                        ctx.fillText(display, x + cellW / 2, y + cellH / 2);
+                    }
+                });
+
+                // Draw separator line before summary
+                if (isSummary) {
+                    ctx.beginPath();
+                    ctx.moveTo(labelWidth, y - 1);
+                    ctx.lineTo(totalW, y - 1);
+                    ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+            });
+
+            // Draw color legend at bottom
+            const legendY = headerH + allCategories.length * cellH + 8;
+            const legendW = 200;
+            const legendH = 12;
+            const legendX = labelWidth;
+            const grad = ctx.createLinearGradient(legendX, 0, legendX + legendW, 0);
+            grad.addColorStop(0, isDark ? 'rgba(30,255,30,0.75)' : 'rgba(30,200,30,0.55)');
+            grad.addColorStop(0.5, isDark ? 'rgba(255,255,30,0.75)' : 'rgba(255,230,30,0.55)');
+            grad.addColorStop(1, isDark ? 'rgba(255,30,30,0.75)' : 'rgba(255,50,50,0.55)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.roundRect(legendX, legendY, legendW, legendH, 4);
+            ctx.fill();
+            ctx.font = '500 10px Heebo';
+            ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
+            ctx.textAlign = 'right';
+            ctx.fillText('נמוך', legendX - 4, legendY + legendH - 1);
+            ctx.textAlign = 'left';
+            ctx.fillText('גבוה', legendX + legendW + 6, legendY + legendH - 1);
+
+            // ---- KPI Cards ----
+            // 1. Highest spending category
+            let topCat = '', topCatTotal = 0;
+            categories.forEach(cat => {
+                const total = monthKeys.reduce((s, m) => s + (catMap[cat][m] || 0), 0);
+                if (total > topCatTotal) { topCatTotal = total; topCat = cat; }
+            });
+            const topCatEl = document.getElementById('heatmap-kpi-top-cat');
+            const topCatAmtEl = document.getElementById('heatmap-kpi-top-cat-amount');
+            if (topCatEl) topCatEl.textContent = topCat || '-';
+            if (topCatAmtEl) topCatAmtEl.textContent = topCatTotal > 0 ? '₪' + Math.round(topCatTotal).toLocaleString('he-IL') + ' (סה״כ)' : '-';
+
+            // 2. Lowest spending month
+            let lowMonth = '', lowMonthTotal = Infinity;
+            monthKeys.forEach((m, i) => {
+                const total = summaryRow[i];
+                if (total > 0 && total < lowMonthTotal) { lowMonthTotal = total; lowMonth = monthLabels[i]; }
+            });
+            const lowMonthEl = document.getElementById('heatmap-kpi-low-month');
+            const lowMonthAmtEl = document.getElementById('heatmap-kpi-low-month-amount');
+            if (lowMonthEl) lowMonthEl.textContent = lowMonth || '-';
+            if (lowMonthAmtEl) lowMonthAmtEl.textContent = lowMonthTotal < Infinity ? '₪' + Math.round(lowMonthTotal).toLocaleString('he-IL') : '-';
+
+            // 3. Trend direction (compare last 3 months avg vs previous 3)
+            const recentMonths = summaryRow.slice(-3).filter(v => v > 0);
+            const olderMonths = summaryRow.slice(-6, -3).filter(v => v > 0);
+            const recentAvg = recentMonths.length > 0 ? recentMonths.reduce((a, b) => a + b, 0) / recentMonths.length : 0;
+            const olderAvg = olderMonths.length > 0 ? olderMonths.reduce((a, b) => a + b, 0) / olderMonths.length : 0;
+            const trendEl = document.getElementById('heatmap-kpi-trend');
+            const trendDetailEl = document.getElementById('heatmap-kpi-trend-detail');
+            if (trendEl && trendDetailEl) {
+                if (olderAvg > 0 && recentAvg > 0) {
+                    const pctChange = ((recentAvg - olderAvg) / olderAvg) * 100;
+                    if (pctChange > 5) {
+                        trendEl.textContent = '📈 עלייה';
+                        trendEl.style.color = 'hsl(0, 72%, 55%)';
+                        trendDetailEl.textContent = '+' + Math.abs(pctChange).toFixed(1) + '% לעומת 3 חודשים קודמים';
+                    } else if (pctChange < -5) {
+                        trendEl.textContent = '📉 ירידה';
+                        trendEl.style.color = 'hsl(142, 60%, 50%)';
+                        trendDetailEl.textContent = '-' + Math.abs(pctChange).toFixed(1) + '% לעומת 3 חודשים קודמים';
+                    } else {
+                        trendEl.textContent = '➡️ יציב';
+                        trendEl.style.color = isDark ? '#94a3b8' : '#64748b';
+                        trendDetailEl.textContent = 'שינוי של ' + Math.abs(pctChange).toFixed(1) + '% בלבד';
+                    }
+                } else {
+                    trendEl.textContent = '-';
+                    trendDetailEl.textContent = 'אין מספיק נתונים';
+                }
+            }
         }
 
         // ========== Prediction Chart ==========
