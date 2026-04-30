@@ -503,6 +503,55 @@
             color: var(--text-muted);
         }
 
+        /* Financial insights strip — 3 metric cards below the entry grid */
+        .insights-strip {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 24px;
+        }
+        .insight-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            transition: var(--transition);
+        }
+        .insight-card:hover { border-color: var(--border-accent); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+        .insight-card .ic-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .insight-card .ic-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            direction: ltr;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        .insight-card .ic-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        .ic-progress-track {
+            height: 6px;
+            border-radius: 99px;
+            background: var(--bg-elevated);
+            overflow: hidden;
+        }
+        .ic-progress-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.8s cubic-bezier(0.4,0,0.2,1);
+        }
+
         /* Hide the old dashboard / buttons blocks since we replaced them */
         .buttons-container, #dashboardSection { display: none !important; }
 
@@ -532,6 +581,7 @@
             .entry-grid { grid-template-columns: 1fr; gap: 14px; }
             .entry-card { min-height: 220px; padding: 20px; }
             .entry-card-title { font-size: 1.2rem; }
+            .insights-strip { grid-template-columns: 1fr; gap: 10px; }
             .feature-badges { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
@@ -654,6 +704,37 @@
             </a>
         </div>
 
+        <!-- Financial Insights Strip (Phase 4) -->
+        <div class="insights-strip stagger-in" id="insightsStrip">
+            <!-- Emergency Fund -->
+            <div class="insight-card">
+                <div class="ic-label">🛡️ קרן חירום</div>
+                <div class="ic-value" id="icEmergencyFund" style="color: var(--text-muted);">—</div>
+                <div class="ic-sub" id="icEmergencySub">חודשים מכוסים</div>
+                <div class="ic-progress-track">
+                    <div class="ic-progress-fill" id="icEmergencyBar" style="width:0%; background: var(--profit);"></div>
+                </div>
+            </div>
+            <!-- FIRE Progress -->
+            <div class="insight-card">
+                <div class="ic-label">🔥 התקדמות FIRE</div>
+                <div class="ic-value" id="icFirePct" style="color: var(--warning);">—</div>
+                <div class="ic-sub" id="icFireSub">מהמטרה</div>
+                <div class="ic-progress-track">
+                    <div class="ic-progress-fill" id="icFireBar" style="width:0%; background: hsl(38,92%,55%);"></div>
+                </div>
+            </div>
+            <!-- Debt Service Ratio -->
+            <div class="insight-card">
+                <div class="ic-label">💳 יחס שירות חוב</div>
+                <div class="ic-value" id="icDsr" style="color: var(--text-muted);">—</div>
+                <div class="ic-sub" id="icDsrSub">מההכנסה החודשית</div>
+                <div class="ic-progress-track">
+                    <div class="ic-progress-fill" id="icDsrBar" style="width:0%; background: var(--profit);"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Feature badges -->
         <div class="feature-badges">
             <div class="feature-badge">
@@ -733,6 +814,7 @@
     <script type="module">
         import { auth, signOut, onAuthStateChanged } from './firebase-config.js';
         import { isDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
+        import { SyncBus } from './shared/sync-bus.js';
 
         const loadingScreen = document.getElementById('loadingScreen');
         const mainContainer = document.getElementById('mainContainer');
@@ -995,11 +1077,119 @@
                 mortSpark = mortgage.schedule.slice(0, 120).map(r => Number(r.balance) || 0);
             }
             drawSparkline('sparkMortgage', mortSpark, 'hsl(270, 65%, 60%)');
+
+            // ---------- Phase 4: Insights Strip ----------
+            loadInsightsStrip({ finance, portfolio, mortgage, totalIncome, totalExpenses });
+        }
+
+        function loadInsightsStrip({ finance, portfolio, mortgage, totalIncome, totalExpenses }) {
+            const el = (id) => document.getElementById(id);
+
+            // --- Emergency Fund ---
+            // Liquid assets: sum netWorthAssets where type is 'savings', 'checking', 'cash', or 'liquid'
+            const liquidTypes = new Set(['savings', 'checking', 'cash', 'liquid', 'money_market', 'bank']);
+            let liquidAssets = 0;
+            if (finance && Array.isArray(finance.netWorthAssets)) {
+                finance.netWorthAssets.forEach(a => {
+                    const t = (a.type || '').toLowerCase();
+                    if (!a.type || liquidTypes.has(t)) {
+                        liquidAssets += Number(a.value) || 0;
+                    }
+                });
+            }
+            const monthlyExpenses = totalExpenses || 1;
+            const emergencyMonths = liquidAssets > 0 && monthlyExpenses > 0
+                ? (liquidAssets / monthlyExpenses)
+                : null;
+
+            if (emergencyMonths !== null) {
+                el('icEmergencyFund').textContent = emergencyMonths.toFixed(1);
+                el('icEmergencySub').textContent = 'חודשי הוצאות מכוסים';
+                const efPct = Math.min((emergencyMonths / 6) * 100, 100);
+                el('icEmergencyBar').style.width = efPct + '%';
+                const efColor = emergencyMonths >= 6 ? 'var(--profit)' : emergencyMonths >= 3 ? 'var(--warning)' : 'var(--loss)';
+                el('icEmergencyFund').style.color = efColor;
+                el('icEmergencyBar').style.background = efColor;
+            }
+
+            // --- FIRE Progress ---
+            // FIRE number = 25× annual expenses (4% withdrawal rule)
+            const annualExpenses = totalExpenses * 12;
+            const fireNumber = annualExpenses * 25;
+            let portfolioValueFire = 0;
+            if (portfolio) {
+                const usd = portfolio.rates?.USD || 3.7;
+                const eur = portfolio.rates?.EUR || 4.1;
+                const rateOf = (cur) => cur === 'USD' ? usd : cur === 'EUR' ? eur : 1;
+                (portfolio.holdings || []).forEach(h => {
+                    portfolioValueFire += (Number(h.shares) || 0) * (Number(h.currentPrice) || 0) * rateOf(h.currency);
+                });
+                (portfolio.bonds || []).forEach(b => {
+                    portfolioValueFire += (Number(b.units) || 0) * (Number(b.currentPrice) || 0) * rateOf(b.currency);
+                });
+                if (portfolio.cash) {
+                    portfolioValueFire += (Number(portfolio.cash.ILS) || 0);
+                    portfolioValueFire += (Number(portfolio.cash.USD) || 0) * usd;
+                    portfolioValueFire += (Number(portfolio.cash.EUR) || 0) * eur;
+                }
+            }
+            const firePct = fireNumber > 0 && portfolioValueFire > 0
+                ? Math.min((portfolioValueFire / fireNumber) * 100, 100)
+                : null;
+
+            if (firePct !== null) {
+                el('icFirePct').textContent = firePct.toFixed(1) + '%';
+                const fireColor = firePct >= 80 ? 'var(--profit)' : firePct >= 50 ? 'hsl(38,92%,55%)' : 'var(--info)';
+                el('icFirePct').style.color = fireColor;
+                el('icFireBar').style.width = firePct + '%';
+                el('icFireBar').style.background = fireColor;
+                if (fireNumber > 0) {
+                    const remaining = fireNumber - portfolioValueFire;
+                    const monthlyNetSavings = totalIncome - totalExpenses;
+                    if (remaining > 0 && monthlyNetSavings > 0) {
+                        const yearsLeft = (remaining / (monthlyNetSavings * 12)).toFixed(1);
+                        el('icFireSub').textContent = `מהיעד (עוד ~${yearsLeft} שנים)`;
+                    } else if (firePct >= 100) {
+                        el('icFireSub').textContent = '🎉 הגעת ל-FIRE!';
+                    } else {
+                        el('icFireSub').textContent = 'מהיעד (25× הוצאות שנתיות)';
+                    }
+                }
+            } else if (fireNumber > 0) {
+                el('icFireSub').textContent = `יעד: ${(fireNumber / 1e6).toFixed(2)}M ₪`;
+            }
+
+            // --- Debt Service Ratio ---
+            const mPaymentDsr = Number(mortgage?.monthlyPayment || mortgage?.current?.monthlyPayment || 0);
+            let debtPayments = 0;
+            if (finance && Array.isArray(finance.debts)) {
+                finance.debts.forEach(d => debtPayments += Number(d.minPayment || d.monthlyPayment || 0));
+            }
+            const totalDebtService = mPaymentDsr + debtPayments;
+            const dsr = totalIncome > 0 && totalDebtService > 0
+                ? (totalDebtService / totalIncome) * 100
+                : null;
+
+            if (dsr !== null) {
+                el('icDsr').textContent = dsr.toFixed(1) + '%';
+                const dsrColor = dsr <= 28 ? 'var(--profit)' : dsr <= 36 ? 'var(--warning)' : 'var(--loss)';
+                el('icDsr').style.color = dsrColor;
+                el('icDsrBar').style.width = Math.min(dsr, 100) + '%';
+                el('icDsrBar').style.background = dsrColor;
+                const dsrLabel = dsr <= 28 ? 'תקין (מתחת ל-28%)' : dsr <= 36 ? 'גבולי (28-36%)' : 'גבוה (מעל 36%)';
+                el('icDsrSub').textContent = dsrLabel;
+            }
         }
 
         function safeParse(raw) {
             try { return JSON.parse(raw); } catch { return null; }
         }
+
+        // Phase 4F: Auto-sync — reload dashboard when any other page saves data
+        SyncBus.subscribe((manifest) => {
+            console.log('[index] SyncBus update from', manifest.source, '— refreshing dashboard');
+            loadDashboard();
+        });
 
         // Check demo mode first
         if (isDemoMode()) {
