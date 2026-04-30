@@ -10590,6 +10590,7 @@ ${msg}`, 'warning');
                     <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">מחיר נוכחי</th>
                     <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">שווי</th>
                     <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">רווח/הפסד</th>
+                    <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem; min-width: 80px;">מגמה</th>
                     <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">פעולות</th>
                 </tr>
             </thead><tbody>`;
@@ -10630,6 +10631,9 @@ ${msg}`, 'warning');
                         ${profit >= 0 ? '+' : ''}${getCurrencySymbol(holding.currency)}${profit.toFixed(2)}
                         <div style="font-size: 0.78rem; opacity: 0.8;">(${profitPercent >= 0 ? '+' : ''}${profitPercent.toFixed(1)}%)</div>
                     </td>
+                    <td style="padding: 8px 16px; text-align: center;">
+                        <div id="spark-${holding.id}" style="width:80px; height:28px; margin: 0 auto;"></div>
+                    </td>
                     <td style="padding: 14px 16px; text-align: center;">
                         <div style="display: flex; gap: 4px; justify-content: center;">
                             <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות">+</button>
@@ -10642,9 +10646,75 @@ ${msg}`, 'warning');
             });
 
             html += '</tbody></table></div>';
+            container.innerHTML = html;
             // Re-render Lucide icons after table update
             setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
-            container.innerHTML = html;
+            // Draw sparklines for each holding
+            setTimeout(() => drawHoldingSparklines(), 60);
+        }
+
+        function drawHoldingSparklines() {
+            portfolio.holdings.forEach(holding => {
+                const container = document.getElementById(`spark-${holding.id}`);
+                if (!container) return;
+
+                const profit = holding.currentPrice - holding.costBasis;
+                const color = profit >= 0 ? 'hsl(142,60%,50%)' : 'hsl(0,72%,55%)';
+
+                // Try to get cached price history (same cache used by TWR calculation)
+                let prices = null;
+                const symbol = holding.altTicker || holding.symbol;
+                const cached = getCachedIndexHistory(`TWR_${symbol}`);
+                if (cached && cached.prices && cached.prices.length >= 5) {
+                    prices = cached.prices.filter(p => p != null && p > 0).slice(-30);
+                }
+
+                // Fallback: generate synthetic trend from costBasis → currentPrice
+                if (!prices || prices.length < 5) {
+                    const steps = 20;
+                    const start = holding.costBasis;
+                    const end = holding.currentPrice || holding.costBasis;
+                    prices = Array.from({ length: steps }, (_, i) => {
+                        const t = i / (steps - 1);
+                        const trend = start + (end - start) * t;
+                        // small deterministic jitter for visual interest
+                        const jitter = Math.sin(i * 2.3 + holding.id) * (Math.abs(end - start) * 0.08 + start * 0.005);
+                        return Math.max(0, trend + jitter);
+                    });
+                }
+
+                if (prices.length < 2) return;
+
+                const w = 80, h = 28, pad = 2;
+                const min = Math.min(...prices);
+                const max = Math.max(...prices);
+                const range = max - min || 1;
+                const pts = prices.map((v, i) => {
+                    const x = pad + (i / (prices.length - 1)) * (w - 2 * pad);
+                    const y = pad + (1 - (v - min) / range) * (h - 2 * pad);
+                    return [x, y];
+                });
+
+                let d = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+                for (let i = 1; i < pts.length; i++) {
+                    const p = pts[i - 1], c = pts[i];
+                    const cx = (p[0] + c[0]) / 2;
+                    d += ` C${cx.toFixed(1)},${p[1].toFixed(1)} ${cx.toFixed(1)},${c[1].toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
+                }
+                const last = pts[pts.length - 1];
+                const gradId = `sg${holding.id}`;
+                container.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" style="display:block;">
+                    <defs>
+                        <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="${color}" stop-opacity="0.35"/>
+                            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="${d} L${w-pad},${h-pad} L${pad},${h-pad} Z" fill="url(#${gradId})"/>
+                    <path d="${d}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.5" fill="${color}"/>
+                </svg>`;
+            });
         }
 
         // ===========================================
