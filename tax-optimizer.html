@@ -1136,7 +1136,7 @@ function TaxBracketWaterfall({ fatherAnnual, motherAnnual }) {
   const brackets = TAX_BRACKETS;
   const colors = ['#22c55e','#84cc16','#eab308','#f97316','#ef4444','#dc2626','#991b1b'];
   const labels = ['10%','14%','20%','31%','35%','47%','50%'];
-  const fm = v => v.toLocaleString('he-IL');
+  const fmNum = v => v.toLocaleString('he-IL');
 
   function computeBreakdown(annual) {
     const result = [];
@@ -1160,55 +1160,55 @@ function TaxBracketWaterfall({ fatherAnnual, motherAnnual }) {
 
   function renderBar(breakdown, annual, totalTax, label, clr) {
     if (annual <= 0) return null;
-    return html`
-      <div style=${{ marginBottom: 16 }}>
-        <div style=${{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style=${{ fontSize: 13, fontWeight: 600, color: clr }}>${label} — ₪${fm(annual)} שנתי</span>
-          <span style=${{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>מס: ₪${fm(totalTax)} (${annual > 0 ? (totalTax / annual * 100).toFixed(1) : 0}%)</span>
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: clr }}>{label} — ₪{fmNum(annual)} שנתי</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>מס: ₪{fmNum(totalTax)} ({annual > 0 ? (totalTax / annual * 100).toFixed(1) : 0}%)</span>
         </div>
-        <div style=${{ display: 'flex', height: 36, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
-          ${breakdown.filter(b => b.taxable > 0).map(b => {
+        <div style={{ display: 'flex', height: 36, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {breakdown.filter(b => b.taxable > 0).map(b => {
             const widthPct = (b.taxable / maxIncome) * 100;
-            return html`
-              <div key=${b.label} style=${{
+            return (
+              <div key={b.label} style={{
                 width: widthPct + '%', minWidth: widthPct > 3 ? '28px' : '0',
                 background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 10, fontWeight: 700, color: '#000', transition: 'all 0.3s ease',
                 cursor: 'default', position: 'relative'
-              }} title=${`מדרגה ${b.label}: ₪${fm(b.taxable)} × ${b.label} = ₪${fm(b.tax)} מס`}>
-                ${widthPct > 6 ? b.label : ''}
-              </div>`;
+              }} title={`מדרגה ${b.label}: ₪${fmNum(b.taxable)} × ${b.label} = ₪${fmNum(b.tax)} מס`}>
+                {widthPct > 6 ? b.label : ''}
+              </div>);
           })}
         </div>
-        <div style=${{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-          ${breakdown.filter(b => b.taxable > 0).map(b => html`
-            <span key=${b.label} style=${{ fontSize: 10, color: 'hsl(215,12%,52%)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, borderRight: '3px solid ' + b.color }}>
-              ${b.label}: ₪${fm(b.tax)}
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {breakdown.filter(b => b.taxable > 0).map(b => (
+            <span key={b.label} style={{ fontSize: 10, color: 'hsl(215,12%,52%)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, borderRight: '3px solid ' + b.color }}>
+              {b.label}: ₪{fmNum(b.tax)}
             </span>
-          `)}
+          ))}
         </div>
-      </div>`;
+      </div>);
   }
 
-  return html`
-    <div style=${{ background: 'rgba(255,255,255,0.035)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: 18, marginBottom: 16 }}>
-      <h2 style=${{ fontSize: 15, fontWeight: 700, color: 'hsl(142, 60%, 50%)', margin: '0 0 14px' }}>📊 ויזואליזציית מדרגות מס</h2>
-      <div style=${{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-        ${colors.map((c, i) => html`
-          <span key=${i} style=${{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(215,12%,58%)' }}>
-            <span style=${{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }}></span>
-            ${labels[i]}
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.035)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: 18, marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, color: 'hsl(142, 60%, 50%)', margin: '0 0 14px' }}>📊 ויזואליזציית מדרגות מס</h2>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {colors.map((c, i) => (
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(215,12%,58%)' }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }}></span>
+            {labels[i]}
           </span>
-        `)}
+        ))}
       </div>
-      ${renderBar(fBreak, fatherAnnual, fTotalTax, '👨 האב', '#7ab8e0')}
-      ${renderBar(mBreak, motherAnnual, mTotalTax, '👩 האם', '#d898c8')}
-      <div style=${{ marginTop: 12, padding: '12px 16px', background: 'rgba(76,175,80,0.08)', borderRadius: 10, textAlign: 'center' }}>
-        <div style=${{ fontSize: 12, color: 'hsl(215, 12%, 52%)' }}>סה״כ מס הכנסה משק הבית (לפני זיכויים)</div>
-        <div style=${{ fontSize: 26, fontWeight: 800, color: '#ef4444' }}>₪${fm(fTotalTax + mTotalTax)}</div>
-        <div style=${{ fontSize: 11, color: 'hsl(215, 12%, 52%)' }}>שיעור מס ממוצע: ${(fatherAnnual + motherAnnual) > 0 ? ((fTotalTax + mTotalTax) / (fatherAnnual + motherAnnual) * 100).toFixed(1) : 0}%</div>
+      {renderBar(fBreak, fatherAnnual, fTotalTax, '👨 האב', '#7ab8e0')}
+      {renderBar(mBreak, motherAnnual, mTotalTax, '👩 האם', '#d898c8')}
+      <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(76,175,80,0.08)', borderRadius: 10, textAlign: 'center' }}>
+        <div style={{ fontSize: 12, color: 'hsl(215, 12%, 52%)' }}>סה״כ מס הכנסה משק הבית (לפני זיכויים)</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#ef4444' }}>₪{fmNum(fTotalTax + mTotalTax)}</div>
+        <div style={{ fontSize: 11, color: 'hsl(215, 12%, 52%)' }}>שיעור מס ממוצע: {(fatherAnnual + motherAnnual) > 0 ? ((fTotalTax + mTotalTax) / (fatherAnnual + motherAnnual) * 100).toFixed(1) : 0}%</div>
       </div>
-    </div>`;
+    </div>);
 }
 
 function App() {
@@ -2002,7 +2002,7 @@ function App() {
         </div>
 
         {/* TAX BRACKET WATERFALL */}
-        ${html`<${TaxBracketWaterfall} fatherAnnual=${fM * 12} motherAnnual=${mM * 12} />`}
+        <TaxBracketWaterfall fatherAnnual={fM * 12} motherAnnual={mM * 12} />
 
         {/* CREDIT POINTS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
