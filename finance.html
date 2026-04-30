@@ -1120,6 +1120,9 @@
                     <button onclick="showReportSubTab('yoy')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         📊 השוואה שנתית
                     </button>
+                    <button onclick="showReportSubTab('debt-compare')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        ⛷️ שלג vs מפולת
+                    </button>
                 </div>
 
                 <!-- סקירה כללית (הגרפים הקיימים) -->
@@ -1294,6 +1297,86 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Debt Snowball vs Avalanche Comparison -->
+                <div id="report-debt-compare" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">⛷️</span>
+                            השוואת אסטרטגיות פירעון חוב — שלג vs מפולת
+                        </h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">
+                            <strong>שיטת השלג (Snowball):</strong> מסלקים את החוב הקטן ביותר קודם — ניצחונות פסיכולוגיים מהירים.
+                            <strong>שיטת המפולת (Avalanche):</strong> מסלקים את הריבית הגבוהה ביותר קודם — חיסכון מתמטי מקסימלי.
+                        </p>
+                        <!-- Extra payment slider -->
+                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
+                            <label style="color: var(--text-secondary); font-weight: 600; white-space: nowrap;">תשלום נוסף חודשי:</label>
+                            <input type="range" id="debt-compare-extra-slider" min="0" max="3000" step="50" value="500"
+                                   oninput="document.getElementById('debt-compare-extra-label').textContent = '₪' + Number(this.value).toLocaleString(); renderDebtComparison();"
+                                   style="flex: 1; min-width: 180px; accent-color: hsl(210, 80%, 55%);">
+                            <span id="debt-compare-extra-label" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; min-width: 60px;">₪500</span>
+                        </div>
+                        <!-- Chart -->
+                        <div style="position: relative; height: 420px;">
+                            <canvas id="debt-compare-chart"></canvas>
+                        </div>
+                    </div>
+                    <!-- Summary Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <!-- Snowball Column -->
+                        <div class="glass p-6" style="border-top: 4px solid hsl(142, 60%, 50%);">
+                            <h4 style="color: hsl(142, 60%, 50%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 1.3rem;">⛷️</span> שיטת השלג (Snowball)
+                            </h4>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
+                                    <span id="dc-snowball-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
+                                    <span id="dc-snowball-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                                </div>
+                                <div id="dc-snowball-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
+                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Avalanche Column -->
+                        <div class="glass p-6" style="border-top: 4px solid hsl(210, 80%, 55%);">
+                            <h4 style="color: hsl(210, 80%, 55%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
+                                <span style="font-size: 1.3rem;">🏔️</span> שיטת המפולת (Avalanche)
+                            </h4>
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
+                                    <span id="dc-avalanche-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
+                                    <span id="dc-avalanche-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                                </div>
+                                <div id="dc-avalanche-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
+                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Savings Difference Banner -->
+                    <div id="dc-savings-banner" class="glass p-6 mb-6" style="border-right: 4px solid hsl(38, 80%, 55%); text-align: center;">
+                        <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 6px;">💰 חיסכון בבחירת המפולת על פני השלג</div>
+                        <div id="dc-savings-amount" style="font-size: 2rem; font-weight: 800; color: hsl(142, 60%, 50%); font-family: 'JetBrains Mono', monospace;">-</div>
+                        <div id="dc-savings-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">-</div>
+                    </div>
+                    <!-- No debts message (hidden by default) -->
+                    <div id="dc-no-debts" class="glass p-6 mb-6 hidden" style="text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 12px;">🎉</div>
+                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-primary);">אין חובות להשוואה</div>
+                        <div style="color: var(--text-muted); margin-top: 6px;">הוסף חובות בטאב "סימולטור חובות" כדי לראות השוואה כאן</div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Advanced Analysis Tab -->
@@ -2377,6 +2460,8 @@
                 renderSpendingHeatmap();
             } else if (subTab === 'yoy') {
                 renderYearOverYearChart();
+            } else if (subTab === 'debt-compare') {
+                renderDebtComparison();
             }
         }
 
@@ -6742,6 +6827,7 @@
         window.setAllEarner = setAllEarner;
         window.saveEarnerAssignments = saveEarnerAssignments;
         window.closeEarnerModal = closeEarnerModal;
+        window.renderDebtComparison = renderDebtComparison;
 
         // ============== DARK MODE FUNCTIONALITY ==============
         function toggleTheme() {
@@ -7644,6 +7730,213 @@
 
             html += '</tbody></table>';
             el.innerHTML = html;
+        }
+
+        let debtCompareChart = null;
+
+        function renderDebtComparison() {
+            const debts = data.debts || [];
+            const noDebtsEl = document.getElementById('dc-no-debts');
+            const chartCanvas = document.getElementById('debt-compare-chart');
+            const savingsBanner = document.getElementById('dc-savings-banner');
+
+            // Show/hide no-debts message
+            if (debts.length === 0) {
+                if (noDebtsEl) noDebtsEl.classList.remove('hidden');
+                if (chartCanvas) chartCanvas.parentElement.style.display = 'none';
+                if (savingsBanner) savingsBanner.style.display = 'none';
+                // Hide the summary columns too
+                document.querySelectorAll('#report-debt-compare .grid.grid-cols-1.md\\:grid-cols-2 .glass').forEach(el => el.style.display = 'none');
+                return;
+            }
+
+            if (noDebtsEl) noDebtsEl.classList.add('hidden');
+            if (chartCanvas) chartCanvas.parentElement.style.display = 'block';
+            if (savingsBanner) savingsBanner.style.display = 'block';
+            document.querySelectorAll('#report-debt-compare .grid .glass').forEach(el => el.style.display = '');
+
+            const extra = parseFloat(document.getElementById('debt-compare-extra-slider')?.value) || 500;
+
+            // Run both simulations
+            const snowballResult = calculatePayoff(debts, 'snowball', extra);
+            const avalancheResult = calculatePayoff(debts, 'avalanche', extra);
+
+            // Update summary cards
+            const snowInterestEl = document.getElementById('dc-snowball-interest');
+            const snowMonthsEl = document.getElementById('dc-snowball-months');
+            const avalInterestEl = document.getElementById('dc-avalanche-interest');
+            const avalMonthsEl = document.getElementById('dc-avalanche-months');
+            const savingsAmountEl = document.getElementById('dc-savings-amount');
+            const savingsDetailEl = document.getElementById('dc-savings-detail');
+
+            if (snowInterestEl) snowInterestEl.textContent = '₪' + Math.round(snowballResult.totalInterest).toLocaleString();
+            if (snowMonthsEl) snowMonthsEl.textContent = snowballResult.months + ' חודשים';
+            if (avalInterestEl) avalInterestEl.textContent = '₪' + Math.round(avalancheResult.totalInterest).toLocaleString();
+            if (avalMonthsEl) avalMonthsEl.textContent = avalancheResult.months + ' חודשים';
+
+            const savings = snowballResult.totalInterest - avalancheResult.totalInterest;
+            const monthsDiff = snowballResult.months - avalancheResult.months;
+            if (savingsAmountEl) {
+                if (savings > 0) {
+                    savingsAmountEl.textContent = '₪' + Math.round(savings).toLocaleString();
+                    savingsAmountEl.style.color = 'hsl(142, 60%, 50%)';
+                } else if (savings < 0) {
+                    savingsAmountEl.textContent = '₪' + Math.round(Math.abs(savings)).toLocaleString() + ' (שלג זול יותר!)';
+                    savingsAmountEl.style.color = 'hsl(38, 80%, 55%)';
+                } else {
+                    savingsAmountEl.textContent = '₪0 — זהה';
+                    savingsAmountEl.style.color = 'var(--text-muted)';
+                }
+            }
+            if (savingsDetailEl) {
+                if (monthsDiff > 0) {
+                    savingsDetailEl.textContent = `המפולת מסיימת ${monthsDiff} חודשים מוקדם יותר`;
+                } else if (monthsDiff < 0) {
+                    savingsDetailEl.textContent = `השלג מסיים ${Math.abs(monthsDiff)} חודשים מוקדם יותר`;
+                } else {
+                    savingsDetailEl.textContent = 'שתי השיטות מסיימות באותו זמן';
+                }
+            }
+
+            // Payoff order lists
+            function getPayoffOrder(strategy) {
+                const sorted = [...debts];
+                if (strategy === 'snowball') {
+                    sorted.sort((a, b) => a.balance - b.balance);
+                } else {
+                    sorted.sort((a, b) => b.rate - a.rate);
+                }
+                return sorted;
+            }
+
+            const snowOrder = getPayoffOrder('snowball');
+            const avalOrder = getPayoffOrder('avalanche');
+
+            const snowOrderEl = document.getElementById('dc-snowball-order');
+            const avalOrderEl = document.getElementById('dc-avalanche-order');
+
+            if (snowOrderEl) {
+                snowOrderEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">סדר פירעון:</div>' +
+                    snowOrder.map((d, i) => `<div style="padding:3px 0;"><span style="color:hsl(142,60%,50%);font-weight:700;margin-left:6px;">${i + 1}.</span> ${d.name} <span style="color:var(--text-muted);font-size:0.8rem;">(₪${d.balance.toLocaleString()} / ${d.rate}%)</span></div>`).join('');
+            }
+            if (avalOrderEl) {
+                avalOrderEl.innerHTML = '<div style="font-weight:600;margin-bottom:6px;">סדר פירעון:</div>' +
+                    avalOrder.map((d, i) => `<div style="padding:3px 0;"><span style="color:hsl(210,80%,55%);font-weight:700;margin-left:6px;">${i + 1}.</span> ${d.name} <span style="color:var(--text-muted);font-size:0.8rem;">(₪${d.balance.toLocaleString()} / ${d.rate}%)</span></div>`).join('');
+            }
+
+            // Draw Chart.js line chart
+            if (!chartCanvas) return;
+            if (debtCompareChart) { debtCompareChart.destroy(); debtCompareChart = null; }
+
+            const maxMonths = Math.max(snowballResult.months, avalancheResult.months, 1);
+            const labels = [];
+            const snowData = [];
+            const avalData = [];
+
+            for (let m = 0; m <= maxMonths; m++) {
+                labels.push(m === 0 ? 'התחלה' : 'חודש ' + m);
+                if (m === 0) {
+                    const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
+                    snowData.push(totalDebt);
+                    avalData.push(totalDebt);
+                } else {
+                    const sEntry = snowballResult.schedule[m - 1];
+                    const aEntry = avalancheResult.schedule[m - 1];
+                    snowData.push(sEntry ? sEntry.totalBalance : 0);
+                    avalData.push(aEntry ? aEntry.totalBalance : 0);
+                }
+            }
+
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            const gridColor = isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+            const textColor = isDarkMode ? 'hsl(215, 12%, 72%)' : 'hsl(220, 10%, 40%)';
+
+            debtCompareChart = new Chart(chartCanvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: '⛷️ שלג (Snowball)',
+                            data: snowData,
+                            borderColor: 'hsl(142, 60%, 50%)',
+                            backgroundColor: 'hsla(142, 60%, 50%, 0.08)',
+                            borderWidth: 3,
+                            borderDash: [8, 4],
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: 'hsl(142, 60%, 50%)',
+                            fill: true,
+                            tension: 0.3,
+                        },
+                        {
+                            label: '🏔️ מפולת (Avalanche)',
+                            data: avalData,
+                            borderColor: 'hsl(210, 80%, 55%)',
+                            backgroundColor: 'hsla(210, 80%, 55%, 0.08)',
+                            borderWidth: 3,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: 'hsl(210, 80%, 55%)',
+                            fill: true,
+                            tension: 0.3,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            rtl: true,
+                            labels: {
+                                color: textColor,
+                                font: { family: "'Heebo', sans-serif", size: 13, weight: '600' },
+                                padding: 20,
+                                usePointStyle: true,
+                                pointStyle: 'rectRounded',
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            backgroundColor: isDarkMode ? 'hsl(220, 18%, 12%)' : 'hsl(0, 0%, 98%)',
+                            titleColor: isDarkMode ? 'hsl(210, 20%, 92%)' : 'hsl(220, 10%, 20%)',
+                            bodyColor: isDarkMode ? 'hsl(210, 20%, 80%)' : 'hsl(220, 10%, 40%)',
+                            borderColor: isDarkMode ? 'hsl(220, 14%, 22%)' : 'hsl(220, 10%, 85%)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 14,
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ₪' + Math.round(context.parsed.y).toLocaleString();
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                color: textColor,
+                                font: { family: "'Heebo', sans-serif", size: 11 },
+                                maxTicksLimit: 15,
+                            },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            position: 'right',
+                            ticks: {
+                                color: textColor,
+                                font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                callback: function(val) { return '₪' + Math.round(val).toLocaleString(); }
+                            },
+                            grid: { color: gridColor }
+                        }
+                    }
+                }
+            });
         }
 
         function renderDebtSimulator() {
