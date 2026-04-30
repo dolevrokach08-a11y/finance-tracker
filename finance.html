@@ -902,6 +902,18 @@
                     <div id="smart-insights-content"></div>
                 </div>
                 
+                <!-- Financial Health Score -->
+                <div class="glass p-4 mb-6" style="border: 1px solid var(--border);">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">💪</span>
+                        <h3 class="text-lg font-semibold" style="color: var(--text-primary);">ציון בריאות פיננסית</h3>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+                        <div id="health-gauge-container" style="flex-shrink: 0;"></div>
+                        <div id="health-breakdown" style="flex: 1; min-width: 200px;"></div>
+                    </div>
+                </div>
+
                 <div class="glass p-4">
                     <h3 class="text-lg font-semibold mb-3">פעילות אחרונה</h3>
                     <div id="recent-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
@@ -1111,6 +1123,9 @@
                     <button onclick="showReportSubTab('prediction')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         🔮 חיזוי הוצאות
                     </button>
+                    <button onclick="showReportSubTab('savings-rate')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📈 שיעור חיסכון
+                    </button>
                 </div>
 
                 <!-- סקירה כללית (הגרפים הקיימים) -->
@@ -1200,6 +1215,31 @@
                         </div>
                     </div>
                     <div id="anomaly-alerts" class="space-y-3"></div>
+                </div>
+
+                <!-- שיעור חיסכון -->
+                <div id="report-savings-rate" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">📈 שיעור חיסכון חודשי</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">אחוז ההכנסה שנשאר כחיסכון — עם ממוצע נע 3 חודשים</p>
+                        <div style="height:400px; position:relative;">
+                            <canvas id="savings-rate-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="glass p-4" style="border-right: 3px solid hsl(142, 60%, 50%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">שיעור חיסכון ממוצע</div>
+                            <div id="avg-savings-rate" style="font-size: 1.3rem; font-weight: 700; color: var(--profit); font-family: 'JetBrains Mono', monospace;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(210, 80%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">שיעור חיסכון חודש אחרון</div>
+                            <div id="latest-savings-rate" style="font-size: 1.3rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(270, 60%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">יעד 50/30/20</div>
+                            <div id="savings-rate-target" style="font-size: 1.3rem; font-weight: 700; color: #9333ea; font-family: 'JetBrains Mono', monospace;">20%</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -2278,6 +2318,8 @@
                 renderAreaChart();
             } else if (subTab === 'prediction') {
                 renderPredictionChart();
+            } else if (subTab === 'savings-rate') {
+                renderSavingsRateChart();
             }
         }
 
@@ -4059,9 +4101,120 @@
                     window.__insightsWidget.render(insightsEl, month);
                 }
             } catch(e) {}
+
+            renderHealthScore(month);
         }
 
-        
+        function renderHealthScore(month) {
+            const gaugeContainer = document.getElementById('health-gauge-container');
+            const breakdownContainer = document.getElementById('health-breakdown');
+            if (!gaugeContainer || !breakdownContainer) return;
+
+            const sum = getMonthSummary(month);
+            const isDarkMode = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            // 1. Savings Rate (25%) — >20% = 100, 10-20 = scaled, <0 = 0
+            const savingsRate = sum.inc > 0 ? ((sum.inc - sum.exp) / sum.inc) * 100 : 0;
+            const savingsScore = savingsRate >= 20 ? 100 : savingsRate <= 0 ? 0 : (savingsRate / 20) * 100;
+
+            // 2. Debt-to-Income (20%) — <30% = 100, >50% = 0
+            const debts = data.debts || [];
+            const totalDebtPayment = debts.reduce((s, d) => s + (d.minPayment || 0), 0);
+            const mortgagePayment = (() => { try { const m = JSON.parse(localStorage.getItem('mortgageData') || '{}'); return m.monthlyPayment || 0; } catch { return 0; } })();
+            const dti = sum.inc > 0 ? ((totalDebtPayment + mortgagePayment) / sum.inc) * 100 : 0;
+            const dtiScore = dti <= 30 ? 100 : dti >= 50 ? 0 : ((50 - dti) / 20) * 100;
+
+            // 3. Emergency Fund (20%) — >6mo = 100, 3-6 = scaled, <1 = 0
+            const monthlyExpenses = sum.exp || 1;
+            const liquidAssets = (data.netWorthAssets || [])
+                .filter(a => a.type !== 'realestate' && a.type !== 'vehicle')
+                .reduce((s, a) => s + (a.value || 0), 0);
+            const emergencyMonths = liquidAssets / monthlyExpenses;
+            const emergencyScore = emergencyMonths >= 6 ? 100 : emergencyMonths <= 0.5 ? 0 : (emergencyMonths / 6) * 100;
+
+            // 4. Net Worth Trend (15%) — positive = 100, flat = 50, negative = 0
+            const nwHistory = data.netWorthHistory || [];
+            let nwTrendScore = 50;
+            if (nwHistory.length >= 2) {
+                const last = nwHistory[nwHistory.length - 1]?.total || 0;
+                const prev = nwHistory[nwHistory.length - 2]?.total || 0;
+                nwTrendScore = last > prev ? 100 : last === prev ? 50 : 0;
+            }
+
+            // 5. Budget Adherence (20%) — % of categories under budget
+            const budgets = data.budgets || {};
+            const budgetCategories = Object.keys(budgets).filter(k => budgets[k] > 0);
+            let underBudget = 0;
+            budgetCategories.forEach(cat => {
+                const spent = data.transactions
+                    .filter(t => t.month === month && t.type === 'expense' && t.cat === cat)
+                    .reduce((s, t) => s + t.amt, 0);
+                if (spent <= budgets[cat]) underBudget++;
+            });
+            const budgetScore = budgetCategories.length > 0 ? (underBudget / budgetCategories.length) * 100 : 75;
+
+            // Composite score
+            const totalScore = Math.round(
+                savingsScore * 0.25 +
+                dtiScore * 0.20 +
+                emergencyScore * 0.20 +
+                nwTrendScore * 0.15 +
+                budgetScore * 0.20
+            );
+
+            // Render gauge
+            const size = 140;
+            const r = (size - 16) / 2;
+            const circumference = 2 * Math.PI * r;
+            const arcLength = circumference * 0.75;
+            const filledLength = arcLength * (totalScore / 100);
+            const cx = size / 2, cy = size / 2;
+
+            const scoreColor = totalScore >= 70 ? 'var(--profit)' : totalScore >= 40 ? 'var(--warning)' : 'var(--loss)';
+            const trackColor = isDarkMode ? 'hsl(220,16%,18%)' : 'hsl(220,12%,90%)';
+            const textColor = isDarkMode ? 'hsl(210,20%,92%)' : 'hsl(220,25%,12%)';
+
+            gaugeContainer.innerHTML = `
+                <div style="position:relative;width:${size}px;height:${size}px;">
+                    <svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
+                        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${trackColor}" stroke-width="10"
+                            stroke-dasharray="${arcLength} ${circumference}" stroke-linecap="round" transform="rotate(135, ${cx}, ${cy})" />
+                        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="10"
+                            stroke-dasharray="${filledLength} ${circumference}" stroke-linecap="round" transform="rotate(135, ${cx}, ${cy})"
+                            style="transition: stroke-dasharray 0.8s cubic-bezier(0.4,0,0.2,1);" />
+                    </svg>
+                    <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:1.8rem;font-weight:700;color:${textColor};">${totalScore}</div>
+                        <div style="font-size:0.7rem;color:var(--text-muted);">מתוך 100</div>
+                    </div>
+                </div>
+            `;
+
+            // Render breakdown
+            const components = [
+                { name: 'שיעור חיסכון', score: savingsScore, detail: `${savingsRate.toFixed(1)}%`, weight: '25%' },
+                { name: 'יחס חוב/הכנסה', score: dtiScore, detail: `${dti.toFixed(1)}%`, weight: '20%' },
+                { name: 'קרן חירום', score: emergencyScore, detail: `${emergencyMonths.toFixed(1)} חודשים`, weight: '20%' },
+                { name: 'מגמת שווי נקי', score: nwTrendScore, detail: nwTrendScore > 50 ? '↑ עולה' : nwTrendScore < 50 ? '↓ יורד' : '→ יציב', weight: '15%' },
+                { name: 'עמידה בתקציב', score: budgetScore, detail: `${underBudget}/${budgetCategories.length}`, weight: '20%' },
+            ];
+
+            breakdownContainer.innerHTML = components.map(c => {
+                const barColor = c.score >= 70 ? 'var(--profit)' : c.score >= 40 ? 'var(--warning)' : 'var(--loss)';
+                return `
+                    <div style="margin-bottom: 10px;">
+                        <div style="display:flex;justify-content:space-between;font-size:0.8rem;margin-bottom:3px;">
+                            <span style="color:var(--text-secondary);font-weight:500;">${c.name} <span style="color:var(--text-muted);font-size:0.7rem;">(${c.weight})</span></span>
+                            <span style="color:var(--text-primary);font-family:'JetBrains Mono',monospace;font-size:0.75rem;">${c.detail}</span>
+                        </div>
+                        <div style="height:6px;background:${isDarkMode ? 'hsl(220,16%,18%)' : 'hsl(220,12%,90%)'};border-radius:3px;overflow:hidden;">
+                            <div style="width:${c.score}%;height:100%;background:${barColor};border-radius:3px;transition:width 0.6s ease;"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         // ========== AI Tips Engine ==========
         function generateAITips(currentMonth) {
             const tips = [];
@@ -4689,6 +4842,113 @@
             renderSavingsChart();
             renderExpensePie();
             renderIncomePie();
+            renderSavingsRateChart();
+        }
+
+        // ========== Savings Rate Chart ==========
+        function renderSavingsRateChart() {
+            const canvas = document.getElementById('savings-rate-chart');
+            if (!canvas) return;
+            if (charts.savingsRate) charts.savingsRate.destroy();
+
+            const months = getReportMonths();
+            const rates = [];
+            const labels = [];
+
+            months.forEach(m => {
+                const sum = getMonthSummary(m.key);
+                const rate = sum.inc > 0 ? ((sum.inc - sum.exp) / sum.inc) * 100 : 0;
+                rates.push(Math.round(rate * 10) / 10);
+                labels.push(m.name);
+            });
+
+            // 3-month moving average
+            const ma3 = rates.map((_, i) => {
+                if (i < 2) return null;
+                return Math.round(((rates[i] + rates[i-1] + rates[i-2]) / 3) * 10) / 10;
+            });
+
+            const isDarkMode = document.documentElement.getAttribute('data-theme') !== 'light';
+            const gridColor = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+            const textColor = isDarkMode ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)';
+
+            charts.savingsRate = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'שיעור חיסכון %',
+                            data: rates,
+                            backgroundColor: rates.map(r => r >= 20 ? 'hsla(142,60%,50%,0.7)' : r >= 10 ? 'hsla(38,92%,55%,0.7)' : 'hsla(0,72%,55%,0.7)'),
+                            borderRadius: 6,
+                            borderSkipped: false,
+                            barPercentage: 0.6,
+                        },
+                        {
+                            label: 'ממוצע נע 3 חודשים',
+                            data: ma3,
+                            type: 'line',
+                            borderColor: 'hsl(210,80%,55%)',
+                            backgroundColor: 'transparent',
+                            borderWidth: 2.5,
+                            pointRadius: 0,
+                            tension: 0.4,
+                            spanGaps: true,
+                        },
+                        {
+                            label: 'יעד 20%',
+                            data: rates.map(() => 20),
+                            type: 'line',
+                            borderColor: 'hsla(270,60%,55%,0.5)',
+                            borderDash: [6, 4],
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: false,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: textColor, font: { family: "'Heebo', sans-serif", size: 12 } }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}%`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor, font: { family: "'Heebo', sans-serif", size: 11 } },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            ticks: {
+                                color: textColor,
+                                font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                callback: v => v + '%'
+                            },
+                            grid: { color: gridColor }
+                        }
+                    }
+                }
+            });
+
+            // Update KPI cards
+            const validRates = rates.filter(r => r !== 0 || rates.indexOf(r) > 0);
+            const avgRate = validRates.length > 0 ? validRates.reduce((a, b) => a + b, 0) / validRates.length : 0;
+            const latestRate = rates[rates.length - 1] || 0;
+
+            const avgEl = document.getElementById('avg-savings-rate');
+            const latestEl = document.getElementById('latest-savings-rate');
+            if (avgEl) avgEl.textContent = avgRate.toFixed(1) + '%';
+            if (latestEl) latestEl.textContent = latestRate.toFixed(1) + '%';
         }
 
         // ========== Prediction Chart ==========
