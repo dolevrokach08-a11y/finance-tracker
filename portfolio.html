@@ -2504,6 +2504,37 @@
                     </div>
                 </div>
 
+                <!-- Sector & Geography Breakdown Charts -->
+                <div style="display: flex; gap: 20px; margin-top: 24px; flex-wrap: wrap;">
+                    <!-- Sector Breakdown -->
+                    <div class="glass" style="flex: 1; min-width: 340px; padding: 25px;">
+                        <h3 style="text-align: center; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">🏭</span>
+                            <span>פילוח סקטוריאלי</span>
+                        </h3>
+                        <div style="text-align: center; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
+                            התפלגות התיק לפי מגזרי פעילות
+                        </div>
+                        <div style="position: relative; height: 380px;">
+                            <canvas id="sector-breakdown-chart"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Geography Breakdown -->
+                    <div class="glass" style="flex: 1; min-width: 340px; padding: 25px;">
+                        <h3 style="text-align: center; color: var(--text-primary); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 10px;">
+                            <span style="font-size: 1.5rem;">🌍</span>
+                            <span>פילוח גיאוגרפי</span>
+                        </h3>
+                        <div style="text-align: center; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
+                            התפלגות התיק לפי אזורים גיאוגרפיים
+                        </div>
+                        <div style="position: relative; height: 380px;">
+                            <canvas id="geo-breakdown-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
 
@@ -7112,7 +7143,7 @@ function calculateTWRv3(startDate = null) {
                     }, 100);
                     break;
                 case 'analysis':
-                    // Analysis tab functions if any
+                    updateAnalysisTab();
                     break;
                 case 'calculator':
                     // Calculator doesn't need refresh
@@ -12388,6 +12419,265 @@ ${msg}`, 'warning');
             
             // Draw Treemap
             drawTreemap();
+
+            // Draw Sector & Geography charts
+            renderSectorGeoCharts();
+        }
+
+        // ========== Sector & Geography Breakdown Charts ==========
+        const SYMBOL_SECTOR_MAP = {
+            // Israeli mutual funds
+            '1185164': { sector: 'מניות גלובלי', geo: 'ארה"ב + עולמי' },
+            '1209220': { sector: 'מניות גלובלי', geo: 'ארה"ב + עולמי' },
+            '1186063': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            '1159169': { sector: 'מניות גלובלי', geo: 'עולמי' },
+            '1155100': { sector: 'אג"ח', geo: 'ישראל' },
+            '1159052': { sector: 'אג"ח', geo: 'ישראל' },
+            '1152412': { sector: 'מניות גלובלי', geo: 'ארה"ב + עולמי' },
+            '1159235': { sector: 'אג"ח ממשלתי', geo: 'ישראל' },
+            '1146067': { sector: 'נדל"ן', geo: 'ישראל' },
+            '1160043': { sector: 'מניות ישראל', geo: 'ישראל' },
+            '5765467': { sector: 'אג"ח קונצרני', geo: 'ישראל' },
+            '5131117': { sector: 'מניות גלובלי', geo: 'עולמי' },
+            '5122595': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            // US stocks
+            'AAPL': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'MSFT': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'GOOGL': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'GOOG': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'AMZN': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'META': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'NVDA': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'TSLA': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'AMD': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'INTC': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'JPM': { sector: 'פיננסים', geo: 'ארה"ב' },
+            'BAC': { sector: 'פיננסים', geo: 'ארה"ב' },
+            'GS': { sector: 'פיננסים', geo: 'ארה"ב' },
+            'V': { sector: 'פיננסים', geo: 'ארה"ב' },
+            'MA': { sector: 'פיננסים', geo: 'ארה"ב' },
+            'JNJ': { sector: 'בריאות', geo: 'ארה"ב' },
+            'PFE': { sector: 'בריאות', geo: 'ארה"ב' },
+            'UNH': { sector: 'בריאות', geo: 'ארה"ב' },
+            'ABBV': { sector: 'בריאות', geo: 'ארה"ב' },
+            'XOM': { sector: 'אנרגיה', geo: 'ארה"ב' },
+            'CVX': { sector: 'אנרגיה', geo: 'ארה"ב' },
+            'PG': { sector: 'צריכה', geo: 'ארה"ב' },
+            'KO': { sector: 'צריכה', geo: 'ארה"ב' },
+            'WMT': { sector: 'צריכה', geo: 'ארה"ב' },
+            'DIS': { sector: 'תקשורת', geo: 'ארה"ב' },
+            'NFLX': { sector: 'תקשורת', geo: 'ארה"ב' },
+            'SPY': { sector: 'מדד S&P 500', geo: 'ארה"ב' },
+            'QQQ': { sector: 'טכנולוגיה / צמיחה', geo: 'ארה"ב' },
+            'VOO': { sector: 'מדד S&P 500', geo: 'ארה"ב' },
+            'VTI': { sector: 'מניות גלובלי', geo: 'ארה"ב' },
+            'VXUS': { sector: 'מניות גלובלי', geo: 'עולמי' },
+            'VEA': { sector: 'מניות גלובלי', geo: 'אירופה + אסיה' },
+            'VWO': { sector: 'שווקים מתעוררים', geo: 'עולמי' },
+            'BND': { sector: 'אג"ח', geo: 'ארה"ב' },
+            'AGG': { sector: 'אג"ח', geo: 'ארה"ב' },
+            // Israeli stocks
+            'TEVA': { sector: 'בריאות', geo: 'ישראל' },
+            'NICE': { sector: 'טכנולוגיה / צמיחה', geo: 'ישראל' },
+            'CHKP': { sector: 'טכנולוגיה / צמיחה', geo: 'ישראל' },
+            'LUMI': { sector: 'טכנולוגיה / צמיחה', geo: 'ישראל' },
+        };
+
+        function getHoldingSectorGeo(symbol) {
+            const sym = String(symbol).trim().toUpperCase();
+            if (SYMBOL_SECTOR_MAP[sym]) return SYMBOL_SECTOR_MAP[sym];
+            // Check numeric (Israeli fund) - default to generic
+            if (/^\d+$/.test(sym)) {
+                return { sector: 'קרנות ישראליות', geo: 'ישראל' };
+            }
+            return { sector: 'אחר', geo: 'אחר' };
+        }
+
+        let sectorGeoCharts = { sector: null, geo: null };
+
+        function renderSectorGeoCharts() {
+            const sectorCanvas = document.getElementById('sector-breakdown-chart');
+            const geoCanvas = document.getElementById('geo-breakdown-chart');
+            if (!sectorCanvas || !geoCanvas) return;
+
+            if (sectorGeoCharts.sector) sectorGeoCharts.sector.destroy();
+            if (sectorGeoCharts.geo) sectorGeoCharts.geo.destroy();
+
+            const holdings = portfolio.holdings || [];
+            if (holdings.length === 0) {
+                sectorCanvas.parentElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 1.1rem;">אין אחזקות בתיק</div>';
+                geoCanvas.parentElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: var(--text-muted); font-size: 1.1rem;">אין אחזקות בתיק</div>';
+                return;
+            }
+
+            const isDarkMode = document.documentElement.getAttribute('data-theme') !== 'light';
+            const textColor = isDarkMode ? 'hsl(215, 12%, 72%)' : 'hsl(220, 10%, 40%)';
+
+            // Aggregate by sector and geography
+            const sectorMap = {};
+            const geoMap = {};
+            let totalValue = 0;
+
+            holdings.forEach(h => {
+                const price = parseFloat(h.currentPrice) || parseFloat(h.costBasis) || 0;
+                const shares = parseFloat(h.shares) || 0;
+                const currency = h.currency || 'ILS';
+                let valueILS = shares * price;
+                if (currency === 'USD') valueILS *= (portfolio.rates?.USD || 3.6);
+                else if (currency === 'EUR') valueILS *= (portfolio.rates?.EUR || 3.9);
+
+                if (valueILS <= 0) return;
+
+                const { sector, geo } = getHoldingSectorGeo(h.symbol);
+                sectorMap[sector] = (sectorMap[sector] || 0) + valueILS;
+                geoMap[geo] = (geoMap[geo] || 0) + valueILS;
+                totalValue += valueILS;
+            });
+
+            if (totalValue === 0) return;
+
+            // Color palettes
+            const sectorColors = [
+                'rgba(59, 130, 246, 0.85)',   // Blue - tech
+                'rgba(16, 185, 129, 0.85)',   // Green - global equity
+                'rgba(245, 158, 11, 0.85)',   // Amber - bonds
+                'rgba(139, 92, 246, 0.85)',   // Purple - finance
+                'rgba(236, 72, 153, 0.85)',   // Pink - health
+                'rgba(20, 184, 166, 0.85)',   // Teal - real estate
+                'rgba(249, 115, 22, 0.85)',   // Orange - energy
+                'rgba(99, 102, 241, 0.85)',   // Indigo - consumer
+                'rgba(234, 179, 8, 0.85)',    // Yellow - comms
+                'rgba(168, 85, 247, 0.85)',   // Violet - emerging
+                'rgba(34, 197, 94, 0.85)',    // Emerald - index
+                'rgba(148, 163, 184, 0.65)',  // Gray - other
+            ];
+            const sectorBorders = sectorColors.map(c => c.replace('0.85', '1').replace('0.65', '1'));
+
+            const geoColors = [
+                'rgba(59, 130, 246, 0.85)',   // Blue - US
+                'rgba(16, 185, 129, 0.85)',   // Green - Israel
+                'rgba(245, 158, 11, 0.85)',   // Amber - Global
+                'rgba(139, 92, 246, 0.85)',   // Purple - US+Global
+                'rgba(236, 72, 153, 0.85)',   // Pink - Europe+Asia
+                'rgba(20, 184, 166, 0.85)',   // Teal
+                'rgba(249, 115, 22, 0.85)',   // Orange
+                'rgba(148, 163, 184, 0.65)',  // Gray - other
+            ];
+            const geoBorders = geoColors.map(c => c.replace('0.85', '1').replace('0.65', '1'));
+
+            // Sort by value descending
+            const sectorEntries = Object.entries(sectorMap).sort((a, b) => b[1] - a[1]);
+            const geoEntries = Object.entries(geoMap).sort((a, b) => b[1] - a[1]);
+
+            const chartOptions = (total, colorSet) => ({
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '55%',
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        rtl: true,
+                        labels: {
+                            color: textColor,
+                            font: { family: "'Heebo', sans-serif", size: 12, weight: '500' },
+                            padding: 12,
+                            usePointStyle: true,
+                            pointStyleWidth: 14,
+                        }
+                    },
+                    tooltip: {
+                        rtl: true,
+                        textDirection: 'rtl',
+                        backgroundColor: 'hsl(220, 18%, 12%)',
+                        titleColor: 'hsl(210, 20%, 92%)',
+                        bodyColor: 'hsl(210, 20%, 80%)',
+                        borderColor: 'hsl(220, 14%, 22%)',
+                        borderWidth: 1,
+                        cornerRadius: 10,
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.parsed;
+                                const percent = total > 0 ? (value / total * 100).toFixed(1) : 0;
+                                return `${context.label}: ₪${Math.round(value).toLocaleString()} (${percent}%)`;
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Sector chart
+            sectorGeoCharts.sector = new Chart(sectorCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: sectorEntries.map(e => e[0]),
+                    datasets: [{
+                        data: sectorEntries.map(e => e[1]),
+                        backgroundColor: sectorColors.slice(0, sectorEntries.length),
+                        borderColor: sectorBorders.slice(0, sectorEntries.length),
+                        borderWidth: 3,
+                        hoverOffset: 15,
+                    }]
+                },
+                options: chartOptions(totalValue, sectorColors),
+                plugins: [{
+                    id: 'sectorCenterText',
+                    afterDraw(chart) {
+                        const { ctx, width, height } = chart;
+                        const meta = chart.getDatasetMeta(0);
+                        if (!meta.data.length) return;
+                        const centerX = (meta.data[0].x);
+                        const centerY = (meta.data[0].y);
+                        ctx.save();
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = textColor;
+                        ctx.font = "bold 15px 'Heebo', sans-serif";
+                        ctx.fillText(`${sectorEntries.length} סקטורים`, centerX, centerY - 10);
+                        ctx.font = "600 18px 'JetBrains Mono', monospace";
+                        ctx.fillStyle = isDarkMode ? 'hsl(142, 60%, 55%)' : 'hsl(142, 60%, 40%)';
+                        ctx.fillText(`₪${Math.round(totalValue).toLocaleString()}`, centerX, centerY + 14);
+                        ctx.restore();
+                    }
+                }]
+            });
+
+            // Geography chart
+            sectorGeoCharts.geo = new Chart(geoCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: geoEntries.map(e => e[0]),
+                    datasets: [{
+                        data: geoEntries.map(e => e[1]),
+                        backgroundColor: geoColors.slice(0, geoEntries.length),
+                        borderColor: geoBorders.slice(0, geoEntries.length),
+                        borderWidth: 3,
+                        hoverOffset: 15,
+                    }]
+                },
+                options: chartOptions(totalValue, geoColors),
+                plugins: [{
+                    id: 'geoCenterText',
+                    afterDraw(chart) {
+                        const { ctx } = chart;
+                        const meta = chart.getDatasetMeta(0);
+                        if (!meta.data.length) return;
+                        const centerX = (meta.data[0].x);
+                        const centerY = (meta.data[0].y);
+                        ctx.save();
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillStyle = textColor;
+                        ctx.font = "bold 15px 'Heebo', sans-serif";
+                        ctx.fillText(`${geoEntries.length} אזורים`, centerX, centerY - 10);
+                        ctx.font = "600 18px 'JetBrains Mono', monospace";
+                        ctx.fillStyle = isDarkMode ? 'hsl(210, 80%, 60%)' : 'hsl(210, 80%, 45%)';
+                        ctx.fillText(`₪${Math.round(totalValue).toLocaleString()}`, centerX, centerY + 14);
+                        ctx.restore();
+                    }
+                }]
+            });
         }
         
         function drawTreemap() {

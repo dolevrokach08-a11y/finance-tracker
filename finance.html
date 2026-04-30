@@ -1117,6 +1117,9 @@
                     <button onclick="showReportSubTab('spending-heatmap')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         🗓️ מפת חום הוצאות
                     </button>
+                    <button onclick="showReportSubTab('yoy')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📊 השוואה שנתית
+                    </button>
                 </div>
 
                 <!-- סקירה כללית (הגרפים הקיימים) -->
@@ -1257,6 +1260,37 @@
                             <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">📊 מגמת הוצאות</div>
                             <div id="heatmap-kpi-trend" style="font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">-</div>
                             <div id="heatmap-kpi-trend-detail" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px;">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Year-over-Year Comparison -->
+                <div id="report-yoy" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="hsl(142, 60%, 50%)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                            השוואה שנתית — הוצאות חודשיות השנה מול שנה שעברה
+                        </h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">גרף עמודות מקובצות: כל חודש מציג את ההוצאות של השנה הנוכחית (ירוק) לעומת שנה שעברה (אפור)</p>
+                        <div style="position: relative; height: 420px;">
+                            <canvas id="yoy-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                        <div class="glass p-4" style="border-right: 3px solid hsl(210, 80%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">📊 סה"כ השנה vs שנה שעברה</div>
+                            <div id="yoy-kpi-total" style="font-size: 1.3rem; font-weight: 700; color: var(--text-primary);">-</div>
+                            <div id="yoy-kpi-total-change" style="font-size: 0.85rem; font-family: 'JetBrains Mono', monospace; margin-top: 2px;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(142, 60%, 50%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">🏆 חודש עם השיפור הגדול ביותר</div>
+                            <div id="yoy-kpi-best" style="font-size: 1.3rem; font-weight: 700; color: hsl(142, 60%, 50%);">-</div>
+                            <div id="yoy-kpi-best-detail" style="font-size: 0.85rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">-</div>
+                        </div>
+                        <div class="glass p-4" style="border-right: 3px solid hsl(0, 72%, 55%);">
+                            <div class="text-sm" style="color: var(--text-muted); margin-bottom: 4px;">⚠️ חודש עם העלייה הגדולה ביותר</div>
+                            <div id="yoy-kpi-worst" style="font-size: 1.3rem; font-weight: 700; color: hsl(0, 72%, 55%);">-</div>
+                            <div id="yoy-kpi-worst-detail" style="font-size: 0.85rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px;">-</div>
                         </div>
                     </div>
                 </div>
@@ -2341,6 +2375,8 @@
                 renderSavingsRateChart();
             } else if (subTab === 'spending-heatmap') {
                 renderSpendingHeatmap();
+            } else if (subTab === 'yoy') {
+                renderYearOverYearChart();
             }
         }
 
@@ -5217,6 +5253,188 @@
                     trendEl.textContent = '-';
                     trendDetailEl.textContent = 'אין מספיק נתונים';
                 }
+            }
+        }
+
+        // ========== Year-over-Year Comparison Chart ==========
+        function renderYearOverYearChart() {
+            const canvas = document.getElementById('yoy-chart');
+            if (!canvas) return;
+            if (charts.yoy) charts.yoy.destroy();
+
+            const isDarkMode = document.documentElement.getAttribute('data-theme') !== 'light';
+            const gridColor = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
+            const textColor = isDarkMode ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)';
+
+            const now = new Date();
+            const thisYear = now.getFullYear();
+            const lastYear = thisYear - 1;
+
+            const hebrewMonths = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
+
+            const thisYearData = new Array(12).fill(0);
+            const lastYearData = new Array(12).fill(0);
+
+            if (data.transactions && data.transactions.length > 0) {
+                data.transactions.forEach(t => {
+                    if (t.type !== 'expense' || !t.month) return;
+                    const parts = t.month.split('-');
+                    const year = parseInt(parts[0]);
+                    const month = parseInt(parts[1]) - 1; // 0-indexed
+                    if (year === thisYear && month >= 0 && month < 12) {
+                        thisYearData[month] += (t.amt || 0);
+                    } else if (year === lastYear && month >= 0 && month < 12) {
+                        lastYearData[month] += (t.amt || 0);
+                    }
+                });
+            }
+
+            charts.yoy = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: hebrewMonths,
+                    datasets: [
+                        {
+                            label: `${thisYear}`,
+                            data: thisYearData,
+                            backgroundColor: 'hsla(142, 60%, 50%, 0.75)',
+                            borderColor: 'hsl(142, 60%, 50%)',
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            borderSkipped: false,
+                            barPercentage: 0.75,
+                            categoryPercentage: 0.7,
+                        },
+                        {
+                            label: `${lastYear}`,
+                            data: lastYearData,
+                            backgroundColor: isDarkMode ? 'hsla(215, 12%, 45%, 0.5)' : 'hsla(215, 12%, 65%, 0.45)',
+                            borderColor: isDarkMode ? 'hsl(215, 12%, 52%)' : 'hsl(215, 12%, 55%)',
+                            borderWidth: 2,
+                            borderRadius: 6,
+                            borderSkipped: false,
+                            barPercentage: 0.75,
+                            categoryPercentage: 0.7,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: textColor,
+                                font: { family: "'Heebo', sans-serif", size: 13, weight: '600' },
+                                usePointStyle: true,
+                                padding: 20,
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            backgroundColor: isDarkMode ? 'hsl(220, 18%, 12%)' : 'hsl(0, 0%, 100%)',
+                            titleColor: isDarkMode ? 'hsl(210, 20%, 92%)' : 'hsl(220, 10%, 20%)',
+                            bodyColor: isDarkMode ? 'hsl(210, 20%, 80%)' : 'hsl(220, 10%, 40%)',
+                            borderColor: isDarkMode ? 'hsl(220, 14%, 22%)' : 'hsl(220, 10%, 85%)',
+                            borderWidth: 1,
+                            cornerRadius: 10,
+                            padding: 12,
+                            callbacks: {
+                                label: function(ctx) {
+                                    return `${ctx.dataset.label}: ₪${Math.round(ctx.parsed.y).toLocaleString()}`;
+                                },
+                                afterBody: function(items) {
+                                    if (items.length < 2) return '';
+                                    const monthIdx = items[0].dataIndex;
+                                    const ty = thisYearData[monthIdx];
+                                    const ly = lastYearData[monthIdx];
+                                    if (ly > 0) {
+                                        const change = ((ty - ly) / ly * 100).toFixed(1);
+                                        const sign = change >= 0 ? '+' : '';
+                                        return `\nשינוי: ${sign}${change}%`;
+                                    }
+                                    return '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: textColor, font: { family: "'Heebo', sans-serif", size: 12 } },
+                            grid: { color: gridColor }
+                        },
+                        y: {
+                            ticks: {
+                                color: textColor,
+                                font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                callback: v => '₪' + Math.round(v).toLocaleString()
+                            },
+                            grid: { color: gridColor }
+                        }
+                    }
+                }
+            });
+
+            // ---- KPI Cards ----
+            const totalThis = thisYearData.reduce((s, v) => s + v, 0);
+            const totalLast = lastYearData.reduce((s, v) => s + v, 0);
+
+            const totalEl = document.getElementById('yoy-kpi-total');
+            const totalChangeEl = document.getElementById('yoy-kpi-total-change');
+            if (totalEl) {
+                totalEl.textContent = `₪${Math.round(totalThis).toLocaleString()} vs ₪${Math.round(totalLast).toLocaleString()}`;
+            }
+            if (totalChangeEl) {
+                if (totalLast > 0) {
+                    const pctChange = ((totalThis - totalLast) / totalLast * 100).toFixed(1);
+                    const sign = pctChange >= 0 ? '+' : '';
+                    totalChangeEl.textContent = `שינוי: ${sign}${pctChange}%`;
+                    totalChangeEl.style.color = pctChange <= 0 ? 'hsl(142, 60%, 50%)' : 'hsl(0, 72%, 55%)';
+                } else {
+                    totalChangeEl.textContent = 'אין נתונים משנה שעברה';
+                    totalChangeEl.style.color = 'var(--text-muted)';
+                }
+            }
+
+            // Best month (biggest improvement = biggest decrease in expenses)
+            let bestMonth = -1, bestImprovement = Infinity;
+            let worstMonth = -1, worstIncrease = -Infinity;
+
+            for (let i = 0; i < 12; i++) {
+                if (lastYearData[i] > 0 && thisYearData[i] >= 0) {
+                    const change = thisYearData[i] - lastYearData[i];
+                    if (change < bestImprovement) {
+                        bestImprovement = change;
+                        bestMonth = i;
+                    }
+                    if (change > worstIncrease) {
+                        worstIncrease = change;
+                        worstMonth = i;
+                    }
+                }
+            }
+
+            const bestEl = document.getElementById('yoy-kpi-best');
+            const bestDetailEl = document.getElementById('yoy-kpi-best-detail');
+            if (bestEl && bestMonth >= 0) {
+                bestEl.textContent = hebrewMonths[bestMonth];
+                const pct = ((bestImprovement / lastYearData[bestMonth]) * 100).toFixed(1);
+                bestDetailEl.textContent = `חיסכון של ₪${Math.abs(Math.round(bestImprovement)).toLocaleString()} (${pct}%)`;
+            } else if (bestEl) {
+                bestEl.textContent = '-';
+                bestDetailEl.textContent = 'אין מספיק נתונים להשוואה';
+            }
+
+            const worstEl = document.getElementById('yoy-kpi-worst');
+            const worstDetailEl = document.getElementById('yoy-kpi-worst-detail');
+            if (worstEl && worstMonth >= 0) {
+                worstEl.textContent = hebrewMonths[worstMonth];
+                const pct = ((worstIncrease / lastYearData[worstMonth]) * 100).toFixed(1);
+                worstDetailEl.textContent = `עלייה של ₪${Math.round(worstIncrease).toLocaleString()} (+${pct}%)`;
+            } else if (worstEl) {
+                worstEl.textContent = '-';
+                worstDetailEl.textContent = 'אין מספיק נתונים להשוואה';
             }
         }
 
