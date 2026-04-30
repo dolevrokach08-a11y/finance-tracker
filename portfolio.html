@@ -2458,6 +2458,22 @@
                         <div class="kpi-desc">תשואה משוקללת כסף · <span style="color: var(--profit);">כולל timing</span></div>
                     </div>
 
+                    <!-- Sortino Ratio Card -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(180, 70%, 45%, 0.12);"><i data-lucide="shield-check" style="width:22px;height:22px;color:#0d9488;"></i></div>
+                        <div class="kpi-label">Sortino Ratio</div>
+                        <div class="kpi-value" id="sortino-ratio" style="color: #0d9488;">-</div>
+                        <div class="kpi-desc">תשואה מול סיכון שלילי · <span style="color: var(--profit);">↑ יותר טוב</span></div>
+                    </div>
+
+                    <!-- Portfolio Beta Card -->
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: hsla(330, 65%, 50%, 0.12);"><i data-lucide="gauge" style="width:22px;height:22px;color:#db2777;"></i></div>
+                        <div class="kpi-label">Beta</div>
+                        <div class="kpi-value" id="portfolio-beta" style="color: #db2777;">-</div>
+                        <div class="kpi-desc">סיכון שיטתי מול שוק · <span style="color: var(--text-muted);">1.0 = כמו השוק</span></div>
+                    </div>
+
                 </div>
 
                 <!-- Treemap Section -->
@@ -12198,6 +12214,8 @@ ${msg}`, 'warning');
             if (holdings.length === 0) {
                 return {
                     sharpeRatio: 0,
+                    sortinoRatio: 0,
+                    beta: 'N/A',
                     maxDrawdown: 0,
                     volatility: 0,
                     winRate: 0,
@@ -12233,17 +12251,43 @@ ${msg}`, 'warning');
             const volatility = Math.sqrt(variance);
             
             // Sharpe Ratio (simplified: avg return / volatility)
-            // Assuming risk-free rate = 0 for simplicity
             const sharpeRatio = volatility > 0 ? avgReturn / volatility : 0;
-            
+
+            // Sortino Ratio — only penalizes downside volatility
+            const negativeReturns = returns.filter(r => r < 0);
+            const downsideVariance = negativeReturns.length > 0
+                ? negativeReturns.map(r => r * r).reduce((a, b) => a + b, 0) / returns.length
+                : 0;
+            const downsideDeviation = Math.sqrt(downsideVariance);
+            const sortinoRatio = downsideDeviation > 0 ? avgReturn / downsideDeviation : (avgReturn > 0 ? Infinity : 0);
+
+            // Portfolio Beta — covariance with market / variance of market
+            let beta = null;
+            try {
+                const benchmarks = JSON.parse(localStorage.getItem('portfolio_cachedBenchmarks') || '{}');
+                const marketReturn = benchmarks?.acwi?.returnPct ?? benchmarks?.spy?.returnPct ?? null;
+                if (marketReturn !== null && volatility > 0) {
+                    const marketReturns = returns.map(() => marketReturn / returns.length);
+                    const avgMarket = marketReturn / returns.length;
+                    let cov = 0, varMarket = 0;
+                    for (let i = 0; i < returns.length; i++) {
+                        cov += (returns[i] - avgReturn) * (marketReturns[i] - avgMarket);
+                        varMarket += (marketReturns[i] - avgMarket) ** 2;
+                    }
+                    beta = varMarket > 0 ? cov / varMarket : null;
+                }
+            } catch { /* benchmark data not available */ }
+
             // Max Drawdown (simplified: worst single holding performance)
             const maxDrawdown = returns.length > 0 ? Math.min(...returns) : 0;
-            
+
             // Calculate MWR (Money-Weighted Return)
             const mwr = calculateMWR();
-            
+
             return {
                 sharpeRatio: sharpeRatio.toFixed(2),
+                sortinoRatio: isFinite(sortinoRatio) ? sortinoRatio.toFixed(2) : '∞',
+                beta: beta !== null ? beta.toFixed(2) : 'N/A',
                 maxDrawdown: maxDrawdown.toFixed(2) + '%',
                 volatility: volatility.toFixed(2) + '%',
                 winRate: winRate.toFixed(1) + '%',
@@ -12266,6 +12310,11 @@ ${msg}`, 'warning');
             if (volatilityEl) volatilityEl.textContent = metrics.volatility;
             if (winRateEl) winRateEl.textContent = metrics.winRate;
             if (mwrEl) mwrEl.textContent = metrics.mwr;
+
+            const sortinoEl = document.getElementById('sortino-ratio');
+            const betaEl = document.getElementById('portfolio-beta');
+            if (sortinoEl) sortinoEl.textContent = metrics.sortinoRatio;
+            if (betaEl) betaEl.textContent = metrics.beta;
             
             // Draw Treemap
             drawTreemap();
