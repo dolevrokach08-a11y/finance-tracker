@@ -252,81 +252,86 @@
             -webkit-font-smoothing: antialiased;
         }
         
-        .glass { 
+        .glass {
             background: var(--bg-surface);
             border-radius: var(--radius-lg);
             box-shadow: var(--shadow-lg);
             border: 1px solid var(--border);
-            transition: all 0.2s ease;
+            transition: var(--transition);
         }
-        
+
         .glass:hover {
             border-color: var(--border-accent);
+            box-shadow: var(--shadow-xl);
         }
-        
-        .tab-active { 
+
+        .tab-active {
             background: var(--accent-dim);
             color: var(--accent);
             border: 1px solid var(--accent);
         }
-        
-        .btn { 
-            transition: all 0.15s ease;
+
+        .btn {
+            transition: var(--transition-fast);
             border: none;
             cursor: pointer;
             font-family: inherit;
         }
-        
-        .btn:hover { 
+
+        .btn:hover {
             transform: translateY(-1px);
+            box-shadow: var(--shadow-sm);
         }
-        
-        .btn-primary { 
+
+        .btn-primary {
             background: var(--accent);
             color: var(--bg-base);
         }
-        
-        .btn-success { 
+
+        .btn-success {
             background: var(--profit);
             color: var(--bg-base);
         }
-        
-        .btn-danger { 
+
+        .btn-danger {
             background: var(--bg-surface); border: 1px solid var(--loss);
-            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+            box-shadow: var(--shadow-sm);
         }
-        
-        .item-income { 
+
+        .item-income {
             border-right: 3px solid var(--success);
             background: rgba(16,185,129,0.08);
-            transition: all 0.2s ease;
+            transition: var(--transition);
             border-radius: var(--radius-md);
         }
-        
+
         .item-income:hover {
             background: rgba(16,185,129,0.15);
+            transform: translateX(-2px);
         }
-        
-        .item-expense { 
+
+        .item-expense {
             border-right: 3px solid var(--danger);
             background: rgba(239,68,68,0.08);
-            transition: all 0.2s ease;
+            transition: var(--transition);
             border-radius: var(--radius-md);
         }
-        
+
         .item-expense:hover {
             background: rgba(239,68,68,0.15);
+            transform: translateX(-2px);
         }
-        
-        .item-tithe { 
+
+        .item-tithe {
             border-right: 3px solid #8b5cf6;
             background: rgba(139,92,246,0.08);
-            transition: all 0.2s ease;
+            transition: var(--transition);
             border-radius: var(--radius-md);
         }
-        
+
         .item-tithe:hover {
             background: rgba(139,92,246,0.15);
+            transform: translateX(-2px);
         }
         
         input:focus, select:focus { 

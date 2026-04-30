@@ -650,7 +650,7 @@
             padding: 20px 24px;
             border-radius: var(--radius);
             border: 1px solid var(--border);
-            transition: all 0.2s ease;
+            transition: var(--transition);
             position: relative;
             overflow: hidden;
         }
@@ -661,8 +661,8 @@
 
         .summary-card:hover {
             border-color: var(--border-accent);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
         }
 
         .summary-card.green,
@@ -678,7 +678,7 @@
         .summary-card.blue:hover,
         .summary-card.orange:hover {
             border-color: var(--border-accent);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            box-shadow: var(--shadow-md);
         }
 
         .summary-card h3 {
@@ -766,9 +766,9 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             margin-bottom: 8px;
-            transition: all 0.15s ease;
+            transition: var(--transition-fast);
         }
-        .tx-card:hover { border-color: var(--border-accent); }
+        .tx-card:hover { border-color: var(--border-accent); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
         .tx-card .tx-icon {
             width: 40px;
             height: 40px;
@@ -805,9 +805,9 @@
             border-radius: var(--radius);
             padding: 24px 20px;
             text-align: center;
-            transition: all 0.2s ease;
+            transition: var(--transition);
         }
-        .kpi-card:hover { border-color: var(--border-accent); transform: translateY(-1px); }
+        .kpi-card:hover { border-color: var(--border-accent); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
         .kpi-card .kpi-icon {
             width: 48px;
             height: 48px;
@@ -829,11 +829,12 @@
             border-radius: var(--radius);
             padding: 24px;
             margin-bottom: 16px;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: var(--transition);
         }
         .section-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-accent);
         }
         .section-card .section-title {
             font-size: 1rem;
@@ -1218,37 +1219,53 @@
             border-radius: var(--radius);
             overflow: hidden;
         }
-        
+
         thead {
             background: var(--bg-elevated);
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
-        
+
         thead th {
             padding: 14px 16px;
             text-align: right;
-            font-weight: 500;
+            font-weight: 600;
             font-size: 0.75rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             color: var(--text-muted);
-            border-bottom: 1px solid var(--border);
+            border-bottom: 2px solid var(--border);
         }
-        
+
         tbody td {
             padding: 14px 16px;
             border-bottom: 1px solid var(--border);
             color: var(--text-primary);
             font-size: 0.9rem;
         }
-        
-        tbody tr {
-            transition: background 0.15s ease;
+
+        tbody td.cell-numeric {
+            font-family: 'JetBrains Mono', monospace;
+            text-align: left;
+            direction: ltr;
+            font-variant-numeric: tabular-nums;
         }
-        
+
+        tbody tr {
+            transition: var(--transition-fast);
+            border-right: 3px solid transparent;
+        }
+
+        tbody tr:nth-child(odd) {
+            background: rgba(255, 255, 255, 0.015);
+        }
+
         tbody tr:hover {
             background: var(--bg-hover);
+            border-right-color: var(--accent);
         }
-        
+
         tbody tr:last-child td {
             border-bottom: none;
         }
@@ -2150,7 +2167,7 @@
                     </div>
 
                     <!-- Main Summary Cards - Lovable Style -->
-                    <div class="summary-grid">
+                    <div class="summary-grid stagger-in">
                         <div class="summary-card">
                             <div class="card-icon purple"><i data-lucide="trending-up" style="width:20px;height:20px;"></i></div>
                             <h3>תשואה כוללת (TWR)</h3>
@@ -2399,7 +2416,7 @@
                 </div>
 
                 <!-- KPI Cards Section - Lovable Style -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px;">
+                <div class="stagger-in" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 30px;">
 
                     <!-- Sharpe Ratio Card -->
                     <div class="kpi-card">
