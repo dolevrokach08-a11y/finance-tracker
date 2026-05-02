@@ -1123,6 +1123,12 @@
                     <button onclick="showReportSubTab('debt-compare')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         ⛷️ שלג vs מפולת
                     </button>
+                    <button onclick="showReportSubTab('fixed-vs-disc')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📌 קבוע vs גמיש
+                    </button>
+                    <button onclick="showReportSubTab('category-trends')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📉 מגמות קטגוריות
+                    </button>
                 </div>
 
                 <!-- סקירה כללית (הגרפים הקיימים) -->
@@ -1374,6 +1380,44 @@
                         <div style="font-size: 3rem; margin-bottom: 12px;">🎉</div>
                         <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-primary);">אין חובות להשוואה</div>
                         <div style="color: var(--text-muted); margin-top: 6px;">הוסף חובות בטאב "סימולטור חובות" כדי לראות השוואה כאן</div>
+                    </div>
+                </div>
+
+                <!-- קבוע vs גמיש -->
+                <div id="report-fixed-vs-disc" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">📌 הוצאות קבועות מול גמישות</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">כמה מההוצאות שלך קבועות (שכירות, ביטוח...) וכמה גמישות (מסעדות, קניות...) — ככל שהחלק הגמיש גדול יותר, יש לך יותר מרחב לקצץ</p>
+                        <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+                            <div style="width: 280px; height: 280px; flex-shrink: 0;">
+                                <canvas id="fixed-disc-chart"></canvas>
+                            </div>
+                            <div style="flex: 1; min-width: 200px;">
+                                <div class="glass p-4 mb-3" style="border-right: 3px solid hsl(210,80%,55%);">
+                                    <div class="text-sm" style="color: var(--text-muted);">הוצאות קבועות</div>
+                                    <div id="fd-fixed-total" style="font-size: 1.3rem; font-weight: 700; color: hsl(210,80%,55%); font-family: 'JetBrains Mono', monospace;">-</div>
+                                </div>
+                                <div class="glass p-4 mb-3" style="border-right: 3px solid hsl(38,80%,55%);">
+                                    <div class="text-sm" style="color: var(--text-muted);">הוצאות גמישות</div>
+                                    <div id="fd-disc-total" style="font-size: 1.3rem; font-weight: 700; color: hsl(38,80%,55%); font-family: 'JetBrains Mono', monospace;">-</div>
+                                </div>
+                                <div class="glass p-4" style="border-right: 3px solid var(--accent);">
+                                    <div class="text-sm" style="color: var(--text-muted);">גמישות תקציבית</div>
+                                    <div id="fd-ratio" style="font-size: 1.3rem; font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace;">-</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- מגמות קטגוריות -->
+                <div id="report-category-trends" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">📉 מגמות הוצאה לפי קטגוריה</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">Top 5 קטגוריות — לזהות מה עולה ומה יורד לאורך זמן</p>
+                        <div style="height: 400px; position: relative;">
+                            <canvas id="category-trends-chart"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -2462,6 +2506,10 @@
                 renderYearOverYearChart();
             } else if (subTab === 'debt-compare') {
                 renderDebtComparison();
+            } else if (subTab === 'fixed-vs-disc') {
+                renderFixedVsDiscretionary();
+            } else if (subTab === 'category-trends') {
+                renderCategoryTrends();
             }
         }
 
@@ -5339,6 +5387,176 @@
                     trendDetailEl.textContent = 'אין מספיק נתונים';
                 }
             }
+        }
+
+        // ========== Fixed vs Discretionary ==========
+        function renderFixedVsDiscretionary() {
+            const canvas = document.getElementById('fixed-disc-chart');
+            if (!canvas) return;
+
+            const months = getReportMonths();
+            const monthKeys = months.map(m => m.key);
+
+            // Fixed expenses: sum from fixedExpenses that are active in the period
+            let fixedTotal = 0;
+            (data.fixedExpenses || []).forEach(f => {
+                const activeMonths = getMonthsInRange(f.start, f.end).filter(m => monthKeys.includes(m));
+                fixedTotal += (f.amount || 0) * activeMonths.length;
+            });
+
+            // All expenses in period
+            let allExpenseTotal = 0;
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+                allExpenseTotal += t.amt || 0;
+            });
+            // Add fixed expenses to total (they may not be in transactions)
+            const totalExpenses = allExpenseTotal + fixedTotal;
+            const discretionaryTotal = Math.max(0, allExpenseTotal); // transactions are the discretionary part
+            const n = monthKeys.length || 1;
+
+            if (totalExpenses === 0) {
+                document.getElementById('fd-fixed-total').textContent = '₪0';
+                document.getElementById('fd-disc-total').textContent = '₪0';
+                document.getElementById('fd-ratio').textContent = '-';
+                return;
+            }
+
+            document.getElementById('fd-fixed-total').textContent = '₪' + Math.round(fixedTotal / n).toLocaleString('he-IL') + '/חודש';
+            document.getElementById('fd-disc-total').textContent = '₪' + Math.round(discretionaryTotal / n).toLocaleString('he-IL') + '/חודש';
+            const discPct = ((discretionaryTotal / (totalExpenses)) * 100).toFixed(0);
+            document.getElementById('fd-ratio').textContent = discPct + '% גמיש';
+
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            if (charts.fixedDisc) charts.fixedDisc.destroy();
+            charts.fixedDisc = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['הוצאות קבועות', 'הוצאות גמישות'],
+                    datasets: [{
+                        data: [fixedTotal, discretionaryTotal],
+                        backgroundColor: ['hsl(210,80%,55%)', 'hsl(38,80%,55%)'],
+                        borderColor: isDark ? 'hsl(220,18%,13%)' : '#fff',
+                        borderWidth: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            rtl: true,
+                            labels: {
+                                color: isDark ? 'hsl(210,20%,75%)' : 'hsl(220,12%,42%)',
+                                font: { family: "'Heebo', sans-serif", size: 13 },
+                                padding: 16,
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => {
+                                    const val = ctx.raw;
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = ((val / total) * 100).toFixed(1);
+                                    return ` ₪${Math.round(val).toLocaleString('he-IL')} (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== Category Spending Trends ==========
+        function renderCategoryTrends() {
+            const canvas = document.getElementById('category-trends-chart');
+            if (!canvas) return;
+
+            const months = getReportMonths();
+            const monthKeys = months.map(m => m.key);
+            const monthLabels = months.map(m => m.name);
+
+            // Aggregate expenses by category × month
+            const catMap = {};
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+                const cat = t.cat || 'אחר';
+                if (!catMap[cat]) catMap[cat] = {};
+                catMap[cat][t.month] = (catMap[cat][t.month] || 0) + (t.amt || 0);
+            });
+
+            // Top 5 categories by total
+            const sorted = Object.entries(catMap).map(([cat, months]) => ({
+                cat,
+                total: Object.values(months).reduce((a, b) => a + b, 0),
+                data: months
+            })).sort((a, b) => b.total - a.total).slice(0, 5);
+
+            if (sorted.length === 0) return;
+
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const palette = [
+                'hsl(142,60%,50%)', 'hsl(210,80%,55%)', 'hsl(38,80%,55%)',
+                'hsl(280,60%,55%)', 'hsl(0,70%,55%)'
+            ];
+
+            const datasets = sorted.map((item, i) => ({
+                label: item.cat,
+                data: monthKeys.map(m => item.data[m] || 0),
+                borderColor: palette[i],
+                backgroundColor: palette[i] + '22',
+                tension: 0.3,
+                fill: false,
+                borderWidth: 2.5,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+            }));
+
+            if (charts.catTrends) charts.catTrends.destroy();
+            charts.catTrends = new Chart(canvas, {
+                type: 'line',
+                data: { labels: monthLabels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            rtl: true,
+                            labels: {
+                                color: isDark ? 'hsl(210,20%,75%)' : 'hsl(220,12%,42%)',
+                                font: { family: "'Heebo', sans-serif", size: 12 },
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => ` ${ctx.dataset.label}: ₪${Math.round(ctx.raw).toLocaleString('he-IL')}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)', font: { family: "'Heebo', sans-serif", size: 11 } },
+                            grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)',
+                                font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                callback: v => '₪' + (v >= 1000 ? Math.round(v / 1000) + 'K' : v)
+                            },
+                            grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }
+                        }
+                    }
+                }
+            });
         }
 
         // ========== Year-over-Year Comparison Chart ==========

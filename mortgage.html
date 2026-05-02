@@ -323,6 +323,7 @@ tr:hover td{background:var(--bg-elevated);}
   .nav-tab{font-size:11px;padding:6px 12px;flex-shrink:0;}
   .container{padding:12px;}
   .four-col{grid-template-columns:repeat(2,1fr);}
+  .summary-metrics-grid{grid-template-columns:repeat(2,1fr) !important;}
   .three-col{grid-template-columns:1fr;}
   .tranche-grid{grid-template-columns:1fr;}
   .sc-row{grid-template-columns:1fr;gap:0;}
@@ -335,6 +336,7 @@ tr:hover td{background:var(--bg-elevated);}
 }
 @media(max-width:480px){
   .four-col{grid-template-columns:1fr 1fr;}
+  .summary-metrics-grid{grid-template-columns:1fr 1fr !important;}
   .nav-tab{font-size:10px;padding:5px 8px;}
 }
 </style>
@@ -414,11 +416,22 @@ tr:hover td{background:var(--bg-elevated);}
     </div>
 
     <div>
-      <div class="four-col" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;" class="summary-metrics-grid">
         <div class="metric-card"><div class="m-label">יתרת קרן</div><div class="m-val" id="sum-principal">—</div><div class="m-sub">ש"ח</div></div>
         <div class="metric-card"><div class="m-label">החזר חודשי</div><div class="m-val" id="sum-monthly">—</div><div class="m-sub">ש"ח</div></div>
         <div class="metric-card"><div class="m-label">ריבית ממוצעת</div><div class="m-val" id="sum-rate">—</div><div class="m-sub">משוקללת</div></div>
         <div class="metric-card"><div class="m-label">סה"כ ריבית</div><div class="m-val" id="sum-total-interest">—</div><div class="m-sub">עד סיום</div></div>
+        <div class="metric-card" id="affordability-card">
+          <div class="m-label">🏠 יחס החזר מהכנסה</div>
+          <div class="m-val" id="affordability-ratio">—</div>
+          <div class="m-sub" id="affordability-status">הזן הכנסה חודשית</div>
+          <div style="margin-top:8px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+            <div id="affordability-bar" style="height:100%;width:0%;border-radius:3px;transition:width 0.4s,background 0.4s;"></div>
+          </div>
+          <input type="number" id="monthly-income-input" placeholder="הכנסה חודשית נטו"
+            style="margin-top:8px;width:100%;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg-base);color:var(--text);font-family:'Heebo',sans-serif;font-size:11px;text-align:center;direction:rtl;"
+            oninput="updateAffordabilityRatio()">
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:16px;">
@@ -1135,6 +1148,13 @@ window.loadFirebaseData = function(state) {
   const taxSellEl = document.getElementById('tax-shevach-sell');
   if (taxSellEl && mortgageState.taxShevachSell) taxSellEl.value = mortgageState.taxShevachSell;
 
+  // Restore saved monthly income for affordability ratio
+  const savedIncome = localStorage.getItem('mortgage_monthly_income');
+  if (savedIncome) {
+    const incomeInput = document.getElementById('monthly-income-input');
+    if (incomeInput) incomeInput.value = savedIncome;
+  }
+
   renderCurrentTranches();
   updateCurrentSummary();
 
@@ -1421,6 +1441,51 @@ function resetToMyMortgage() {
   showToast('אופס למשכנתא המקורית');
 }
 
+function updateAffordabilityRatio() {
+  const incomeInput = document.getElementById('monthly-income-input');
+  const ratioEl = document.getElementById('affordability-ratio');
+  const statusEl = document.getElementById('affordability-status');
+  const barEl = document.getElementById('affordability-bar');
+  if (!incomeInput || !ratioEl) return;
+
+  const income = parseFloat(incomeInput.value);
+  if (!income || income <= 0) {
+    ratioEl.textContent = '—';
+    statusEl.textContent = 'הזן הכנסה חודשית';
+    barEl.style.width = '0%';
+    barEl.style.background = 'transparent';
+    localStorage.removeItem('mortgage_monthly_income');
+    return;
+  }
+
+  localStorage.setItem('mortgage_monthly_income', income);
+  const total = currentTranches.reduce((s, t) => s + t.principal, 0);
+  if (!total) return;
+  const monthly = currentTranches.reduce((s, t) => s + pmt(t.rate, t.months, t.principal), 0);
+  const ratio = (monthly / income) * 100;
+
+  ratioEl.textContent = ratio.toFixed(1) + '%';
+  barEl.style.width = Math.min(ratio, 100) + '%';
+
+  if (ratio <= 25) {
+    barEl.style.background = 'var(--green, #10b981)';
+    statusEl.textContent = '✅ מצוין — עומס נמוך';
+    ratioEl.style.color = 'var(--green, #10b981)';
+  } else if (ratio <= 33) {
+    barEl.style.background = 'var(--accent, #22d3ee)';
+    statusEl.textContent = '👍 סביר — בגבול המומלץ';
+    ratioEl.style.color = 'var(--accent, #22d3ee)';
+  } else if (ratio <= 40) {
+    barEl.style.background = '#f59e0b';
+    statusEl.textContent = '⚠️ גבוה — מעל המלצת בנק ישראל';
+    ratioEl.style.color = '#f59e0b';
+  } else {
+    barEl.style.background = 'var(--red, #ef4444)';
+    statusEl.textContent = '🚨 מסוכן — עומס כבד מאוד';
+    ratioEl.style.color = 'var(--red, #ef4444)';
+  }
+}
+
 function updateCurrentSummary() {
   const total = currentTranches.reduce((s,t)=>s+t.principal,0);
   if(!total) return;
@@ -1478,6 +1543,9 @@ function updateCurrentSummary() {
 
   // Render amortization heatmap
   renderAmortizationHeatmap();
+
+  // Update affordability ratio
+  updateAffordabilityRatio();
 
   // Save everything (localStorage + Firebase + mortgageData for Net Worth)
   saveMortgage();

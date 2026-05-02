@@ -2289,6 +2289,11 @@
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">מזומן פנוי</div>
                                 <div style="font-size: 1.4rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="available-cash-summary">₪0</div>
                             </div>
+                            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">💸 עלות מזומן (שנתי)</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--warning); font-family: 'JetBrains Mono', monospace;" id="cash-drag-value">₪0</div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="cash-drag-pct">0% מהתיק במזומן</div>
+                            </div>
                         </div>
                     </div>
 
@@ -11000,7 +11005,17 @@ ${msg}`, 'warning');
             if (totalDepositsEl) totalDepositsEl.textContent = `₪${Math.round(totalDeposits).toLocaleString()}`;
             if (totalWithdrawalsEl) totalWithdrawalsEl.textContent = `₪${Math.round(totalWithdrawals).toLocaleString()}`;
             if (availableCashSummaryEl) availableCashSummaryEl.textContent = `₪${Math.round(availableCash).toLocaleString()}`;
-            
+
+            // =============================================
+            // UPDATE CASH DRAG KPI
+            // =============================================
+            const cashPct = totalValue > 0 ? (availableCash / totalValue) * 100 : 0;
+            const opportunityCost = availableCash * 0.08; // 8% annual benchmark
+            const cashDragValueEl = document.getElementById('cash-drag-value');
+            const cashDragPctEl = document.getElementById('cash-drag-pct');
+            if (cashDragValueEl) cashDragValueEl.textContent = `₪${Math.round(opportunityCost).toLocaleString()}`;
+            if (cashDragPctEl) cashDragPctEl.textContent = `${cashPct.toFixed(1)}% מהתיק במזומן`;
+
             // =============================================
             // RENDER OTHER SECTIONS
             // =============================================
