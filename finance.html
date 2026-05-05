@@ -1880,9 +1880,38 @@
                                 <option value="expected">צפוי</option>
                                 <option value="optimistic">אופטימי (+10%)</option>
                                 <option value="pessimistic">שמרני (-15%)</option>
+                                <option value="custom">מותאם אישית</option>
                             </select>
                         </div>
                     </div>
+                </div>
+
+                <!-- What-If Scenario Sliders -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h4 class="font-bold mb-3">🎛️ תרחיש מותאם — What If?</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                        <div>
+                            <label class="text-sm text-gray-500">שינוי הכנסות: <strong id="cf-inc-mod-disp">0%</strong></label>
+                            <input type="range" id="cf-inc-mod" min="-30" max="50" value="0" step="1" class="w-full"
+                                   oninput="updateWhatIf()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">שינוי הוצאות: <strong id="cf-exp-mod-disp">0%</strong></label>
+                            <input type="range" id="cf-exp-mod" min="-30" max="50" value="0" step="1" class="w-full"
+                                   oninput="updateWhatIf()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">אירוע חד-פעמי (₪): <strong id="cf-one-time-disp">0</strong></label>
+                            <input type="range" id="cf-one-time" min="-100000" max="100000" value="0" step="1000" class="w-full"
+                                   oninput="updateWhatIf()">
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">שלילי = הוצאה, חיובי = בונוס</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button onclick="resetWhatIf()" class="px-3 py-1 rounded-lg text-sm" style="background: var(--bg-hover, #374151); color: var(--text-secondary, #9ca3af);">איפוס</button>
+                        <button onclick="addScenarioOverlay()" class="px-3 py-1 rounded-lg text-sm" style="background: rgba(59,130,246,0.15); color: #60a5fa;">+ הוסף כשכבה</button>
+                    </div>
+                    <div id="cf-fire-impact" style="margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);"></div>
                 </div>
 
                 <!-- Chart -->
@@ -8351,9 +8380,16 @@
             if(avgExpense === 0) avgExpense = fixedExpense + billsMonthly;
 
             // Scenario adjustments
-            let incMod=1, expMod=1;
+            let incMod=1, expMod=1, oneTimeEvent=0;
             if(scenario==='optimistic') { incMod=1.1; expMod=0.95; }
             else if(scenario==='pessimistic') { incMod=0.9; expMod=1.15; }
+            else if(scenario==='custom') {
+                const incChange = parseFloat(document.getElementById('cf-inc-mod')?.value) || 0;
+                const expChange = parseFloat(document.getElementById('cf-exp-mod')?.value) || 0;
+                incMod = 1 + incChange / 100;
+                expMod = 1 + expChange / 100;
+                oneTimeEvent = parseFloat(document.getElementById('cf-one-time')?.value) || 0;
+            }
 
             // Build forecast
             const labels=[], incomes=[], expenses=[], balances=[], savings=[];
@@ -8366,7 +8402,8 @@
                 labels.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
                 const inc = avgIncome * incMod;
                 const exp = avgExpense * expMod;
-                const saving = inc - exp;
+                let saving = inc - exp;
+                if(i === 0 && oneTimeEvent !== 0) saving += oneTimeEvent;
                 runningBalance += saving;
                 incomes.push(Math.round(inc));
                 expenses.push(Math.round(exp));
@@ -8389,16 +8426,22 @@
             const ctx = document.getElementById('cf-chart');
             if(ctx) {
                 if(cfChart) cfChart.destroy();
+                const datasets = [
+                    { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
+                    { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
+                    { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
+                ];
+                // Add scenario overlay layers
+                (window.scenarioLayers || []).forEach(layer => {
+                    datasets.push({
+                        label: layer.label, data: layer.balances, type: 'line',
+                        borderColor: layer.color, borderDash: [6, 3],
+                        pointRadius: 2, fill: false, tension: 0.3, order: 0, yAxisID: 'y1'
+                    });
+                });
                 cfChart = new Chart(ctx.getContext('2d'), {
                     type:'bar',
-                    data:{
-                        labels,
-                        datasets:[
-                            { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
-                            { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
-                            { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
-                        ]
-                    },
+                    data:{ labels, datasets },
                     options:{
                         responsive:true, maintainAspectRatio:false,
                         plugins:{legend:{position:'top',rtl:true}},
@@ -8422,6 +8465,87 @@
                 </tr>`).join('');
             }
         }
+
+        // ═══════════════ WHAT-IF HELPERS ═══════════════
+        window.scenarioLayers = [];
+
+        function updateWhatIf() {
+            const incVal = document.getElementById('cf-inc-mod').value;
+            const expVal = document.getElementById('cf-exp-mod').value;
+            const oneTime = document.getElementById('cf-one-time').value;
+            document.getElementById('cf-inc-mod-disp').textContent = (incVal >= 0 ? '+' : '') + incVal + '%';
+            document.getElementById('cf-exp-mod-disp').textContent = (expVal >= 0 ? '+' : '') + expVal + '%';
+            document.getElementById('cf-one-time-disp').textContent = parseInt(oneTime).toLocaleString('he-IL');
+            document.getElementById('cf-scenario').value = 'custom';
+            renderCashFlow();
+
+            // FIRE impact estimate
+            const fireEl = document.getElementById('cf-fire-impact');
+            if (fireEl) {
+                const avgSaving = parseInt(document.getElementById('cf-avg-saving')?.textContent?.replace(/[^\d-]/g,'')) || 0;
+                if (avgSaving > 0) {
+                    const annualSaving = avgSaving * 12;
+                    const target = annualSaving * 25;
+                    const yearsToFire = Math.round(Math.log(target / annualSaving + 1) / Math.log(1.07));
+                    fireEl.textContent = `💡 בתרחיש הזה, עצמאות כלכלית בעוד ~${yearsToFire} שנים (הנחת תשואה 7%)`;
+                } else {
+                    fireEl.textContent = '';
+                }
+            }
+        }
+
+        function resetWhatIf() {
+            document.getElementById('cf-inc-mod').value = 0;
+            document.getElementById('cf-exp-mod').value = 0;
+            document.getElementById('cf-one-time').value = 0;
+            document.getElementById('cf-inc-mod-disp').textContent = '0%';
+            document.getElementById('cf-exp-mod-disp').textContent = '0%';
+            document.getElementById('cf-one-time-disp').textContent = '0';
+            document.getElementById('cf-scenario').value = 'expected';
+            window.scenarioLayers = [];
+            document.getElementById('cf-fire-impact').textContent = '';
+            renderCashFlow();
+        }
+
+        function addScenarioOverlay() {
+            const balance = parseFloat(document.getElementById('cf-current-balance')?.value) || 0;
+            const period = parseInt(document.getElementById('cf-period')?.value) || 12;
+            const incChange = parseFloat(document.getElementById('cf-inc-mod')?.value) || 0;
+            const expChange = parseFloat(document.getElementById('cf-exp-mod')?.value) || 0;
+            const oneTime = parseFloat(document.getElementById('cf-one-time')?.value) || 0;
+            const incMod = 1 + incChange / 100;
+            const expMod = 1 + expChange / 100;
+
+            const now = new Date();
+            const months = [];
+            for(let i=1; i<=6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+                months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+            }
+            let totalInc=0, totalExp=0, cnt=0;
+            months.forEach(m => { const s=getMonthSummary(m); if(s.income>0||s.expense>0){totalInc+=s.income;totalExp+=s.expense;cnt++;} });
+            let avgInc = cnt>0 ? totalInc/cnt : 0;
+            let avgExp = cnt>0 ? totalExp/cnt : 0;
+
+            const balances = [];
+            let rb = balance;
+            for(let i=0; i<period; i++) {
+                let saving = avgInc*incMod - avgExp*expMod;
+                if(i===0 && oneTime!==0) saving += oneTime;
+                rb += saving;
+                balances.push(Math.round(rb));
+            }
+
+            const colors = ['#a78bfa','#38d4c8','#f5a623','#ec4899','#84cc16'];
+            const idx = window.scenarioLayers.length;
+            const label = `תרחיש ${idx+1} (${incChange>=0?'+':''}${incChange}%/${expChange>=0?'+':''}${expChange}%)`;
+            window.scenarioLayers.push({ label, balances, color: colors[idx % colors.length] });
+            renderCashFlow();
+        }
+
+        window.updateWhatIf = updateWhatIf;
+        window.resetWhatIf = resetWhatIf;
+        window.addScenarioOverlay = addScenarioOverlay;
 
         // ═══════════════ INCOME GROWTH PROJECTION ═══════════════
         let igpChart = null;
