@@ -4862,7 +4862,8 @@ function calculateTWRv3(startDate = null) {
     // Live period
     const lastSnap = snapshots[snapshots.length - 1];
     const liveStart = (lastSnap.value_before_flow || 0) + (lastSnap.cash_flow || 0);
-    const currentValue = getTotalPortfolioValue();
+    // Exclude pensions from performance metrics — they're tracked for net worth only
+    const currentValue = getTotalPortfolioValueEnhanced();
     
     let liveTWR = 0;
     if (liveStart > 0 && !isNaN(currentValue)) {
@@ -5556,15 +5557,16 @@ function calculateTWRv3(startDate = null) {
         
         // יצירת Snapshot (לפני הפקדה/משיכה!)
         function createSnapshot(triggerType, triggerNote = '', cashFlow = 0, customDate = null) {
+            // Exclude pensions from snapshot values — they're tracked for net worth only
             const snapshot = {
                 id: Date.now(),
                 date: customDate || new Date().toISOString(),
-                value_before_flow: getTotalPortfolioValue(), // שווי התיק לפני זרימת המזומן
+                value_before_flow: getTotalPortfolioValueEnhanced(), // שווי התיק לפני זרימת המזומן (ללא פנסיה)
                 cash_flow: cashFlow, // סכום ההפקדה (+) או המשיכה (-)
                 stocksValue: getTotalValueILS(),
                 bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                 implicitCash: getImplicitCash('all'),
-                totalValue: getTotalPortfolioValue(),
+                totalValue: getTotalPortfolioValueEnhanced(),
                 triggerType: triggerType, // 'deposit' or 'withdrawal'
                 triggerNote: triggerNote
             };
@@ -7915,7 +7917,7 @@ function calculateTWRv3(startDate = null) {
                 if (fundingSource === 'deposit') {
                     const depositAmount = availableCash < 0 ? purchaseAmount : (purchaseAmount - availableCash);
                     
-                    // יצירת snapshot עם שווי לפני הקנייה
+                    // יצירת snapshot עם שווי לפני הקנייה (ללא פנסיה)
                     const snapshot = {
                         id: Date.now() + 2,
                         date: purchaseDate,  // ← תאריך קנייה אמיתי!
@@ -7924,7 +7926,7 @@ function calculateTWRv3(startDate = null) {
                         stocksValue: getTotalValueILS(),
                         bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                         implicitCash: getImplicitCash('all'),
-                        totalValue: getTotalPortfolioValue(),
+                        totalValue: getTotalPortfolioValueEnhanced(),
                         triggerType: 'deposit',
                         triggerNote: `הפקדה לקנייה: ${symbol}`
                     };
@@ -8594,7 +8596,7 @@ ${msg}`, 'warning');
                     stocksValue: getTotalValueILS(),
                     bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                     implicitCash: getImplicitCash('all'),
-                    totalValue: getTotalPortfolioValue(),
+                    totalValue: getTotalPortfolioValueEnhanced(),
                     triggerType: 'deposit',
                     triggerNote: `הפקדה לקנייה: ${bond.symbol}`
                 });
@@ -11801,8 +11803,8 @@ ${msg}`, 'warning');
             // Delete all old snapshots
             portfolio.snapshots = [];
             
-            // Create one new snapshot with current portfolio value
-            const currentValue = getTotalPortfolioValue();
+            // Create one new snapshot with current portfolio value (excluding pensions)
+            const currentValue = getTotalPortfolioValueEnhanced();
             const totalDeposits = portfolio.deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
             
             createSnapshot('fix', 'תיקון פורמט', 0);
@@ -12520,7 +12522,8 @@ ${msg}`, 'warning');
                 }
                 
                 // Current Value: What investor gets back today = POSITIVE
-                const currentValue = getTotalPortfolioValue();
+                // Exclude pensions — they're tracked for net worth, not investment performance
+                const currentValue = getTotalPortfolioValueEnhanced();
                 console.log('🔍 Current Value:', currentValue);
                 values.push(currentValue); // POSITIVE (as if selling everything)
                 dates.push(new Date());
@@ -13895,9 +13898,9 @@ ${msg}`, 'warning');
                 depositsCumulative.push(cumDeposits);
             });
             
-            // הוסף נקודה נוכחית
+            // הוסף נקודה נוכחית (ללא פנסיה — זה גרף ביצועי השקעות מול הפקדות)
             const now = new Date();
-            const currentValue = getTotalPortfolioValue();
+            const currentValue = getTotalPortfolioValueEnhanced();
             labels.push(now.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' }));
             portfolioValues.push(currentValue);
             
@@ -14044,8 +14047,8 @@ ${msg}`, 'warning');
                 return;
             }
             
-            // חישוב שווי כולל
-            let totalValue = getTotalPortfolioValue();
+            // חישוב שווי כולל (ללא פנסיה — בסיס לאחוזי scatter של מניות+אג"ח)
+            let totalValue = getTotalPortfolioValueEnhanced();
             if (totalValue <= 0) totalValue = 1; // למניעת חלוקה באפס
             
             // בניית נתוני scatter
@@ -14304,8 +14307,8 @@ ${msg}`, 'warning');
                 comparisonNote = 'TWR';
                 console.log('📊 Using TWR for comparison:', portfolioReturn.toFixed(2) + '%');
             } else {
-                // Fallback לחישוב פשוט אם אין snapshots
-                const totalValue = getTotalPortfolioValue();
+                // Fallback לחישוב פשוט אם אין snapshots (ללא פנסיה — מבוסס על הפקדות בלבד)
+                const totalValue = getTotalPortfolioValueEnhanced();
                 const totalDeposits = portfolio.deposits.reduce((sum, d) => sum + d.amount, 0);
                 const totalWithdrawals = portfolio.withdrawals.reduce((sum, w) => sum + w.amount, 0);
                 
