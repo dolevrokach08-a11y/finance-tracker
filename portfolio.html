@@ -2247,6 +2247,30 @@
                             </div>
                         </div>
 
+                        <!-- Pensions Card -->
+                        <div class="section-card">
+                            <div class="section-title">
+                                <div class="card-icon" style="width:32px;height:32px;margin-bottom:0;background:rgba(245,166,35,0.12);color:#f5a623;display:flex;align-items:center;justify-content:center;border-radius:8px;"><i data-lucide="landmark" style="width:18px;height:18px;"></i></div>
+                                פנסיות
+                                <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:0.68rem;background:rgba(245,166,35,0.12);color:#f5a623;border:1px solid rgba(245,166,35,0.2);margin-right:8px;">לא נזיל</span>
+                            </div>
+                            <div style="margin-bottom: 12px;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
+                                <div style="font-size: 1.8rem; font-weight: 700; color: #f5a623; font-family: 'JetBrains Mono', monospace;" id="pensions-value">₪0</div>
+                                <div style="font-size: 0.8rem; color: var(--text-muted);" id="pensions-count">0 חסכונות</div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
+                                <div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">👤 שלי</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="pensions-self">₪0</div>
+                                </div>
+                                <div>
+                                    <div style="color: var(--text-muted); font-size: 0.8rem;">👩 אשתי</div>
+                                    <div style="font-weight: 600; color: var(--text-primary);" id="pensions-wife">₪0</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Total Card -->
                         <div class="section-card">
                             <div class="section-title">
@@ -2288,6 +2312,11 @@
                             <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">מזומן פנוי</div>
                                 <div style="font-size: 1.4rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="available-cash-summary">₪0</div>
+                            </div>
+                            <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">💸 עלות מזומן (שנתי)</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--warning); font-family: 'JetBrains Mono', monospace;" id="cash-drag-value">₪0</div>
+                                <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="cash-drag-pct">0% מהתיק במזומן</div>
                             </div>
                         </div>
                     </div>
@@ -2535,36 +2564,6 @@
                     </div>
                 </div>
 
-                <!-- ===== Correlation Heatmap ===== -->
-                <div class="glass" style="padding: 25px; margin-top: 24px;">
-                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
-                        <span style="font-size: 1.5rem;">📈</span>
-                        <span>מטריצת קורלציה</span>
-                    </h3>
-                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
-                        מידת הקשר בין אחזקות התיק — אדום = קורלציה גבוהה, כחול = קורלציה נמוכה/שלילית
-                    </div>
-                    <div style="width: 100%; overflow-x: auto;">
-                        <canvas id="correlation-heatmap-canvas"></canvas>
-                    </div>
-                    <!-- Color legend -->
-                    <div id="correlation-legend" style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">-1.0</span>
-                        <div style="display: flex; height: 18px; border-radius: 4px; overflow: hidden; width: 280px;">
-                            <div style="flex:1; background: #1e40af;"></div>
-                            <div style="flex:1; background: #3b82f6;"></div>
-                            <div style="flex:1; background: #93c5fd;"></div>
-                            <div style="flex:1; background: #e0e7ff;"></div>
-                            <div style="flex:1; background: #fef9c3;"></div>
-                            <div style="flex:1; background: #fbbf24;"></div>
-                            <div style="flex:1; background: #f97316;"></div>
-                            <div style="flex:1; background: #ef4444;"></div>
-                            <div style="flex:1; background: #991b1b;"></div>
-                        </div>
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">+1.0</span>
-                    </div>
-                </div>
-
             </div>
 
 
@@ -2764,6 +2763,48 @@
 
                 <!-- Bonds List -->
                 <div id="bonds-list"></div>
+            </div>
+
+            <!-- Pensions Tab -->
+            <div id="tab-pensions" class="tab-content">
+                <h3 style="margin-bottom: 20px;">🏛️ חסכונות פנסיוניים</h3>
+
+                <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                    <button onclick="showAddPensionForm()" class="btn btn-success">➕ הוסף חיסכון פנסיוני</button>
+                </div>
+
+                <!-- Add Pension Form -->
+                <div id="add-pension-form" style="display: none; margin-bottom: 30px;" class="glass">
+                    <h4 style="margin-bottom: 15px;">הוסף/ערוך חיסכון פנסיוני</h4>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>שם החיסכון</label>
+                            <input type="text" id="pension-name" placeholder="לדוגמה: מקפת הראל">
+                        </div>
+                        <div class="form-group">
+                            <label>בעלות</label>
+                            <select id="pension-owner">
+                                <option value="self">👤 שלי</option>
+                                <option value="wife">👩 אשתי</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>שווי נוכחי (₪)</label>
+                            <input type="number" id="pension-value" step="1" placeholder="150000">
+                        </div>
+                        <div class="form-group">
+                            <label>קבוצת הקצאה</label>
+                            <select id="pension-group"></select>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px; margin-top: 15px;">
+                        <button onclick="savePension()" class="btn btn-success">💾 שמור</button>
+                        <button onclick="hideAddPensionForm()" class="btn" style="background: var(--text-muted);">ביטול</button>
+                    </div>
+                </div>
+
+                <!-- Pensions List -->
+                <div id="pensions-list"></div>
             </div>
 
             <!-- Groups Tab -->
@@ -3229,6 +3270,38 @@
                 <div class="glass" style="margin-bottom: 24px;">
                     <h4 style="margin-bottom: 12px;">📅 לוח שנה — דיבידנדים קרובים</h4>
                     <div id="div-calendar" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
+                </div>
+
+                <!-- Dividend Growth Projection -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">📈 תחזית צמיחת דיבידנדים</h4>
+                    <div style="display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; align-items: end;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">שנות תחזית: <strong id="div-proj-years-disp">10</strong></label>
+                            <input type="range" id="div-proj-years" min="5" max="20" value="10" style="width: 160px;"
+                                   oninput="document.getElementById('div-proj-years-disp').textContent=this.value; renderDivProjection()">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">צמיחה שנתית: <strong id="div-proj-growth-disp">6%</strong></label>
+                            <input type="range" id="div-proj-growth" min="1" max="15" step="0.5" value="6" style="width: 160px;"
+                                   oninput="document.getElementById('div-proj-growth-disp').textContent=this.value+'%'; renderDivProjection()">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">דיבידנד שנתי בסוף התקופה</div>
+                            <div id="div-proj-final" style="font-size: 1.3rem; font-weight: 800; color: var(--accent);">—</div>
+                        </div>
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">סה"כ מצטבר</div>
+                            <div id="div-proj-cumulative" style="font-size: 1.3rem; font-weight: 800; color: var(--info);">—</div>
+                        </div>
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">כיסוי הוצאות חודשיות</div>
+                            <div id="div-proj-coverage" style="font-size: 1.3rem; font-weight: 800; color: var(--warning);">—</div>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 300px;"><canvas id="div-projection-chart"></canvas></div>
                 </div>
 
                 <!-- Dividend History -->
@@ -4789,7 +4862,8 @@ function calculateTWRv3(startDate = null) {
     // Live period
     const lastSnap = snapshots[snapshots.length - 1];
     const liveStart = (lastSnap.value_before_flow || 0) + (lastSnap.cash_flow || 0);
-    const currentValue = getTotalPortfolioValue();
+    // Exclude pensions from performance metrics — they're tracked for net worth only
+    const currentValue = getTotalPortfolioValueEnhanced();
     
     let liveTWR = 0;
     if (liveStart > 0 && !isNaN(currentValue)) {
@@ -5458,11 +5532,13 @@ function calculateTWRv3(startDate = null) {
             
             // ✅ FIX: Use portfolio.cash instead of getImplicitCash for accurate total
             if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
-            const cash = (portfolio.cash.ILS || 0) + 
-                         convertToILS(portfolio.cash.USD || 0, 'USD') + 
+            const cash = (portfolio.cash.ILS || 0) +
+                         convertToILS(portfolio.cash.USD || 0, 'USD') +
                          convertToILS(portfolio.cash.EUR || 0, 'EUR');
-            
-            return stocksValue + bondsValue + cash;
+
+            const pensionsValue = (portfolio.pensions || []).reduce((sum, p) => sum + (p.currentValue || 0), 0);
+
+            return stocksValue + bondsValue + cash + pensionsValue;
         }
         
         // חישוב שווי תיק לפי מחיר קנייה (costBasis) - לשימוש ב-snapshots
@@ -5481,15 +5557,16 @@ function calculateTWRv3(startDate = null) {
         
         // יצירת Snapshot (לפני הפקדה/משיכה!)
         function createSnapshot(triggerType, triggerNote = '', cashFlow = 0, customDate = null) {
+            // Exclude pensions from snapshot values — they're tracked for net worth only
             const snapshot = {
                 id: Date.now(),
                 date: customDate || new Date().toISOString(),
-                value_before_flow: getTotalPortfolioValue(), // שווי התיק לפני זרימת המזומן
+                value_before_flow: getTotalPortfolioValueEnhanced(), // שווי התיק לפני זרימת המזומן (ללא פנסיה)
                 cash_flow: cashFlow, // סכום ההפקדה (+) או המשיכה (-)
                 stocksValue: getTotalValueILS(),
                 bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                 implicitCash: getImplicitCash('all'),
-                totalValue: getTotalPortfolioValue(),
+                totalValue: getTotalPortfolioValueEnhanced(),
                 triggerType: triggerType, // 'deposit' or 'withdrawal'
                 triggerNote: triggerNote
             };
@@ -6716,7 +6793,8 @@ function calculateTWRv3(startDate = null) {
             
             let currentTotalValue;
             try {
-                currentTotalValue = getTotalValueILS();
+                const pensionsVal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+                currentTotalValue = getTotalValueILS() + pensionsVal;
                 console.log('💰 Current total value:', currentTotalValue);
             } catch (e) {
                 console.error('💥 Error in getTotalValueILS:', e);
@@ -6739,12 +6817,17 @@ function calculateTWRv3(startDate = null) {
             // חישוב מה כל קבוצה צריכה להיות אחרי ההשקעה
             const groupsStatus = portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
-                
-                // שווי נוכחי של הקבוצה (לפי currentPrice!)
-                const currentValue = groupHoldings.reduce((sum, h) => {
+
+                const holdingsValue = groupHoldings.reduce((sum, h) => {
                     const value = h.shares * (h.currentPrice || h.costBasis);
                     return sum + convertToILS(value, h.currency);
                 }, 0);
+
+                const pensionValue = (portfolio.pensions || [])
+                    .filter(p => p.groupId === group.id)
+                    .reduce((sum, p) => sum + (p.currentValue || 0), 0);
+
+                const currentValue = holdingsValue + pensionValue;
                 
                 // מה הקבוצה צריכה להיות אחרי ההשקעה
                 const targetValue = futureTotal * (group.target / 100);
@@ -7002,6 +7085,7 @@ function calculateTWRv3(startDate = null) {
                 subTabs: [
                     { id: 'holdings', label: 'מניות', icon: 'briefcase' },
                     { id: 'bonds', label: 'אג"ח', icon: 'file-text' },
+                    { id: 'pensions', label: 'פנסיות', icon: 'landmark' },
                     { id: 'cashflow', label: 'תזרים', icon: 'dollar-sign' }
                 ],
                 default: 'holdings'
@@ -7155,6 +7239,9 @@ function calculateTWRv3(startDate = null) {
                     break;
                 case 'bonds':
                     renderBondsList();
+                    break;
+                case 'pensions':
+                    renderPensionsList();
                     break;
                 case 'cashflow':
                     if (typeof renderCashFlow === 'function') renderCashFlow();
@@ -7339,6 +7426,7 @@ function calculateTWRv3(startDate = null) {
                 dividends: portfolio.dividends || [],
                 holdingFees: portfolio.holdingFees || {},
                 watchlist: portfolio.watchlist || [],
+                pensions: portfolio.pensions || [],
                 lastModified: newLastModified
             };
 
@@ -7454,7 +7542,8 @@ function calculateTWRv3(startDate = null) {
                         cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
                         dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
                         holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
-                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
+                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
+                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : []
                     };
 
                     // Run migration
@@ -7527,7 +7616,8 @@ function calculateTWRv3(startDate = null) {
                         cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
                         dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
                         holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
-                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : []
+                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
+                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : []
                     };
 
                     // Run migration
@@ -7827,7 +7917,7 @@ function calculateTWRv3(startDate = null) {
                 if (fundingSource === 'deposit') {
                     const depositAmount = availableCash < 0 ? purchaseAmount : (purchaseAmount - availableCash);
                     
-                    // יצירת snapshot עם שווי לפני הקנייה
+                    // יצירת snapshot עם שווי לפני הקנייה (ללא פנסיה)
                     const snapshot = {
                         id: Date.now() + 2,
                         date: purchaseDate,  // ← תאריך קנייה אמיתי!
@@ -7836,7 +7926,7 @@ function calculateTWRv3(startDate = null) {
                         stocksValue: getTotalValueILS(),
                         bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                         implicitCash: getImplicitCash('all'),
-                        totalValue: getTotalPortfolioValue(),
+                        totalValue: getTotalPortfolioValueEnhanced(),
                         triggerType: 'deposit',
                         triggerNote: `הפקדה לקנייה: ${symbol}`
                     };
@@ -8506,7 +8596,7 @@ ${msg}`, 'warning');
                     stocksValue: getTotalValueILS(),
                     bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                     implicitCash: getImplicitCash('all'),
-                    totalValue: getTotalPortfolioValue(),
+                    totalValue: getTotalPortfolioValueEnhanced(),
                     triggerType: 'deposit',
                     triggerNote: `הפקדה לקנייה: ${bond.symbol}`
                 });
@@ -8820,6 +8910,132 @@ ${msg}`, 'warning');
             container.innerHTML = html;
         }
         
+        // ===========================================
+        // PENSION MANAGEMENT
+        // ===========================================
+        let editingPensionId = null;
+
+        function showAddPensionForm() {
+            editingPensionId = null;
+            document.getElementById('pension-name').value = '';
+            document.getElementById('pension-owner').value = 'self';
+            document.getElementById('pension-value').value = '';
+            populatePensionGroupDropdown();
+            document.getElementById('add-pension-form').style.display = 'block';
+        }
+
+        function hideAddPensionForm() {
+            document.getElementById('add-pension-form').style.display = 'none';
+            editingPensionId = null;
+        }
+
+        function populatePensionGroupDropdown() {
+            const sel = document.getElementById('pension-group');
+            sel.innerHTML = portfolio.groups.map(g =>
+                `<option value="${g.id}">${g.name}</option>`
+            ).join('');
+        }
+
+        function savePension() {
+            const name = document.getElementById('pension-name').value.trim();
+            const owner = document.getElementById('pension-owner').value;
+            const currentValue = parseFloat(document.getElementById('pension-value').value) || 0;
+            const groupId = parseInt(document.getElementById('pension-group').value);
+            if (!name || currentValue <= 0) { notify('נא למלא שם וסכום', 'warning'); return; }
+
+            if (!portfolio.pensions) portfolio.pensions = [];
+
+            if (editingPensionId) {
+                const p = portfolio.pensions.find(p => p.id === editingPensionId);
+                if (p) { p.name = name; p.owner = owner; p.currentValue = currentValue; p.groupId = groupId; p.lastUpdate = new Date().toISOString(); }
+            } else {
+                portfolio.pensions.push({
+                    id: Date.now(), name, owner, currentValue, groupId,
+                    isNonLiquid: true, lastUpdate: new Date().toISOString()
+                });
+            }
+            saveData();
+            hideAddPensionForm();
+            renderPensionsList();
+            updateOverview();
+            notify(editingPensionId ? 'פנסיה עודכנה' : 'פנסיה נוספה בהצלחה!', 'success');
+        }
+
+        function editPension(id) {
+            const p = (portfolio.pensions || []).find(p => p.id === id);
+            if (!p) return;
+            editingPensionId = id;
+            document.getElementById('pension-name').value = p.name;
+            document.getElementById('pension-owner').value = p.owner;
+            document.getElementById('pension-value').value = p.currentValue;
+            populatePensionGroupDropdown();
+            document.getElementById('pension-group').value = p.groupId;
+            document.getElementById('add-pension-form').style.display = 'block';
+        }
+
+        function deletePension(id) {
+            if (!confirm('למחוק חיסכון פנסיוני זה?')) return;
+            portfolio.pensions = (portfolio.pensions || []).filter(p => p.id !== id);
+            saveData();
+            renderPensionsList();
+            updateOverview();
+            notify('פנסיה נמחקה', 'success');
+        }
+
+        function renderPensionsList() {
+            const container = document.getElementById('pensions-list');
+            if (!container) return;
+            if (!portfolio.pensions) portfolio.pensions = [];
+
+            if (portfolio.pensions.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
+                        <p style="font-size: 1.2rem; margin-bottom: 10px;">אין חסכונות פנסיוניים עדיין</p>
+                        <p>לחץ על "הוסף חיסכון פנסיוני" כדי להתחיל</p>
+                    </div>`;
+                return;
+            }
+
+            const ownerLabels = { self: '👤 שלי', wife: '👩 אשתי' };
+            let html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 12px; overflow: hidden;">';
+            html += `<thead><tr style="border-bottom: 1px solid var(--border);">
+                <th style="padding: 14px 16px; text-align: right; font-weight: 500; color: var(--text-muted); font-size: 0.78rem;">שם</th>
+                <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">בעלות</th>
+                <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">שווי נוכחי</th>
+                <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">קבוצה</th>
+                <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">סטטוס</th>
+                <th style="padding: 14px 16px; text-align: center; color: var(--text-muted); font-size: 0.78rem;">פעולות</th>
+            </tr></thead><tbody>`;
+
+            portfolio.pensions.forEach(p => {
+                const group = portfolio.groups.find(g => g.id === p.groupId);
+                html += `<tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 15px; font-weight: 700; color: var(--text-primary);">${p.name}</td>
+                    <td style="padding: 15px; text-align: center;">${ownerLabels[p.owner] || p.owner}</td>
+                    <td style="padding: 15px; text-align: center; font-weight: 700; color: #f5a623; font-family: 'JetBrains Mono', monospace;">₪${Math.round(p.currentValue).toLocaleString()}</td>
+                    <td style="padding: 15px; text-align: center;">${group ? group.name : '—'}</td>
+                    <td style="padding: 15px; text-align: center;">
+                        <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:0.72rem;background:rgba(245,166,35,0.12);color:#f5a623;border:1px solid rgba(245,166,35,0.2);">🔒 לא נזיל</span>
+                    </td>
+                    <td style="padding: 15px; text-align: center;">
+                        <div style="display: flex; gap: 5px; justify-content: center;">
+                            <button onclick="editPension(${p.id})" class="btn btn-sm" title="ערוך" style="background: var(--info); color: white; padding: 6px 10px; font-size: 0.8rem;">✏️</button>
+                            <button onclick="deletePension(${p.id})" class="btn btn-sm" title="מחק" style="background: var(--loss); color: white; padding: 6px 10px; font-size: 0.8rem;">🗑️</button>
+                        </div>
+                    </td>
+                </tr>`;
+            });
+
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        }
+
+        window.showAddPensionForm = showAddPensionForm;
+        window.hideAddPensionForm = hideAddPensionForm;
+        window.savePension = savePension;
+        window.editPension = editPension;
+        window.deletePension = deletePension;
+
         // ===========================================
         // NEW: ADD SHARES TO EXISTING POSITION (MODAL)
         // ===========================================
@@ -10958,6 +11174,23 @@ ${msg}`, 'warning');
             document.getElementById('bonds-cost').textContent = `₪${Math.round(bondsInvested).toLocaleString()}`;
             
             // =============================================
+            // UPDATE PENSIONS CARD
+            // =============================================
+            const pensions = portfolio.pensions || [];
+            const pensionsTotal = pensions.reduce((sum, p) => sum + (p.currentValue || 0), 0);
+            const pensionsSelf = pensions.filter(p => p.owner === 'self').reduce((sum, p) => sum + (p.currentValue || 0), 0);
+            const pensionsWife = pensions.filter(p => p.owner === 'wife').reduce((sum, p) => sum + (p.currentValue || 0), 0);
+
+            const pensionsValueEl = document.getElementById('pensions-value');
+            if (pensionsValueEl) pensionsValueEl.textContent = `₪${Math.round(pensionsTotal).toLocaleString()}`;
+            const pensionsCountEl = document.getElementById('pensions-count');
+            if (pensionsCountEl) pensionsCountEl.textContent = `${pensions.length} חסכונות`;
+            const pensionsSelfEl = document.getElementById('pensions-self');
+            if (pensionsSelfEl) pensionsSelfEl.textContent = `₪${Math.round(pensionsSelf).toLocaleString()}`;
+            const pensionsWifeEl = document.getElementById('pensions-wife');
+            if (pensionsWifeEl) pensionsWifeEl.textContent = `₪${Math.round(pensionsWife).toLocaleString()}`;
+
+            // =============================================
             // UPDATE TOTAL CARD
             // =============================================
             const totalValueEl = document.getElementById('total-value');
@@ -11000,7 +11233,17 @@ ${msg}`, 'warning');
             if (totalDepositsEl) totalDepositsEl.textContent = `₪${Math.round(totalDeposits).toLocaleString()}`;
             if (totalWithdrawalsEl) totalWithdrawalsEl.textContent = `₪${Math.round(totalWithdrawals).toLocaleString()}`;
             if (availableCashSummaryEl) availableCashSummaryEl.textContent = `₪${Math.round(availableCash).toLocaleString()}`;
-            
+
+            // =============================================
+            // UPDATE CASH DRAG KPI
+            // =============================================
+            const cashPct = totalValue > 0 ? (availableCash / totalValue) * 100 : 0;
+            const opportunityCost = availableCash * 0.08; // 8% annual benchmark
+            const cashDragValueEl = document.getElementById('cash-drag-value');
+            const cashDragPctEl = document.getElementById('cash-drag-pct');
+            if (cashDragValueEl) cashDragValueEl.textContent = `₪${Math.round(opportunityCost).toLocaleString()}`;
+            if (cashDragPctEl) cashDragPctEl.textContent = `${cashPct.toFixed(1)}% מהתיק במזומן`;
+
             // =============================================
             // RENDER OTHER SECTIONS
             // =============================================
@@ -11011,31 +11254,25 @@ ${msg}`, 'warning');
         
         function renderAllocationComparison() {
             const container = document.getElementById('allocation-comparison');
-            const totalValue = getTotalValueILS();
-            
-            console.log('📊 renderAllocationComparison - Total value:', totalValue);
-            console.log('📊 All holdings:', portfolio.holdings.map(h => ({ symbol: h.symbol, groupId: h.groupId, groupIdType: typeof h.groupId })));
-            
+            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+            const totalValue = getTotalValueILS() + pensionsTotal;
+
             const html = `<div class="allocation-grid">` + portfolio.groups.map(group => {
-                // Handle both string and number groupId
                 const groupHoldings = portfolio.holdings.filter(h => {
                     const holdingGroupId = parseInt(h.groupId);
                     return holdingGroupId === group.id;
                 });
-                
-                console.log(`📂 Group ${group.name} (ID: ${group.id}):`, {
-                    holdings: groupHoldings.length,
-                    symbols: groupHoldings.map(h => h.symbol)
-                });
-                
-                const groupValue = groupHoldings.reduce((sum, h) => {
+
+                const holdingsValue = groupHoldings.reduce((sum, h) => {
                     const value = h.shares * (h.currentPrice || h.costBasis);
-                    const ilsValue = convertToILS(value, h.currency);
-                    console.log(`  - ${h.symbol}: ${h.shares} × ${h.currentPrice || h.costBasis} ${h.currency} = ₪${ilsValue.toFixed(2)}`);
-                    return sum + ilsValue;
+                    return sum + convertToILS(value, h.currency);
                 }, 0);
-                
-                console.log(`  Total group value: ₪${groupValue.toFixed(2)}`);
+
+                const pensionValue = (portfolio.pensions || [])
+                    .filter(p => p.groupId === group.id)
+                    .reduce((sum, p) => sum + (p.currentValue || 0), 0);
+
+                const groupValue = holdingsValue + pensionValue;
                 
                 const actualPercent = totalValue > 0 ? (groupValue / totalValue) * 100 : 0;
                 const diff = actualPercent - group.target;
@@ -11101,21 +11338,25 @@ ${msg}`, 'warning');
         function renderPortfolioChart() {
             const canvas = document.getElementById('portfolio-chart');
             if (!canvas) return;
-            
+
             if (charts.portfolio) {
                 charts.portfolio.destroy();
             }
-            
-            const totalValue = getTotalValueILS();
+
+            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+            const totalValue = getTotalValueILS() + pensionsTotal;
             const data = portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
-                return groupHoldings.reduce((sum, h) => {
+                const holdingsVal = groupHoldings.reduce((sum, h) => {
                     const value = h.shares * (h.currentPrice || h.costBasis);
                     return sum + convertToILS(value, h.currency);
                 }, 0);
+                const pensionVal = (portfolio.pensions || [])
+                    .filter(p => p.groupId === group.id)
+                    .reduce((sum, p) => sum + (p.currentValue || 0), 0);
+                return holdingsVal + pensionVal;
             });
-            
-            // Calculate target vs actual for tooltip
+
             const groupMeta = portfolio.groups.map((g, i) => {
                 const actual = totalValue > 0 ? (data[i] / totalValue * 100) : 0;
                 return { name: g.name, target: g.target || 0, actual: actual.toFixed(1), value: data[i] };
@@ -11562,8 +11803,8 @@ ${msg}`, 'warning');
             // Delete all old snapshots
             portfolio.snapshots = [];
             
-            // Create one new snapshot with current portfolio value
-            const currentValue = getTotalPortfolioValue();
+            // Create one new snapshot with current portfolio value (excluding pensions)
+            const currentValue = getTotalPortfolioValueEnhanced();
             const totalDeposits = portfolio.deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
             
             createSnapshot('fix', 'תיקון פורמט', 0);
@@ -12281,7 +12522,8 @@ ${msg}`, 'warning');
                 }
                 
                 // Current Value: What investor gets back today = POSITIVE
-                const currentValue = getTotalPortfolioValue();
+                // Exclude pensions — they're tracked for net worth, not investment performance
+                const currentValue = getTotalPortfolioValueEnhanced();
                 console.log('🔍 Current Value:', currentValue);
                 values.push(currentValue); // POSITIVE (as if selling everything)
                 dates.push(new Date());
@@ -12455,6 +12697,10 @@ ${msg}`, 'warning');
 
             // Draw Correlation Heatmap
             renderCorrelationHeatmap();
+
+            // Draw Attribution & Bond vs Stock overlay
+            renderAttributionChart();
+            renderBondStockOverlay();
         }
 
         // ========== Sector & Geography Breakdown Charts ==========
@@ -12941,6 +13187,247 @@ ${msg}`, 'warning');
             }
         }
 
+        // ========== Attribution by Asset Type (2G) ==========
+        let attributionChartInstance = null;
+        function renderAttributionChart() {
+            const canvas = document.getElementById('attribution-chart');
+            if (!canvas) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            // Group holdings by asset type using SYMBOL_SECTOR_MAP
+            const groups = {};
+            const holdings = portfolio.holdings || [];
+            const bonds = portfolio.bonds || [];
+
+            holdings.forEach(h => {
+                const sg = getHoldingSectorGeo(h.symbol);
+                const type = sg.sector.includes('אג"ח') ? 'אג"ח' :
+                             sg.sector.includes('נדל"ן') ? 'נדל"ן' : 'מניות';
+                if (!groups[type]) groups[type] = { invested: 0, current: 0 };
+                const cost = (h.shares || 0) * (h.costBasis || 0);
+                const curr = (h.shares || 0) * (h.currentPrice || h.costBasis || 0);
+                groups[type].invested += convertToILS(cost, h.currency);
+                groups[type].current += convertToILS(curr, h.currency);
+            });
+
+            bonds.forEach(b => {
+                if (!groups['אג"ח']) groups['אג"ח'] = { invested: 0, current: 0 };
+                const cost = (b.units || 0) * (b.costBasis || 0);
+                const curr = (b.units || 0) * (b.currentPrice || b.costBasis || 0);
+                groups['אג"ח'].invested += convertToILS(cost, b.currency || 'ILS');
+                groups['אג"ח'].current += convertToILS(curr, b.currency || 'ILS');
+            });
+
+            // Add cash
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+            const cashILS = (portfolio.cash.ILS || 0) +
+                convertToILS(portfolio.cash.USD || 0, 'USD') +
+                convertToILS(portfolio.cash.EUR || 0, 'EUR');
+            if (cashILS > 0) {
+                groups['מזומן'] = { invested: cashILS, current: cashILS };
+            }
+
+            const totalValue = Object.values(groups).reduce((s, g) => s + g.current, 0);
+            if (totalValue <= 0) return;
+
+            const labels = Object.keys(groups);
+            const contributions = labels.map(l => {
+                const g = groups[l];
+                const returnPct = g.invested > 0 ? ((g.current - g.invested) / g.invested) * 100 : 0;
+                const weight = g.current / totalValue;
+                return {
+                    label: l,
+                    return: returnPct,
+                    weight: weight * 100,
+                    contribution: returnPct * weight,
+                    profit: g.current - g.invested
+                };
+            });
+
+            const colorMap = {
+                'מניות': '#22d3ee',
+                'אג"ח': '#a78bfa',
+                'נדל"ן': '#f59e0b',
+                'מזומן': '#6b7280'
+            };
+
+            if (attributionChartInstance) attributionChartInstance.destroy();
+            attributionChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: contributions.map(c => c.label),
+                    datasets: [{
+                        label: 'תרומה לתשואה (%)',
+                        data: contributions.map(c => c.contribution),
+                        backgroundColor: contributions.map(c => colorMap[c.label] || '#64748b'),
+                        borderRadius: 8,
+                        borderSkipped: false,
+                        barThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: (ctx) => {
+                                    const c = contributions[ctx.dataIndex];
+                                    return [
+                                        `משקל: ${c.weight.toFixed(1)}%`,
+                                        `תשואה: ${c.return.toFixed(1)}%`,
+                                        `תרומה: ${c.contribution.toFixed(2)}%`,
+                                        `רווח: ₪${Math.round(c.profit).toLocaleString()}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: {
+                                color: isDark ? '#94a3b8' : '#64748b',
+                                callback: v => v.toFixed(1) + '%'
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                color: isDark ? '#e2e8f0' : '#334155',
+                                font: { family: "'Heebo', sans-serif", weight: 600, size: 13 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== Bond vs Stock Overlay (2I) ==========
+        let bondStockChartInstance = null;
+        function renderBondStockOverlay() {
+            const canvas = document.getElementById('bond-stock-overlay-chart');
+            if (!canvas) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            const snapshots = portfolio.snapshots || [];
+            if (snapshots.length < 2) {
+                canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:120px;color:var(--text-muted);font-size:1.1rem;">נדרשים לפחות 2 תמונות מצב להשוואה</div>';
+                return;
+            }
+
+            // Sort snapshots chronologically
+            const sorted = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const labels = sorted.map(s => {
+                const d = new Date(s.date);
+                return d.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' });
+            });
+
+            // Calculate stock vs bond values from each snapshot
+            const stockValues = [];
+            const bondValues = [];
+
+            sorted.forEach(snap => {
+                let stockVal = 0, bondVal = 0;
+                // Snapshot might have holdingsSnapshot with per-holding data
+                if (snap.holdingsSnapshot && Array.isArray(snap.holdingsSnapshot)) {
+                    snap.holdingsSnapshot.forEach(h => {
+                        const sg = getHoldingSectorGeo(h.symbol);
+                        const val = (h.shares || 0) * (h.price || 0);
+                        const rate = h.currency === 'USD' ? (snap.exchange_rates?.USD || portfolio.rates?.USD || 3.6) :
+                                     h.currency === 'EUR' ? (snap.exchange_rates?.EUR || portfolio.rates?.EUR || 3.9) : 1;
+                        const ilsVal = val * rate;
+                        if (sg.sector.includes('אג"ח')) bondVal += ilsVal;
+                        else stockVal += ilsVal;
+                    });
+                }
+                if (snap.bondsSnapshot && Array.isArray(snap.bondsSnapshot)) {
+                    snap.bondsSnapshot.forEach(b => {
+                        bondVal += (b.units || 0) * (b.currentPrice || b.price || 0);
+                    });
+                }
+                // Fallback: if no per-holding breakdown, use total
+                if (stockVal === 0 && bondVal === 0 && snap.total_value) {
+                    // Estimate based on current allocation
+                    const totalHoldings = getTotalValueILS();
+                    const totalBonds = (portfolio.bonds || []).reduce((s, b) => s + b.units * b.currentPrice, 0);
+                    const bondRatio = totalHoldings > 0 ? totalBonds / (totalHoldings + totalBonds) : 0;
+                    bondVal = snap.total_value * bondRatio;
+                    stockVal = snap.total_value * (1 - bondRatio);
+                }
+                stockValues.push(stockVal);
+                bondValues.push(bondVal);
+            });
+
+            if (bondStockChartInstance) bondStockChartInstance.destroy();
+            bondStockChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'מניות',
+                            data: stockValues,
+                            borderColor: '#22d3ee',
+                            backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5
+                        },
+                        {
+                            label: 'אג"ח',
+                            data: bondValues,
+                            borderColor: '#a78bfa',
+                            backgroundColor: 'rgba(167, 139, 250, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            rtl: true,
+                            labels: { color: isDark ? '#e2e8f0' : '#334155', font: { family: "'Heebo', sans-serif", size: 12 } }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ₪${Math.round(ctx.raw).toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: { color: isDark ? '#94a3b8' : '#64748b', font: { size: 11 } }
+                        },
+                        y: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: {
+                                color: isDark ? '#94a3b8' : '#64748b',
+                                callback: v => '₪' + Math.round(v / 1000) + 'K'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         function drawTreemap() {
             const container = document.getElementById('treemap-container');
             if (!container) return;
@@ -13411,9 +13898,9 @@ ${msg}`, 'warning');
                 depositsCumulative.push(cumDeposits);
             });
             
-            // הוסף נקודה נוכחית
+            // הוסף נקודה נוכחית (ללא פנסיה — זה גרף ביצועי השקעות מול הפקדות)
             const now = new Date();
-            const currentValue = getTotalPortfolioValue();
+            const currentValue = getTotalPortfolioValueEnhanced();
             labels.push(now.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' }));
             portfolioValues.push(currentValue);
             
@@ -13560,8 +14047,8 @@ ${msg}`, 'warning');
                 return;
             }
             
-            // חישוב שווי כולל
-            let totalValue = getTotalPortfolioValue();
+            // חישוב שווי כולל (ללא פנסיה — בסיס לאחוזי scatter של מניות+אג"ח)
+            let totalValue = getTotalPortfolioValueEnhanced();
             if (totalValue <= 0) totalValue = 1; // למניעת חלוקה באפס
             
             // בניית נתוני scatter
@@ -13820,8 +14307,8 @@ ${msg}`, 'warning');
                 comparisonNote = 'TWR';
                 console.log('📊 Using TWR for comparison:', portfolioReturn.toFixed(2) + '%');
             } else {
-                // Fallback לחישוב פשוט אם אין snapshots
-                const totalValue = getTotalPortfolioValue();
+                // Fallback לחישוב פשוט אם אין snapshots (ללא פנסיה — מבוסס על הפקדות בלבד)
+                const totalValue = getTotalPortfolioValueEnhanced();
                 const totalDeposits = portfolio.deposits.reduce((sum, d) => sum + d.amount, 0);
                 const totalWithdrawals = portfolio.withdrawals.reduce((sum, w) => sum + w.amount, 0);
                 
@@ -15106,6 +15593,7 @@ ${msg}`, 'warning');
             renderDivByHoldingChart(dividends);
             renderDivCalendar(dividends);
             renderDivHistory(dividends);
+            renderDivProjection(annualNet);
         }
 
         function addDividend() {
@@ -15266,6 +15754,72 @@ ${msg}`, 'warning');
                         <td style="padding:8px;"><button onclick="removeDividend(${d.id})" style="cursor:pointer;border:none;background:none;color:var(--loss);">🗑️</button></td>
                     </tr>`;
                 }).join('')}</tbody></table>`;
+        }
+
+        // ═══════════════════════════ DIVIDEND PROJECTION ═══════════════════════════
+        let divProjectionChart = null;
+
+        function renderDivProjection(annualNet) {
+            if (!annualNet || annualNet <= 0) {
+                const el = document.getElementById('div-proj-final');
+                if (el) el.textContent = '—';
+                return;
+            }
+            const years = parseInt(document.getElementById('div-proj-years')?.value) || 10;
+            const growth = parseFloat(document.getElementById('div-proj-growth')?.value) || 6;
+            const growthRate = growth / 100;
+
+            const labels = [];
+            const annualData = [];
+            const cumulativeData = [];
+            let cumulative = 0;
+            let current = annualNet;
+
+            for (let y = 0; y <= years; y++) {
+                labels.push(new Date().getFullYear() + y);
+                annualData.push(Math.round(current));
+                cumulative += current;
+                cumulativeData.push(Math.round(cumulative));
+                current *= (1 + growthRate);
+            }
+
+            document.getElementById('div-proj-final').textContent = `₪${annualData[years].toLocaleString('he-IL')}`;
+            document.getElementById('div-proj-cumulative').textContent = `₪${cumulativeData[years].toLocaleString('he-IL')}`;
+
+            // Try to get monthly expense from finance data for coverage calculation
+            try {
+                const fd = JSON.parse(localStorage.getItem('financeData') || '{}');
+                const fixedExp = (fd.fixedExpenses || []).reduce((s, f) => s + (f.amount || 0), 0);
+                const monthlyExpense = fixedExp || 15000;
+                const annualExpense = monthlyExpense * 12;
+                const coverage = annualExpense > 0 ? (annualData[years] / annualExpense * 100).toFixed(1) : 0;
+                document.getElementById('div-proj-coverage').textContent = `${coverage}%`;
+            } catch (e) {
+                document.getElementById('div-proj-coverage').textContent = '—';
+            }
+
+            // Chart
+            const ctx = document.getElementById('div-projection-chart');
+            if (!ctx) return;
+            if (divProjectionChart) divProjectionChart.destroy();
+            divProjectionChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'דיבידנד שנתי נטו', data: annualData, backgroundColor: 'rgba(45,216,122,0.6)', borderRadius: 4, order: 2, yAxisID: 'y' },
+                        { label: 'סה"כ מצטבר', data: cumulativeData, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.3, pointRadius: 3, order: 1, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } } },
+                    scales: {
+                        y: { position: 'right', title: { display: true, text: '₪ שנתי' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y1: { position: 'left', title: { display: true, text: '₪ מצטבר' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
         }
 
         // ═══════════════════════════ FEES TAB ═══════════════════════════

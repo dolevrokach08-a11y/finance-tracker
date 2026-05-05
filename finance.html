@@ -1120,8 +1120,11 @@
                     <button onclick="showReportSubTab('yoy')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         📊 השוואה שנתית
                     </button>
-                    <button onclick="showReportSubTab('debt-compare')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
-                        ⛷️ שלג vs מפולת
+                    <button onclick="showReportSubTab('fixed-vs-disc')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📌 קבוע vs גמיש
+                    </button>
+                    <button onclick="showReportSubTab('category-trends')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
+                        📉 מגמות קטגוריות
                     </button>
                 </div>
 
@@ -1299,81 +1302,41 @@
                 </div>
 
                 <!-- Debt Snowball vs Avalanche Comparison -->
-                <div id="report-debt-compare" class="report-sub-content hidden">
+                <!-- קבוע vs גמיש -->
+                <div id="report-fixed-vs-disc" class="report-sub-content hidden">
                     <div class="glass p-6 mb-6">
-                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">⛷️</span>
-                            השוואת אסטרטגיות פירעון חוב — שלג vs מפולת
-                        </h3>
-                        <p class="text-sm mb-4" style="color: var(--text-muted);">
-                            <strong>שיטת השלג (Snowball):</strong> מסלקים את החוב הקטן ביותר קודם — ניצחונות פסיכולוגיים מהירים.
-                            <strong>שיטת המפולת (Avalanche):</strong> מסלקים את הריבית הגבוהה ביותר קודם — חיסכון מתמטי מקסימלי.
-                        </p>
-                        <!-- Extra payment slider -->
-                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
-                            <label style="color: var(--text-secondary); font-weight: 600; white-space: nowrap;">תשלום נוסף חודשי:</label>
-                            <input type="range" id="debt-compare-extra-slider" min="0" max="3000" step="50" value="500"
-                                   oninput="document.getElementById('debt-compare-extra-label').textContent = '₪' + Number(this.value).toLocaleString(); renderDebtComparison();"
-                                   style="flex: 1; min-width: 180px; accent-color: hsl(210, 80%, 55%);">
-                            <span id="debt-compare-extra-label" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; min-width: 60px;">₪500</span>
-                        </div>
-                        <!-- Chart -->
-                        <div style="position: relative; height: 420px;">
-                            <canvas id="debt-compare-chart"></canvas>
-                        </div>
-                    </div>
-                    <!-- Summary Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <!-- Snowball Column -->
-                        <div class="glass p-6" style="border-top: 4px solid hsl(142, 60%, 50%);">
-                            <h4 style="color: hsl(142, 60%, 50%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 1.3rem;">⛷️</span> שיטת השלג (Snowball)
-                            </h4>
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
-                                    <span id="dc-snowball-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
-                                    <span id="dc-snowball-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div id="dc-snowball-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
-                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
-                                </div>
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">📌 הוצאות קבועות מול גמישות</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">כמה מההוצאות שלך קבועות (שכירות, ביטוח...) וכמה גמישות (מסעדות, קניות...) — ככל שהחלק הגמיש גדול יותר, יש לך יותר מרחב לקצץ</p>
+                        <div style="display: flex; align-items: center; gap: 24px; flex-wrap: wrap;">
+                            <div style="width: 280px; height: 280px; flex-shrink: 0;">
+                                <canvas id="fixed-disc-chart"></canvas>
                             </div>
-                        </div>
-                        <!-- Avalanche Column -->
-                        <div class="glass p-6" style="border-top: 4px solid hsl(210, 80%, 55%);">
-                            <h4 style="color: hsl(210, 80%, 55%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 1.3rem;">🏔️</span> שיטת המפולת (Avalanche)
-                            </h4>
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
-                                    <span id="dc-avalanche-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                            <div style="flex: 1; min-width: 200px;">
+                                <div class="glass p-4 mb-3" style="border-right: 3px solid hsl(210,80%,55%);">
+                                    <div class="text-sm" style="color: var(--text-muted);">הוצאות קבועות</div>
+                                    <div id="fd-fixed-total" style="font-size: 1.3rem; font-weight: 700; color: hsl(210,80%,55%); font-family: 'JetBrains Mono', monospace;">-</div>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
-                                    <span id="dc-avalanche-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
+                                <div class="glass p-4 mb-3" style="border-right: 3px solid hsl(38,80%,55%);">
+                                    <div class="text-sm" style="color: var(--text-muted);">הוצאות גמישות</div>
+                                    <div id="fd-disc-total" style="font-size: 1.3rem; font-weight: 700; color: hsl(38,80%,55%); font-family: 'JetBrains Mono', monospace;">-</div>
                                 </div>
-                                <div id="dc-avalanche-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
-                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
+                                <div class="glass p-4" style="border-right: 3px solid var(--accent);">
+                                    <div class="text-sm" style="color: var(--text-muted);">גמישות תקציבית</div>
+                                    <div id="fd-ratio" style="font-size: 1.3rem; font-weight: 700; color: var(--accent); font-family: 'JetBrains Mono', monospace;">-</div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <!-- Savings Difference Banner -->
-                    <div id="dc-savings-banner" class="glass p-6 mb-6" style="border-right: 4px solid hsl(38, 80%, 55%); text-align: center;">
-                        <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 6px;">💰 חיסכון בבחירת המפולת על פני השלג</div>
-                        <div id="dc-savings-amount" style="font-size: 2rem; font-weight: 800; color: hsl(142, 60%, 50%); font-family: 'JetBrains Mono', monospace;">-</div>
-                        <div id="dc-savings-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">-</div>
-                    </div>
-                    <!-- No debts message (hidden by default) -->
-                    <div id="dc-no-debts" class="glass p-6 mb-6 hidden" style="text-align: center;">
-                        <div style="font-size: 3rem; margin-bottom: 12px;">🎉</div>
-                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-primary);">אין חובות להשוואה</div>
-                        <div style="color: var(--text-muted); margin-top: 6px;">הוסף חובות בטאב "סימולטור חובות" כדי לראות השוואה כאן</div>
+                </div>
+
+                <!-- מגמות קטגוריות -->
+                <div id="report-category-trends" class="report-sub-content hidden">
+                    <div class="glass p-6 mb-6">
+                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary);">📉 מגמות הוצאה לפי קטגוריה</h3>
+                        <p class="text-sm mb-4" style="color: var(--text-muted);">Top 5 קטגוריות — לזהות מה עולה ומה יורד לאורך זמן</p>
+                        <div style="height: 400px; position: relative;">
+                            <canvas id="category-trends-chart"></canvas>
+                        </div>
                     </div>
                 </div>
 
@@ -1836,9 +1799,38 @@
                                 <option value="expected">צפוי</option>
                                 <option value="optimistic">אופטימי (+10%)</option>
                                 <option value="pessimistic">שמרני (-15%)</option>
+                                <option value="custom">מותאם אישית</option>
                             </select>
                         </div>
                     </div>
+                </div>
+
+                <!-- What-If Scenario Sliders -->
+                <div class="glass p-4 rounded-xl mb-6">
+                    <h4 class="font-bold mb-3">🎛️ תרחיש מותאם — What If?</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px;">
+                        <div>
+                            <label class="text-sm text-gray-500">שינוי הכנסות: <strong id="cf-inc-mod-disp">0%</strong></label>
+                            <input type="range" id="cf-inc-mod" min="-30" max="50" value="0" step="1" class="w-full"
+                                   oninput="updateWhatIf()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">שינוי הוצאות: <strong id="cf-exp-mod-disp">0%</strong></label>
+                            <input type="range" id="cf-exp-mod" min="-30" max="50" value="0" step="1" class="w-full"
+                                   oninput="updateWhatIf()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">אירוע חד-פעמי (₪): <strong id="cf-one-time-disp">0</strong></label>
+                            <input type="range" id="cf-one-time" min="-100000" max="100000" value="0" step="1000" class="w-full"
+                                   oninput="updateWhatIf()">
+                            <div style="font-size:0.72rem;color:var(--text-secondary);">שלילי = הוצאה, חיובי = בונוס</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <button onclick="resetWhatIf()" class="px-3 py-1 rounded-lg text-sm" style="background: var(--bg-hover, #374151); color: var(--text-secondary, #9ca3af);">איפוס</button>
+                        <button onclick="addScenarioOverlay()" class="px-3 py-1 rounded-lg text-sm" style="background: rgba(59,130,246,0.15); color: #60a5fa;">+ הוסף כשכבה</button>
+                    </div>
+                    <div id="cf-fire-impact" style="margin-top: 12px; font-size: 0.85rem; color: var(--text-secondary);"></div>
                 </div>
 
                 <!-- Chart -->
@@ -1864,6 +1856,49 @@
                             <tbody id="cf-table-body"></tbody>
                         </table>
                     </div>
+                </div>
+
+                <!-- Income Growth Projection -->
+                <div class="glass p-4 rounded-xl mt-6">
+                    <h3 class="font-bold text-lg mb-4">📈 תחזית גידול הכנסה</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                        <div>
+                            <label class="text-sm text-gray-500">שנות תחזית: <strong id="igp-years-disp">10</strong></label>
+                            <input type="range" id="igp-years" min="5" max="20" value="10" class="w-full"
+                                   oninput="document.getElementById('igp-years-disp').textContent=this.value; renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">גידול הכנסה שנתי (%)</label>
+                            <input type="number" id="igp-income-growth" value="5" step="0.5" min="0" max="25"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">גידול הוצאות / אינפלציה (%)</label>
+                            <input type="number" id="igp-expense-growth" value="3" step="0.5" min="0" max="15"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">הכנסה חודשית נוכחית (₪)</label>
+                            <input type="number" id="igp-current-income" placeholder="זיהוי אוטומטי"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">הכנסה חודשית בסוף התקופה</div>
+                            <div id="igp-future-income" style="font-size: 1.3rem; font-weight: 800; color: #22c55e;">—</div>
+                        </div>
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">אחוז חיסכון בסוף התקופה</div>
+                            <div id="igp-future-savings-rate" style="font-size: 1.3rem; font-weight: 800; color: #3b82f6;">—</div>
+                        </div>
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">פער חיסכון חודשי</div>
+                            <div id="igp-savings-gap" style="font-size: 1.3rem; font-weight: 800;">—</div>
+                        </div>
+                    </div>
+                    <div style="position:relative;height:300px;"><canvas id="igp-chart"></canvas></div>
+                    <div id="igp-milestones" style="margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap;"></div>
                 </div>
             </div>
 
@@ -2415,7 +2450,7 @@
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
             if(tab==='networth') { renderNetWorth(); }
             if(tab==='bills') { renderBills(); }
-            if(tab==='cashflow') { renderCashFlow(); }
+            if(tab==='cashflow') { renderCashFlow(); renderIncomeGrowth(); }
             if(tab==='fire') { renderFIRE(); }
             if(tab==='debt') { renderDebtSimulator(); }
         }
@@ -2462,6 +2497,10 @@
                 renderYearOverYearChart();
             } else if (subTab === 'debt-compare') {
                 renderDebtComparison();
+            } else if (subTab === 'fixed-vs-disc') {
+                renderFixedVsDiscretionary();
+            } else if (subTab === 'category-trends') {
+                renderCategoryTrends();
             }
         }
 
@@ -2632,6 +2671,8 @@
                     if (!data.categoryRules) data.categoryRules = [];
                     if (!data.budgets) data.budgets = {};
                     if (!data.payslips) data.payslips = [];
+                    if (!data.incomeCategories) data.incomeCategories = ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'];
+                    if (!data.expenseCategories) data.expenseCategories = ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'];
 
                     console.log('✅ Data loaded from Firebase', { cloudLastModified });
 
@@ -2676,6 +2717,8 @@
                     if (!data.payslips) {
                         data.payslips = [];
                     }
+                    if (!data.incomeCategories) data.incomeCategories = ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'];
+                    if (!data.expenseCategories) data.expenseCategories = ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'];
 
                     // Mark that we loaded from localStorage (no cloud reference)
                     localLoadTime = new Date().toISOString();
@@ -5339,6 +5382,176 @@
                     trendDetailEl.textContent = 'אין מספיק נתונים';
                 }
             }
+        }
+
+        // ========== Fixed vs Discretionary ==========
+        function renderFixedVsDiscretionary() {
+            const canvas = document.getElementById('fixed-disc-chart');
+            if (!canvas) return;
+
+            const months = getReportMonths();
+            const monthKeys = months.map(m => m.key);
+
+            // Fixed expenses: sum from fixedExpenses that are active in the period
+            let fixedTotal = 0;
+            (data.fixedExpenses || []).forEach(f => {
+                const activeMonths = getMonthsInRange(f.start, f.end).filter(m => monthKeys.includes(m));
+                fixedTotal += (f.amount || 0) * activeMonths.length;
+            });
+
+            // All expenses in period
+            let allExpenseTotal = 0;
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+                allExpenseTotal += t.amt || 0;
+            });
+            // Add fixed expenses to total (they may not be in transactions)
+            const totalExpenses = allExpenseTotal + fixedTotal;
+            const discretionaryTotal = Math.max(0, allExpenseTotal); // transactions are the discretionary part
+            const n = monthKeys.length || 1;
+
+            if (totalExpenses === 0) {
+                document.getElementById('fd-fixed-total').textContent = '₪0';
+                document.getElementById('fd-disc-total').textContent = '₪0';
+                document.getElementById('fd-ratio').textContent = '-';
+                return;
+            }
+
+            document.getElementById('fd-fixed-total').textContent = '₪' + Math.round(fixedTotal / n).toLocaleString('he-IL') + '/חודש';
+            document.getElementById('fd-disc-total').textContent = '₪' + Math.round(discretionaryTotal / n).toLocaleString('he-IL') + '/חודש';
+            const discPct = ((discretionaryTotal / (totalExpenses)) * 100).toFixed(0);
+            document.getElementById('fd-ratio').textContent = discPct + '% גמיש';
+
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            if (charts.fixedDisc) charts.fixedDisc.destroy();
+            charts.fixedDisc = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['הוצאות קבועות', 'הוצאות גמישות'],
+                    datasets: [{
+                        data: [fixedTotal, discretionaryTotal],
+                        backgroundColor: ['hsl(210,80%,55%)', 'hsl(38,80%,55%)'],
+                        borderColor: isDark ? 'hsl(220,18%,13%)' : '#fff',
+                        borderWidth: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '55%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            rtl: true,
+                            labels: {
+                                color: isDark ? 'hsl(210,20%,75%)' : 'hsl(220,12%,42%)',
+                                font: { family: "'Heebo', sans-serif", size: 13 },
+                                padding: 16,
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => {
+                                    const val = ctx.raw;
+                                    const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = ((val / total) * 100).toFixed(1);
+                                    return ` ₪${Math.round(val).toLocaleString('he-IL')} (${pct}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== Category Spending Trends ==========
+        function renderCategoryTrends() {
+            const canvas = document.getElementById('category-trends-chart');
+            if (!canvas) return;
+
+            const months = getReportMonths();
+            const monthKeys = months.map(m => m.key);
+            const monthLabels = months.map(m => m.name);
+
+            // Aggregate expenses by category × month
+            const catMap = {};
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+                const cat = t.cat || 'אחר';
+                if (!catMap[cat]) catMap[cat] = {};
+                catMap[cat][t.month] = (catMap[cat][t.month] || 0) + (t.amt || 0);
+            });
+
+            // Top 5 categories by total
+            const sorted = Object.entries(catMap).map(([cat, months]) => ({
+                cat,
+                total: Object.values(months).reduce((a, b) => a + b, 0),
+                data: months
+            })).sort((a, b) => b.total - a.total).slice(0, 5);
+
+            if (sorted.length === 0) return;
+
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+            const palette = [
+                'hsl(142,60%,50%)', 'hsl(210,80%,55%)', 'hsl(38,80%,55%)',
+                'hsl(280,60%,55%)', 'hsl(0,70%,55%)'
+            ];
+
+            const datasets = sorted.map((item, i) => ({
+                label: item.cat,
+                data: monthKeys.map(m => item.data[m] || 0),
+                borderColor: palette[i],
+                backgroundColor: palette[i] + '22',
+                tension: 0.3,
+                fill: false,
+                borderWidth: 2.5,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+            }));
+
+            if (charts.catTrends) charts.catTrends.destroy();
+            charts.catTrends = new Chart(canvas, {
+                type: 'line',
+                data: { labels: monthLabels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            rtl: true,
+                            labels: {
+                                color: isDark ? 'hsl(210,20%,75%)' : 'hsl(220,12%,42%)',
+                                font: { family: "'Heebo', sans-serif", size: 12 },
+                                usePointStyle: true,
+                                pointStyle: 'circle',
+                            }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => ` ${ctx.dataset.label}: ₪${Math.round(ctx.raw).toLocaleString('he-IL')}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: { color: isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)', font: { family: "'Heebo', sans-serif", size: 11 } },
+                            grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }
+                        },
+                        y: {
+                            ticks: {
+                                color: isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,58%)',
+                                font: { family: "'JetBrains Mono', monospace", size: 11 },
+                                callback: v => '₪' + (v >= 1000 ? Math.round(v / 1000) + 'K' : v)
+                            },
+                            grid: { color: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }
+                        }
+                    }
+                }
+            });
         }
 
         // ========== Year-over-Year Comparison Chart ==========
@@ -8090,9 +8303,16 @@
             if(avgExpense === 0) avgExpense = fixedExpense + billsMonthly;
 
             // Scenario adjustments
-            let incMod=1, expMod=1;
+            let incMod=1, expMod=1, oneTimeEvent=0;
             if(scenario==='optimistic') { incMod=1.1; expMod=0.95; }
             else if(scenario==='pessimistic') { incMod=0.9; expMod=1.15; }
+            else if(scenario==='custom') {
+                const incChange = parseFloat(document.getElementById('cf-inc-mod')?.value) || 0;
+                const expChange = parseFloat(document.getElementById('cf-exp-mod')?.value) || 0;
+                incMod = 1 + incChange / 100;
+                expMod = 1 + expChange / 100;
+                oneTimeEvent = parseFloat(document.getElementById('cf-one-time')?.value) || 0;
+            }
 
             // Build forecast
             const labels=[], incomes=[], expenses=[], balances=[], savings=[];
@@ -8105,7 +8325,8 @@
                 labels.push(`${monthNames[d.getMonth()]} ${d.getFullYear()}`);
                 const inc = avgIncome * incMod;
                 const exp = avgExpense * expMod;
-                const saving = inc - exp;
+                let saving = inc - exp;
+                if(i === 0 && oneTimeEvent !== 0) saving += oneTimeEvent;
                 runningBalance += saving;
                 incomes.push(Math.round(inc));
                 expenses.push(Math.round(exp));
@@ -8128,16 +8349,22 @@
             const ctx = document.getElementById('cf-chart');
             if(ctx) {
                 if(cfChart) cfChart.destroy();
+                const datasets = [
+                    { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
+                    { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
+                    { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
+                ];
+                // Add scenario overlay layers
+                (window.scenarioLayers || []).forEach(layer => {
+                    datasets.push({
+                        label: layer.label, data: layer.balances, type: 'line',
+                        borderColor: layer.color, borderDash: [6, 3],
+                        pointRadius: 2, fill: false, tension: 0.3, order: 0, yAxisID: 'y1'
+                    });
+                });
                 cfChart = new Chart(ctx.getContext('2d'), {
                     type:'bar',
-                    data:{
-                        labels,
-                        datasets:[
-                            { label:'הכנסות', data:incomes, backgroundColor:'rgba(34,197,94,0.6)', borderRadius:4, order:2 },
-                            { label:'הוצאות', data:expenses, backgroundColor:'rgba(239,68,68,0.6)', borderRadius:4, order:2 },
-                            { label:'יתרה מצטברת', data:balances, type:'line', borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.3, pointRadius:3, order:1, yAxisID:'y1' }
-                        ]
-                    },
+                    data:{ labels, datasets },
                     options:{
                         responsive:true, maintainAspectRatio:false,
                         plugins:{legend:{position:'top',rtl:true}},
@@ -8161,6 +8388,200 @@
                 </tr>`).join('');
             }
         }
+
+        // ═══════════════ WHAT-IF HELPERS ═══════════════
+        window.scenarioLayers = [];
+
+        function updateWhatIf() {
+            const incVal = document.getElementById('cf-inc-mod').value;
+            const expVal = document.getElementById('cf-exp-mod').value;
+            const oneTime = document.getElementById('cf-one-time').value;
+            document.getElementById('cf-inc-mod-disp').textContent = (incVal >= 0 ? '+' : '') + incVal + '%';
+            document.getElementById('cf-exp-mod-disp').textContent = (expVal >= 0 ? '+' : '') + expVal + '%';
+            document.getElementById('cf-one-time-disp').textContent = parseInt(oneTime).toLocaleString('he-IL');
+            document.getElementById('cf-scenario').value = 'custom';
+            renderCashFlow();
+
+            // FIRE impact estimate
+            const fireEl = document.getElementById('cf-fire-impact');
+            if (fireEl) {
+                const avgSaving = parseInt(document.getElementById('cf-avg-saving')?.textContent?.replace(/[^\d-]/g,'')) || 0;
+                if (avgSaving > 0) {
+                    const annualSaving = avgSaving * 12;
+                    const target = annualSaving * 25;
+                    const yearsToFire = Math.round(Math.log(target / annualSaving + 1) / Math.log(1.07));
+                    fireEl.textContent = `💡 בתרחיש הזה, עצמאות כלכלית בעוד ~${yearsToFire} שנים (הנחת תשואה 7%)`;
+                } else {
+                    fireEl.textContent = '';
+                }
+            }
+        }
+
+        function resetWhatIf() {
+            document.getElementById('cf-inc-mod').value = 0;
+            document.getElementById('cf-exp-mod').value = 0;
+            document.getElementById('cf-one-time').value = 0;
+            document.getElementById('cf-inc-mod-disp').textContent = '0%';
+            document.getElementById('cf-exp-mod-disp').textContent = '0%';
+            document.getElementById('cf-one-time-disp').textContent = '0';
+            document.getElementById('cf-scenario').value = 'expected';
+            window.scenarioLayers = [];
+            document.getElementById('cf-fire-impact').textContent = '';
+            renderCashFlow();
+        }
+
+        function addScenarioOverlay() {
+            const balance = parseFloat(document.getElementById('cf-current-balance')?.value) || 0;
+            const period = parseInt(document.getElementById('cf-period')?.value) || 12;
+            const incChange = parseFloat(document.getElementById('cf-inc-mod')?.value) || 0;
+            const expChange = parseFloat(document.getElementById('cf-exp-mod')?.value) || 0;
+            const oneTime = parseFloat(document.getElementById('cf-one-time')?.value) || 0;
+            const incMod = 1 + incChange / 100;
+            const expMod = 1 + expChange / 100;
+
+            const now = new Date();
+            const months = [];
+            for(let i=1; i<=6; i++) {
+                const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+                months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+            }
+            let totalInc=0, totalExp=0, cnt=0;
+            months.forEach(m => { const s=getMonthSummary(m); if(s.income>0||s.expense>0){totalInc+=s.income;totalExp+=s.expense;cnt++;} });
+            let avgInc = cnt>0 ? totalInc/cnt : 0;
+            let avgExp = cnt>0 ? totalExp/cnt : 0;
+
+            const balances = [];
+            let rb = balance;
+            for(let i=0; i<period; i++) {
+                let saving = avgInc*incMod - avgExp*expMod;
+                if(i===0 && oneTime!==0) saving += oneTime;
+                rb += saving;
+                balances.push(Math.round(rb));
+            }
+
+            const colors = ['#a78bfa','#38d4c8','#f5a623','#ec4899','#84cc16'];
+            const idx = window.scenarioLayers.length;
+            const label = `תרחיש ${idx+1} (${incChange>=0?'+':''}${incChange}%/${expChange>=0?'+':''}${expChange}%)`;
+            window.scenarioLayers.push({ label, balances, color: colors[idx % colors.length] });
+            renderCashFlow();
+        }
+
+        window.updateWhatIf = updateWhatIf;
+        window.resetWhatIf = resetWhatIf;
+        window.addScenarioOverlay = addScenarioOverlay;
+
+        // ═══════════════ INCOME GROWTH PROJECTION ═══════════════
+        let igpChart = null;
+
+        function renderIncomeGrowth() {
+            const years = parseInt(document.getElementById('igp-years')?.value) || 10;
+            const incGrowth = parseFloat(document.getElementById('igp-income-growth')?.value) || 5;
+            const expGrowth = parseFloat(document.getElementById('igp-expense-growth')?.value) || 3;
+
+            // Auto-detect current income
+            let currentIncome = parseFloat(document.getElementById('igp-current-income')?.value) || 0;
+            if (!currentIncome) {
+                const now = new Date();
+                let total = 0, count = 0;
+                for (let i = 1; i <= 3; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    const summary = getMonthSummary(m);
+                    if (summary.income > 0) { total += summary.income; count++; }
+                }
+                currentIncome = count > 0 ? total / count : 0;
+            }
+
+            // Auto-detect current expense
+            let currentExpense = 0;
+            {
+                const now = new Date();
+                let total = 0, count = 0;
+                for (let i = 1; i <= 3; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    const summary = getMonthSummary(m);
+                    if (summary.expense > 0) { total += summary.expense; count++; }
+                }
+                currentExpense = count > 0 ? total / count : currentIncome * 0.7;
+            }
+
+            if (currentIncome <= 0) {
+                document.getElementById('igp-future-income').textContent = '—';
+                return;
+            }
+
+            const labels = [];
+            const incomeData = [], expenseData = [], savingsData = [];
+            let inc = currentIncome * 12;
+            let exp = currentExpense * 12;
+            const initialIncome = inc;
+            const milestones = [];
+
+            for (let y = 0; y <= years; y++) {
+                labels.push(new Date().getFullYear() + y);
+                incomeData.push(Math.round(inc));
+                expenseData.push(Math.round(exp));
+                const savings = inc - exp;
+                savingsData.push(Math.round(savings));
+
+                const rate = inc > 0 ? (savings / inc) * 100 : 0;
+                if (inc >= initialIncome * 2 && !milestones.find(m => m.type === 'double')) {
+                    milestones.push({ type: 'double', year: new Date().getFullYear() + y, label: '💰 הכנסה הוכפלה' });
+                }
+                if (rate >= 50 && !milestones.find(m => m.type === 'rate50')) {
+                    milestones.push({ type: 'rate50', year: new Date().getFullYear() + y, label: '🎯 חיסכון 50%' });
+                }
+
+                inc *= (1 + incGrowth / 100);
+                exp *= (1 + expGrowth / 100);
+            }
+
+            // Update summary
+            const finalIncome = incomeData[years] / 12;
+            const finalExpense = expenseData[years] / 12;
+            const finalSavings = savingsData[years] / 12;
+            const finalRate = incomeData[years] > 0 ? (savingsData[years] / incomeData[years] * 100) : 0;
+
+            document.getElementById('igp-future-income').textContent = `₪${Math.round(finalIncome).toLocaleString('he-IL')}`;
+            document.getElementById('igp-future-savings-rate').textContent = `${finalRate.toFixed(1)}%`;
+            const gapEl = document.getElementById('igp-savings-gap');
+            gapEl.textContent = `₪${Math.round(finalSavings).toLocaleString('he-IL')}`;
+            gapEl.style.color = finalSavings >= 0 ? '#22c55e' : '#ef4444';
+
+            // Chart
+            const ctx = document.getElementById('igp-chart');
+            if (!ctx) return;
+            if (igpChart) igpChart.destroy();
+            igpChart = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'הכנסה שנתית', data: incomeData, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: false, tension: 0.3, pointRadius: 3 },
+                        { label: 'הוצאות שנתיות', data: expenseData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: false, tension: 0.3, pointRadius: 3 },
+                        { label: 'חיסכון שנתי', data: savingsData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.3, pointRadius: 3 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } } },
+                    scales: {
+                        y: { position: 'right', title: { display: true, text: '₪ שנתי' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+
+            // Milestones
+            const msEl = document.getElementById('igp-milestones');
+            if (msEl) {
+                msEl.innerHTML = milestones.map(m =>
+                    `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:8px;font-size:0.82rem;background:rgba(59,130,246,0.1);color:#60a5fa;border:1px solid rgba(59,130,246,0.2);">${m.label} — ${m.year}</span>`
+                ).join('');
+            }
+        }
+
+        window.renderIncomeGrowth = renderIncomeGrowth;
 
         // ═══════════════ FIRE CALCULATOR ═══════════════
         let fireChart = null;

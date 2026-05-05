@@ -323,6 +323,7 @@ tr:hover td{background:var(--bg-elevated);}
   .nav-tab{font-size:11px;padding:6px 12px;flex-shrink:0;}
   .container{padding:12px;}
   .four-col{grid-template-columns:repeat(2,1fr);}
+  .summary-metrics-grid{grid-template-columns:repeat(2,1fr) !important;}
   .three-col{grid-template-columns:1fr;}
   .tranche-grid{grid-template-columns:1fr;}
   .sc-row{grid-template-columns:1fr;gap:0;}
@@ -335,6 +336,7 @@ tr:hover td{background:var(--bg-elevated);}
 }
 @media(max-width:480px){
   .four-col{grid-template-columns:1fr 1fr;}
+  .summary-metrics-grid{grid-template-columns:1fr 1fr !important;}
   .nav-tab{font-size:10px;padding:5px 8px;}
 }
 </style>
@@ -353,6 +355,7 @@ tr:hover td{background:var(--bg-elevated);}
     <button class="nav-tab" onclick="showPage('p-refi',this)">השוואת מחזור</button>
     <button class="nav-tab" onclick="showPage('p-penalty',this)">עמלת פירעון</button>
     <button class="nav-tab" onclick="showPage('p-stress',this)">מבחן לחץ</button>
+    <button class="nav-tab" onclick="showPage('p-cliff',this)">מצוק ריבית</button>
     <button class="nav-tab" onclick="showPage('p-tax',this)">מס ושכ"ט</button>
     <button class="nav-tab" onclick="showPage('p-graph',this)">גרף החזרים</button>
   </div>
@@ -414,11 +417,22 @@ tr:hover td{background:var(--bg-elevated);}
     </div>
 
     <div>
-      <div class="four-col" style="margin-bottom:16px;">
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px;" class="summary-metrics-grid">
         <div class="metric-card"><div class="m-label">יתרת קרן</div><div class="m-val" id="sum-principal">—</div><div class="m-sub">ש"ח</div></div>
         <div class="metric-card"><div class="m-label">החזר חודשי</div><div class="m-val" id="sum-monthly">—</div><div class="m-sub">ש"ח</div></div>
         <div class="metric-card"><div class="m-label">ריבית ממוצעת</div><div class="m-val" id="sum-rate">—</div><div class="m-sub">משוקללת</div></div>
         <div class="metric-card"><div class="m-label">סה"כ ריבית</div><div class="m-val" id="sum-total-interest">—</div><div class="m-sub">עד סיום</div></div>
+        <div class="metric-card" id="affordability-card">
+          <div class="m-label">🏠 יחס החזר מהכנסה</div>
+          <div class="m-val" id="affordability-ratio">—</div>
+          <div class="m-sub" id="affordability-status">הזן הכנסה חודשית</div>
+          <div style="margin-top:8px;height:6px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+            <div id="affordability-bar" style="height:100%;width:0%;border-radius:3px;transition:width 0.4s,background 0.4s;"></div>
+          </div>
+          <input type="number" id="monthly-income-input" placeholder="הכנסה חודשית נטו"
+            style="margin-top:8px;width:100%;padding:4px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg-base);color:var(--text);font-family:'Heebo',sans-serif;font-size:11px;text-align:center;direction:rtl;"
+            oninput="updateAffordabilityRatio()">
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:16px;">
@@ -451,29 +465,6 @@ tr:hover td{background:var(--bg-elevated);}
         </div>
       </div>
 
-      <div class="card" style="margin-top:16px;">
-        <div class="card-head"><span class="card-title">🗓️ מפת חום אמורטיזציה — ריבית מול קרן</span></div>
-        <div class="card-body">
-          <p style="font-size:11px;color:var(--text3);margin-bottom:12px;">אדום = בעיקר ריבית (תחילת תקופה) &nbsp;|&nbsp; ירוק = בעיקר קרן (סוף תקופה) &nbsp;|&nbsp; שורות = שנים, עמודות = חודשים</p>
-          <div id="amort-heatmap-container" style="width:100%;overflow-x:auto;">
-            <canvas id="amort-heatmap-canvas"></canvas>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;">
-            <div class="metric-card">
-              <div class="m-label">ריבית שנה ראשונה</div>
-              <div class="m-val m-red" id="amort-hm-first-year-int">-</div>
-            </div>
-            <div class="metric-card">
-              <div class="m-label">נקודת איזון קרן/ריבית</div>
-              <div class="m-val" id="amort-hm-breakeven" style="color:var(--accent);">-</div>
-            </div>
-            <div class="metric-card">
-              <div class="m-label">ריבית שנה אחרונה</div>
-              <div class="m-val m-green" id="amort-hm-last-year-int">-</div>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   </div>
@@ -772,6 +763,54 @@ tr:hover td{background:var(--bg-elevated);}
       <div class="card">
         <div class="card-head"><span class="card-title">גרף רגישות</span></div>
         <div class="card-body"><div class="chart-wrap"><canvas id="stress-chart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CREDIT CLIFF ═══════════════ -->
+<div id="p-cliff" class="page">
+  <div class="container">
+  <div class="page-hero" style="margin-bottom:18px;">
+    <span class="hero-eyebrow">RATE RESET · VISUALIZATION</span>
+    <h1>מצוק ריבית</h1>
+    <p>מה יקרה כשהריבית המשתנה תתעדכן? צפה בתרחישי תשלום עתידיים</p>
+  </div>
+  <div class="two-col">
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><span class="card-title">🎛️ הגדרות תרחיש</span></div>
+        <div class="card-body">
+          <div class="field">
+            <div class="f-label">תרחיש אופטימי — שינוי ריבית <span class="f-val" id="cliff-opt-disp">-1%</span></div>
+            <input type="range" id="cliff-opt-rate" min="-2" max="0" step="0.1" value="-1" oninput="document.getElementById('cliff-opt-disp').textContent=this.value+'%'; renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">תרחיש שמרני — שינוי ריבית <span class="f-val" id="cliff-pes-disp">+2%</span></div>
+            <input type="range" id="cliff-pes-rate" min="0" max="4" step="0.1" value="2" oninput="document.getElementById('cliff-pes-disp').textContent='+'+this.value+'%'; renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">הכנסה חודשית נטו (₪)</div>
+            <input type="number" id="cliff-income" placeholder="20000" oninput="renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">סף אזהרה — % מהכנסה <span class="f-val" id="cliff-threshold-disp">33%</span></div>
+            <input type="range" id="cliff-threshold" min="25" max="50" step="1" value="33" oninput="document.getElementById('cliff-threshold-disp').textContent=this.value+'%'; renderCliff()">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">📋 סיכום</span></div>
+        <div class="card-body" id="cliff-summary">
+          <p style="opacity:0.5;font-size:0.9rem;">הגדר מסלולים בדף "משכנתא נוכחית" כדי לראות ניתוח</p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><span class="card-title">📈 ציר זמן תשלומים</span></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="cliff-chart"></canvas></div></div>
       </div>
     </div>
   </div>
@@ -1135,6 +1174,13 @@ window.loadFirebaseData = function(state) {
   const taxSellEl = document.getElementById('tax-shevach-sell');
   if (taxSellEl && mortgageState.taxShevachSell) taxSellEl.value = mortgageState.taxShevachSell;
 
+  // Restore saved monthly income for affordability ratio
+  const savedIncome = localStorage.getItem('mortgage_monthly_income');
+  if (savedIncome) {
+    const incomeInput = document.getElementById('monthly-income-input');
+    if (incomeInput) incomeInput.value = savedIncome;
+  }
+
   renderCurrentTranches();
   updateCurrentSummary();
 
@@ -1300,6 +1346,7 @@ function showPage(id, btn) {
   if(id==='p-refi') renderRefiPage();
   if(id==='p-penalty') renderPenaltyPage();
   if(id==='p-stress') { setTimeout(updateStress,50); }
+  if(id==='p-cliff') { setTimeout(renderCliff,50); }
   if(id==='p-tax') { setTimeout(updateTax,50); }
   if(id==='p-graph') { setTimeout(updateGraph,50); }
 
@@ -1421,6 +1468,51 @@ function resetToMyMortgage() {
   showToast('אופס למשכנתא המקורית');
 }
 
+function updateAffordabilityRatio() {
+  const incomeInput = document.getElementById('monthly-income-input');
+  const ratioEl = document.getElementById('affordability-ratio');
+  const statusEl = document.getElementById('affordability-status');
+  const barEl = document.getElementById('affordability-bar');
+  if (!incomeInput || !ratioEl) return;
+
+  const income = parseFloat(incomeInput.value);
+  if (!income || income <= 0) {
+    ratioEl.textContent = '—';
+    statusEl.textContent = 'הזן הכנסה חודשית';
+    barEl.style.width = '0%';
+    barEl.style.background = 'transparent';
+    localStorage.removeItem('mortgage_monthly_income');
+    return;
+  }
+
+  localStorage.setItem('mortgage_monthly_income', income);
+  const total = currentTranches.reduce((s, t) => s + t.principal, 0);
+  if (!total) return;
+  const monthly = currentTranches.reduce((s, t) => s + pmt(t.rate, t.months, t.principal), 0);
+  const ratio = (monthly / income) * 100;
+
+  ratioEl.textContent = ratio.toFixed(1) + '%';
+  barEl.style.width = Math.min(ratio, 100) + '%';
+
+  if (ratio <= 25) {
+    barEl.style.background = 'var(--green, #10b981)';
+    statusEl.textContent = '✅ מצוין — עומס נמוך';
+    ratioEl.style.color = 'var(--green, #10b981)';
+  } else if (ratio <= 33) {
+    barEl.style.background = 'var(--accent, #22d3ee)';
+    statusEl.textContent = '👍 סביר — בגבול המומלץ';
+    ratioEl.style.color = 'var(--accent, #22d3ee)';
+  } else if (ratio <= 40) {
+    barEl.style.background = '#f59e0b';
+    statusEl.textContent = '⚠️ גבוה — מעל המלצת בנק ישראל';
+    ratioEl.style.color = '#f59e0b';
+  } else {
+    barEl.style.background = 'var(--red, #ef4444)';
+    statusEl.textContent = '🚨 מסוכן — עומס כבד מאוד';
+    ratioEl.style.color = 'var(--red, #ef4444)';
+  }
+}
+
 function updateCurrentSummary() {
   const total = currentTranches.reduce((s,t)=>s+t.principal,0);
   if(!total) return;
@@ -1476,192 +1568,13 @@ function updateCurrentSummary() {
   }
   document.getElementById('amort-table').innerHTML = rows;
 
-  // Render amortization heatmap
-  renderAmortizationHeatmap();
+  // Update affordability ratio
+  updateAffordabilityRatio();
 
   // Save everything (localStorage + Firebase + mortgageData for Net Worth)
   saveMortgage();
 }
 
-// ═══════════════════════════ AMORTIZATION HEATMAP ═══════════════════════════
-function renderAmortizationHeatmap() {
-  const canvas = document.getElementById('amort-heatmap-canvas');
-  if (!canvas || !currentTranches.length) return;
-  const ctx = canvas.getContext('2d');
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const isDark = !isLight;
-
-  // Calculate full amortization schedule across all tranches
-  const maxMonths = Math.max(...currentTranches.map(t => t.months));
-  const balArr = currentTranches.map(t => t.principal);
-  const schedule = []; // { month, payment, principal, interest }
-
-  for (let m = 1; m <= maxMonths; m++) {
-    let totPmt = 0, totPrin = 0, totInt = 0;
-    currentTranches.forEach((t, i) => {
-      if (balArr[i] <= 0 || m > t.months) return;
-      const mr = t.rate / 12 / 100;
-      const intPart = balArr[i] * mr;
-      const mp = pmt(t.rate, t.months, t.principal);
-      const prinPart = Math.min(mp - intPart, balArr[i]);
-      balArr[i] = Math.max(0, balArr[i] - prinPart);
-      totPmt += mp; totInt += intPart; totPrin += prinPart;
-    });
-    if (totPmt > 0) {
-      schedule.push({ month: m, payment: totPmt, principal: totPrin, interest: totInt });
-    }
-  }
-
-  if (schedule.length === 0) return;
-
-  // Build grid: rows = years, columns = months 1-12
-  const totalYears = Math.ceil(schedule.length / 12);
-  const grid = []; // grid[year][monthInYear] = { payment, interestRatio }
-  for (let y = 0; y < totalYears; y++) {
-    const row = [];
-    for (let m = 0; m < 12; m++) {
-      const idx = y * 12 + m;
-      if (idx < schedule.length) {
-        const s = schedule[idx];
-        const intRatio = s.payment > 0 ? s.interest / s.payment : 0;
-        row.push({ payment: s.payment, interest: s.interest, principal: s.principal, intRatio });
-      } else {
-        row.push(null);
-      }
-    }
-    grid.push(row);
-  }
-
-  // Sizing
-  const dpr = window.devicePixelRatio || 1;
-  const labelWidth = 65;
-  const cellW = Math.max(62, Math.floor((canvas.parentElement.clientWidth - labelWidth - 20) / 12));
-  const cellH = 40;
-  const headerH = 32;
-  const totalW = labelWidth + cellW * 12 + 20;
-  const totalH = headerH + cellH * totalYears + 30;
-
-  canvas.style.width = totalW + 'px';
-  canvas.style.height = Math.max(totalH, 300) + 'px';
-  canvas.width = totalW * dpr;
-  canvas.height = Math.max(totalH, 300) * dpr;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, totalW, Math.max(totalH, 300));
-
-  // Color: red (high interest ratio) -> yellow (50/50) -> green (high principal ratio)
-  function cellColor(intRatio) {
-    // intRatio 1.0 = all interest (red), 0.0 = all principal (green)
-    const t = intRatio; // 0 = green, 1 = red
-    const r = t < 0.5 ? Math.round(t * 2 * 240) : 240;
-    const g = t < 0.5 ? 220 : Math.round((1 - (t - 0.5) * 2) * 220);
-    const b = 40;
-    const alpha = isDark ? 0.8 : 0.6;
-    return `rgba(${r},${g},${b},${alpha})`;
-  }
-
-  // Column headers (months 1-12)
-  const monthNames = ['ינו׳','פבר׳','מרץ','אפר׳','מאי','יוני','יולי','אוג׳','ספט׳','אוק׳','נוב׳','דצמ׳'];
-  ctx.font = '600 10px Heebo';
-  ctx.fillStyle = isDark ? 'hsl(215,12%,52%)' : 'hsl(220,10%,48%)';
-  ctx.textAlign = 'center';
-  for (let c = 0; c < 12; c++) {
-    ctx.fillText(monthNames[c], labelWidth + c * cellW + cellW / 2, headerH - 8);
-  }
-
-  // Draw grid
-  let breakevenMonth = null;
-  grid.forEach((row, yi) => {
-    const y = headerH + yi * cellH;
-
-    // Row label (year number)
-    ctx.font = '700 11px Heebo';
-    ctx.fillStyle = isDark ? '#cbd5e1' : '#334155';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('שנה ' + (yi + 1), labelWidth - 8, y + cellH / 2);
-
-    row.forEach((cell, mi) => {
-      const x = labelWidth + mi * cellW;
-      if (!cell) {
-        // Empty cell (past loan end)
-        ctx.beginPath();
-        ctx.roundRect(x + 2, y + 2, cellW - 4, cellH - 4, 5);
-        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)';
-        ctx.fill();
-        return;
-      }
-
-      // Track breakeven (first month where principal > interest)
-      if (!breakevenMonth && cell.principal > cell.interest) {
-        breakevenMonth = yi * 12 + mi + 1;
-      }
-
-      // Cell background
-      ctx.beginPath();
-      ctx.roundRect(x + 2, y + 2, cellW - 4, cellH - 4, 5);
-      ctx.fillStyle = cellColor(cell.intRatio);
-      ctx.fill();
-
-      // Cell text: payment amount
-      ctx.font = '600 10px JetBrains Mono, Space Grotesk, monospace';
-      const textBrightness = cell.intRatio > 0.3 && cell.intRatio < 0.7;
-      ctx.fillStyle = (isDark || cell.intRatio > 0.25) ? '#fff' : '#1e293b';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const pmtDisplay = cell.payment >= 1000 ? '₪' + (cell.payment / 1000).toFixed(1) + 'K' : '₪' + Math.round(cell.payment);
-      ctx.fillText(pmtDisplay, x + cellW / 2, y + cellH / 2 - 5);
-
-      // Small sub-text: interest ratio percentage
-      ctx.font = '500 8px Heebo';
-      ctx.fillStyle = (isDark || cell.intRatio > 0.25) ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)';
-      ctx.fillText(Math.round(cell.intRatio * 100) + '% ריבית', x + cellW / 2, y + cellH / 2 + 9);
-    });
-  });
-
-  // Draw color legend
-  const legendY = headerH + totalYears * cellH + 8;
-  const legendW = 220;
-  const legendH = 10;
-  const legendX = labelWidth;
-  const grad = ctx.createLinearGradient(legendX, 0, legendX + legendW, 0);
-  grad.addColorStop(0, isDark ? 'rgba(30,220,40,0.8)' : 'rgba(30,200,40,0.6)');
-  grad.addColorStop(0.5, isDark ? 'rgba(240,220,40,0.8)' : 'rgba(240,200,40,0.6)');
-  grad.addColorStop(1, isDark ? 'rgba(240,40,40,0.8)' : 'rgba(240,50,50,0.6)');
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.roundRect(legendX, legendY, legendW, legendH, 4);
-  ctx.fill();
-  ctx.font = '500 10px Heebo';
-  ctx.fillStyle = isDark ? '#94a3b8' : '#64748b';
-  ctx.textAlign = 'right';
-  ctx.fillText('בעיקר קרן', legendX - 4, legendY + legendH - 1);
-  ctx.textAlign = 'left';
-  ctx.fillText('בעיקר ריבית', legendX + legendW + 6, legendY + legendH - 1);
-
-  // KPI cards
-  // First year total interest
-  const firstYearInt = schedule.slice(0, 12).reduce((s, m) => s + m.interest, 0);
-  const el1 = document.getElementById('amort-hm-first-year-int');
-  if (el1) el1.textContent = '₪' + fmtShort(firstYearInt);
-
-  // Breakeven month
-  const el2 = document.getElementById('amort-hm-breakeven');
-  if (el2) {
-    if (breakevenMonth) {
-      const bYear = Math.ceil(breakevenMonth / 12);
-      const bMonth = ((breakevenMonth - 1) % 12) + 1;
-      el2.textContent = 'שנה ' + bYear + ' חודש ' + bMonth;
-    } else {
-      el2.textContent = 'לא בתקופה';
-    }
-  }
-
-  // Last year total interest
-  const lastYearStart = Math.max(0, schedule.length - 12);
-  const lastYearInt = schedule.slice(lastYearStart).reduce((s, m) => s + m.interest, 0);
-  const el3 = document.getElementById('amort-hm-last-year-int');
-  if (el3) el3.textContent = '₪' + fmtShort(lastYearInt);
-}
 
 // ═══════════════════════════ EARLY REPAYMENT ═══════════════════════════
 function updateEarlyRepay() {
@@ -2490,6 +2403,129 @@ function updateGraph() {
       interaction:{mode:'index',intersect:false}
     }
   });
+}
+
+// ═══════════════════════════ CREDIT CLIFF ═══════════════════════════
+let cliffChart = null;
+
+function renderCliff() {
+  if (!currentTranches || currentTranches.length === 0) return;
+
+  const optChange = parseFloat(document.getElementById('cliff-opt-rate')?.value) || -1;
+  const pesChange = parseFloat(document.getElementById('cliff-pes-rate')?.value) || 2;
+  const income = parseFloat(document.getElementById('cliff-income')?.value) ||
+                 parseFloat(localStorage.getItem('mortgage_monthly_income')) || 20000;
+  const threshold = parseFloat(document.getElementById('cliff-threshold')?.value) || 33;
+
+  if (!document.getElementById('cliff-income').value) {
+    document.getElementById('cliff-income').value = income;
+  }
+
+  const maxMonths = Math.max(...currentTranches.map(t => t.months));
+
+  function buildTimeline(rateChange) {
+    const timeline = [];
+    const bals = currentTranches.map(t => t.principal);
+    for (let m = 1; m <= maxMonths; m++) {
+      let payment = 0;
+      currentTranches.forEach((t, i) => {
+        if (bals[i] <= 0 || m > t.months) return;
+        const isVar = ['prime','var5','var1'].includes(t.type);
+        let effectiveRate = t.rate;
+        if (isVar && rateChange !== 0) {
+          const resetPeriod = t.type === 'var5' ? 60 : t.type === 'var1' ? 12 : 1;
+          if (m >= resetPeriod) effectiveRate = t.rate + rateChange;
+        }
+        effectiveRate = Math.max(0.1, effectiveRate);
+        const mr = effectiveRate / 12 / 100;
+        const rem = t.months - m + 1;
+        const mp = bals[i] * mr * Math.pow(1+mr, rem) / (Math.pow(1+mr, rem) - 1);
+        const intPart = bals[i] * (effectiveRate / 12 / 100);
+        bals[i] = Math.max(0, bals[i] - (mp - intPart));
+        payment += mp;
+      });
+      timeline.push(payment);
+    }
+    return timeline;
+  }
+
+  const currentTL = buildTimeline(0);
+  const optTL = buildTimeline(optChange);
+  const pesTL = buildTimeline(pesChange);
+
+  // Find cliff months
+  const cliffMonths = [];
+  currentTranches.forEach(t => {
+    if (t.type === 'var5') { for (let m = 60; m <= t.months; m += 60) cliffMonths.push(m); }
+    else if (t.type === 'var1') { for (let m = 12; m <= t.months; m += 12) cliffMonths.push(m); }
+    else if (t.type === 'prime') { cliffMonths.push(1); }
+  });
+
+  // Sample yearly for chart
+  const yearLabels = [], curData = [], optData = [], pesData = [], threshData = [];
+  const thresholdAmt = income * threshold / 100;
+  for (let y = 0; y < Math.ceil(maxMonths / 12); y++) {
+    const m = y * 12;
+    if (m >= currentTL.length) break;
+    yearLabels.push(`שנה ${y + 1}`);
+    curData.push(Math.round(currentTL[m]));
+    optData.push(Math.round(optTL[m]));
+    pesData.push(Math.round(pesTL[m]));
+    threshData.push(Math.round(thresholdAmt));
+  }
+
+  // Chart
+  const ctx = document.getElementById('cliff-chart');
+  if (!ctx) return;
+  if (cliffChart) cliffChart.destroy();
+  cliffChart = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: yearLabels,
+      datasets: [
+        { label: 'תשלום נוכחי', data: curData, borderColor: '#4f7cff', fill: false, tension: 0.2, pointRadius: 3, borderWidth: 2.5 },
+        { label: 'תרחיש אופטימי', data: optData, borderColor: '#2dd87a', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
+        { label: 'תרחיש שמרני', data: pesData, borderColor: '#ef4444', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
+        { label: `סף ${threshold}% מהכנסה`, data: threshData, borderColor: '#f5a623', borderDash: [8,4], pointRadius: 0, fill: false, borderWidth: 1.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo', size: 11 } } } },
+      scales: {
+        y: { position: 'right', title: { display: true, text: '₪ תשלום חודשי' },
+             ticks: { callback: v => '₪' + Math.round(v).toLocaleString() } }
+      }
+    }
+  });
+
+  // Summary
+  const summaryEl = document.getElementById('cliff-summary');
+  const dangerMonths = pesTL.filter(p => p > thresholdAmt).length;
+  const firstCliff = cliffMonths.length > 0 ? Math.min(...cliffMonths) : null;
+  let html = '';
+
+  if (dangerMonths > 0) {
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);margin-bottom:10px;">
+      <strong style="color:#ef4444;">🚨 סיכון נטל</strong><br>
+      <span style="font-size:0.88rem;">בתרחיש שמרני, ההחזר עולה על ${threshold}% מההכנסה ב-<strong>${dangerMonths}</strong> חודשים</span>
+    </div>`;
+  }
+  if (firstCliff) {
+    const yrs = Math.floor(firstCliff / 12);
+    const mos = firstCliff % 12;
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);margin-bottom:10px;">
+      <strong style="color:#f5a623;">⏰ מצוק ריבית ראשון</strong><br>
+      <span style="font-size:0.88rem;">בעוד ${yrs} שנים${mos > 0 ? ` ו-${mos} חודשים` : ''} (חודש ${firstCliff})</span>
+    </div>`;
+  }
+  if (dangerMonths === 0) {
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(45,216,122,0.1);border:1px solid rgba(45,216,122,0.25);">
+      <strong style="color:#2dd87a;">✅ עמידות טובה</strong><br>
+      <span style="font-size:0.88rem;">גם בתרחיש שמרני, ההחזר נשאר מתחת לסף</span>
+    </div>`;
+  }
+  summaryEl.innerHTML = html;
 }
 
 // ═══════════════════════════ INIT ═══════════════════════════
