@@ -3330,6 +3330,38 @@
                     <div id="div-calendar" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;"></div>
                 </div>
 
+                <!-- Dividend Growth Projection -->
+                <div class="glass" style="margin-bottom: 24px;">
+                    <h4 style="margin-bottom: 12px;">📈 תחזית צמיחת דיבידנדים</h4>
+                    <div style="display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; align-items: end;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">שנות תחזית: <strong id="div-proj-years-disp">10</strong></label>
+                            <input type="range" id="div-proj-years" min="5" max="20" value="10" style="width: 160px;"
+                                   oninput="document.getElementById('div-proj-years-disp').textContent=this.value; renderDivProjection()">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; margin-bottom: 4px;">צמיחה שנתית: <strong id="div-proj-growth-disp">6%</strong></label>
+                            <input type="range" id="div-proj-growth" min="1" max="15" step="0.5" value="6" style="width: 160px;"
+                                   oninput="document.getElementById('div-proj-growth-disp').textContent=this.value+'%'; renderDivProjection()">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">דיבידנד שנתי בסוף התקופה</div>
+                            <div id="div-proj-final" style="font-size: 1.3rem; font-weight: 800; color: var(--accent);">—</div>
+                        </div>
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">סה"כ מצטבר</div>
+                            <div id="div-proj-cumulative" style="font-size: 1.3rem; font-weight: 800; color: var(--info);">—</div>
+                        </div>
+                        <div class="glass" style="text-align: center;">
+                            <div style="font-size: 0.85rem; opacity: 0.7;">כיסוי הוצאות חודשיות</div>
+                            <div id="div-proj-coverage" style="font-size: 1.3rem; font-weight: 800; color: var(--warning);">—</div>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 300px;"><canvas id="div-projection-chart"></canvas></div>
+                </div>
+
                 <!-- Dividend History -->
                 <div class="glass">
                     <h4 style="margin-bottom: 12px;">📋 היסטוריית דיבידנדים</h4>
@@ -6817,7 +6849,8 @@ function calculateTWRv3(startDate = null) {
             
             let currentTotalValue;
             try {
-                currentTotalValue = getTotalValueILS();
+                const pensionsVal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+                currentTotalValue = getTotalValueILS() + pensionsVal;
                 console.log('💰 Current total value:', currentTotalValue);
             } catch (e) {
                 console.error('💥 Error in getTotalValueILS:', e);
@@ -11271,7 +11304,8 @@ ${msg}`, 'warning');
         
         function renderAllocationComparison() {
             const container = document.getElementById('allocation-comparison');
-            const totalValue = getTotalPortfolioValue();
+            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+            const totalValue = getTotalValueILS() + pensionsTotal;
 
             const html = `<div class="allocation-grid">` + portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => {
@@ -11354,12 +11388,13 @@ ${msg}`, 'warning');
         function renderPortfolioChart() {
             const canvas = document.getElementById('portfolio-chart');
             if (!canvas) return;
-            
+
             if (charts.portfolio) {
                 charts.portfolio.destroy();
             }
-            
-            const totalValue = getTotalPortfolioValue();
+
+            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+            const totalValue = getTotalValueILS() + pensionsTotal;
             const data = portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
                 const holdingsVal = groupHoldings.reduce((sum, h) => {
@@ -15607,6 +15642,7 @@ ${msg}`, 'warning');
             renderDivByHoldingChart(dividends);
             renderDivCalendar(dividends);
             renderDivHistory(dividends);
+            renderDivProjection(annualNet);
         }
 
         function addDividend() {
@@ -15767,6 +15803,72 @@ ${msg}`, 'warning');
                         <td style="padding:8px;"><button onclick="removeDividend(${d.id})" style="cursor:pointer;border:none;background:none;color:var(--loss);">🗑️</button></td>
                     </tr>`;
                 }).join('')}</tbody></table>`;
+        }
+
+        // ═══════════════════════════ DIVIDEND PROJECTION ═══════════════════════════
+        let divProjectionChart = null;
+
+        function renderDivProjection(annualNet) {
+            if (!annualNet || annualNet <= 0) {
+                const el = document.getElementById('div-proj-final');
+                if (el) el.textContent = '—';
+                return;
+            }
+            const years = parseInt(document.getElementById('div-proj-years')?.value) || 10;
+            const growth = parseFloat(document.getElementById('div-proj-growth')?.value) || 6;
+            const growthRate = growth / 100;
+
+            const labels = [];
+            const annualData = [];
+            const cumulativeData = [];
+            let cumulative = 0;
+            let current = annualNet;
+
+            for (let y = 0; y <= years; y++) {
+                labels.push(new Date().getFullYear() + y);
+                annualData.push(Math.round(current));
+                cumulative += current;
+                cumulativeData.push(Math.round(cumulative));
+                current *= (1 + growthRate);
+            }
+
+            document.getElementById('div-proj-final').textContent = `₪${annualData[years].toLocaleString('he-IL')}`;
+            document.getElementById('div-proj-cumulative').textContent = `₪${cumulativeData[years].toLocaleString('he-IL')}`;
+
+            // Try to get monthly expense from finance data for coverage calculation
+            try {
+                const fd = JSON.parse(localStorage.getItem('financeData') || '{}');
+                const fixedExp = (fd.fixedExpenses || []).reduce((s, f) => s + (f.amount || 0), 0);
+                const monthlyExpense = fixedExp || 15000;
+                const annualExpense = monthlyExpense * 12;
+                const coverage = annualExpense > 0 ? (annualData[years] / annualExpense * 100).toFixed(1) : 0;
+                document.getElementById('div-proj-coverage').textContent = `${coverage}%`;
+            } catch (e) {
+                document.getElementById('div-proj-coverage').textContent = '—';
+            }
+
+            // Chart
+            const ctx = document.getElementById('div-projection-chart');
+            if (!ctx) return;
+            if (divProjectionChart) divProjectionChart.destroy();
+            divProjectionChart = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'דיבידנד שנתי נטו', data: annualData, backgroundColor: 'rgba(45,216,122,0.6)', borderRadius: 4, order: 2, yAxisID: 'y' },
+                        { label: 'סה"כ מצטבר', data: cumulativeData, type: 'line', borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', fill: true, tension: 0.3, pointRadius: 3, order: 1, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } } },
+                    scales: {
+                        y: { position: 'right', title: { display: true, text: '₪ שנתי' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                        y1: { position: 'left', title: { display: true, text: '₪ מצטבר' }, grid: { drawOnChartArea: false } }
+                    }
+                }
+            });
         }
 
         // ═══════════════════════════ FEES TAB ═══════════════════════════
