@@ -2564,64 +2564,6 @@
                     </div>
                 </div>
 
-                <!-- ===== Correlation Heatmap ===== -->
-                <div class="glass" style="padding: 25px; margin-top: 24px;">
-                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
-                        <span style="font-size: 1.5rem;">📈</span>
-                        <span>מטריצת קורלציה</span>
-                    </h3>
-                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
-                        מידת הקשר בין אחזקות התיק — אדום = קורלציה גבוהה, כחול = קורלציה נמוכה/שלילית
-                    </div>
-                    <div style="width: 100%; overflow-x: auto;">
-                        <canvas id="correlation-heatmap-canvas"></canvas>
-                    </div>
-                    <!-- Color legend -->
-                    <div id="correlation-legend" style="display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap;">
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">-1.0</span>
-                        <div style="display: flex; height: 18px; border-radius: 4px; overflow: hidden; width: 280px;">
-                            <div style="flex:1; background: #1e40af;"></div>
-                            <div style="flex:1; background: #3b82f6;"></div>
-                            <div style="flex:1; background: #93c5fd;"></div>
-                            <div style="flex:1; background: #e0e7ff;"></div>
-                            <div style="flex:1; background: #fef9c3;"></div>
-                            <div style="flex:1; background: #fbbf24;"></div>
-                            <div style="flex:1; background: #f97316;"></div>
-                            <div style="flex:1; background: #ef4444;"></div>
-                            <div style="flex:1; background: #991b1b;"></div>
-                        </div>
-                        <span style="color: var(--text-muted); font-size: 0.8rem;">+1.0</span>
-                    </div>
-                </div>
-
-                <!-- ===== Attribution by Asset Type ===== -->
-                <div class="glass" style="padding: 25px; margin-top: 24px;">
-                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
-                        <span style="font-size: 1.5rem;">📊</span>
-                        <span>תרומה לתשואה לפי סוג נכס</span>
-                    </h3>
-                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
-                        כמה כל סוג נכס תורם לתשואה הכוללת של התיק
-                    </div>
-                    <div style="width: 100%; max-width: 700px; margin: 0 auto;">
-                        <canvas id="attribution-chart"></canvas>
-                    </div>
-                </div>
-
-                <!-- ===== Bond vs Stock Overlay ===== -->
-                <div class="glass" style="padding: 25px; margin-top: 24px;">
-                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
-                        <span style="font-size: 1.5rem;">⚖️</span>
-                        <span>מניות מול אג"ח — שווי מצטבר</span>
-                    </h3>
-                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
-                        השוואת ביצועים מצטברים בין רכיב המניות לרכיב האג"ח בתיק
-                    </div>
-                    <div style="width: 100%; max-width: 700px; margin: 0 auto;">
-                        <canvas id="bond-stock-overlay-chart"></canvas>
-                    </div>
-                </div>
-
             </div>
 
 
@@ -9085,6 +9027,12 @@ ${msg}`, 'warning');
             html += '</tbody></table></div>';
             container.innerHTML = html;
         }
+
+        window.showAddPensionForm = showAddPensionForm;
+        window.hideAddPensionForm = hideAddPensionForm;
+        window.savePension = savePension;
+        window.editPension = editPension;
+        window.deletePension = deletePension;
 
         // ===========================================
         // NEW: ADD SHARES TO EXISTING POSITION (MODAL)

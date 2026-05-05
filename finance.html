@@ -1120,9 +1120,6 @@
                     <button onclick="showReportSubTab('yoy')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         📊 השוואה שנתית
                     </button>
-                    <button onclick="showReportSubTab('debt-compare')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
-                        ⛷️ שלג vs מפולת
-                    </button>
                     <button onclick="showReportSubTab('fixed-vs-disc')" class="report-sub-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100">
                         📌 קבוע vs גמיש
                     </button>
@@ -1305,84 +1302,6 @@
                 </div>
 
                 <!-- Debt Snowball vs Avalanche Comparison -->
-                <div id="report-debt-compare" class="report-sub-content hidden">
-                    <div class="glass p-6 mb-6">
-                        <h3 class="text-xl font-semibold mb-2" style="color: var(--text-primary); display: flex; align-items: center; gap: 10px;">
-                            <span style="font-size: 1.5rem;">⛷️</span>
-                            השוואת אסטרטגיות פירעון חוב — שלג vs מפולת
-                        </h3>
-                        <p class="text-sm mb-4" style="color: var(--text-muted);">
-                            <strong>שיטת השלג (Snowball):</strong> מסלקים את החוב הקטן ביותר קודם — ניצחונות פסיכולוגיים מהירים.
-                            <strong>שיטת המפולת (Avalanche):</strong> מסלקים את הריבית הגבוהה ביותר קודם — חיסכון מתמטי מקסימלי.
-                        </p>
-                        <!-- Extra payment slider -->
-                        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;">
-                            <label style="color: var(--text-secondary); font-weight: 600; white-space: nowrap;">תשלום נוסף חודשי:</label>
-                            <input type="range" id="debt-compare-extra-slider" min="0" max="3000" step="50" value="500"
-                                   oninput="document.getElementById('debt-compare-extra-label').textContent = '₪' + Number(this.value).toLocaleString(); renderDebtComparison();"
-                                   style="flex: 1; min-width: 180px; accent-color: hsl(210, 80%, 55%);">
-                            <span id="debt-compare-extra-label" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; min-width: 60px;">₪500</span>
-                        </div>
-                        <!-- Chart -->
-                        <div style="position: relative; height: 420px;">
-                            <canvas id="debt-compare-chart"></canvas>
-                        </div>
-                    </div>
-                    <!-- Summary Cards -->
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <!-- Snowball Column -->
-                        <div class="glass p-6" style="border-top: 4px solid hsl(142, 60%, 50%);">
-                            <h4 style="color: hsl(142, 60%, 50%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 1.3rem;">⛷️</span> שיטת השלג (Snowball)
-                            </h4>
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
-                                    <span id="dc-snowball-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
-                                    <span id="dc-snowball-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div id="dc-snowball-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
-                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Avalanche Column -->
-                        <div class="glass p-6" style="border-top: 4px solid hsl(210, 80%, 55%);">
-                            <h4 style="color: hsl(210, 80%, 55%); font-weight: 700; font-size: 1.15rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px;">
-                                <span style="font-size: 1.3rem;">🏔️</span> שיטת המפולת (Avalanche)
-                            </h4>
-                            <div style="display: flex; flex-direction: column; gap: 12px;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">סה"כ ריבית</span>
-                                    <span id="dc-avalanche-interest" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <span style="color: var(--text-muted);">חודשים לפירעון</span>
-                                    <span id="dc-avalanche-months" style="font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text-primary); font-size: 1.15rem;">-</span>
-                                </div>
-                                <div id="dc-avalanche-order" style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--bg-card, rgba(255,255,255,0.04));">
-                                    <div style="font-weight: 600; margin-bottom: 6px;">סדר פירעון:</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- Savings Difference Banner -->
-                    <div id="dc-savings-banner" class="glass p-6 mb-6" style="border-right: 4px solid hsl(38, 80%, 55%); text-align: center;">
-                        <div style="font-size: 1rem; color: var(--text-muted); margin-bottom: 6px;">💰 חיסכון בבחירת המפולת על פני השלג</div>
-                        <div id="dc-savings-amount" style="font-size: 2rem; font-weight: 800; color: hsl(142, 60%, 50%); font-family: 'JetBrains Mono', monospace;">-</div>
-                        <div id="dc-savings-detail" style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 4px;">-</div>
-                    </div>
-                    <!-- No debts message (hidden by default) -->
-                    <div id="dc-no-debts" class="glass p-6 mb-6 hidden" style="text-align: center;">
-                        <div style="font-size: 3rem; margin-bottom: 12px;">🎉</div>
-                        <div style="font-size: 1.2rem; font-weight: 600; color: var(--text-primary);">אין חובות להשוואה</div>
-                        <div style="color: var(--text-muted); margin-top: 6px;">הוסף חובות בטאב "סימולטור חובות" כדי לראות השוואה כאן</div>
-                    </div>
-                </div>
-
                 <!-- קבוע vs גמיש -->
                 <div id="report-fixed-vs-disc" class="report-sub-content hidden">
                     <div class="glass p-6 mb-6">
@@ -2752,6 +2671,8 @@
                     if (!data.categoryRules) data.categoryRules = [];
                     if (!data.budgets) data.budgets = {};
                     if (!data.payslips) data.payslips = [];
+                    if (!data.incomeCategories) data.incomeCategories = ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'];
+                    if (!data.expenseCategories) data.expenseCategories = ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'];
 
                     console.log('✅ Data loaded from Firebase', { cloudLastModified });
 
@@ -2796,6 +2717,8 @@
                     if (!data.payslips) {
                         data.payslips = [];
                     }
+                    if (!data.incomeCategories) data.incomeCategories = ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'];
+                    if (!data.expenseCategories) data.expenseCategories = ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'];
 
                     // Mark that we loaded from localStorage (no cloud reference)
                     localLoadTime = new Date().toISOString();
