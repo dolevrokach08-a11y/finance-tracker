@@ -355,6 +355,7 @@ tr:hover td{background:var(--bg-elevated);}
     <button class="nav-tab" onclick="showPage('p-refi',this)">השוואת מחזור</button>
     <button class="nav-tab" onclick="showPage('p-penalty',this)">עמלת פירעון</button>
     <button class="nav-tab" onclick="showPage('p-stress',this)">מבחן לחץ</button>
+    <button class="nav-tab" onclick="showPage('p-cliff',this)">מצוק ריבית</button>
     <button class="nav-tab" onclick="showPage('p-tax',this)">מס ושכ"ט</button>
     <button class="nav-tab" onclick="showPage('p-graph',this)">גרף החזרים</button>
   </div>
@@ -785,6 +786,54 @@ tr:hover td{background:var(--bg-elevated);}
       <div class="card">
         <div class="card-head"><span class="card-title">גרף רגישות</span></div>
         <div class="card-body"><div class="chart-wrap"><canvas id="stress-chart"></canvas></div></div>
+      </div>
+    </div>
+  </div>
+  </div>
+</div>
+
+<!-- ═══════════════ CREDIT CLIFF ═══════════════ -->
+<div id="p-cliff" class="page">
+  <div class="container">
+  <div class="page-hero" style="margin-bottom:18px;">
+    <span class="hero-eyebrow">RATE RESET · VISUALIZATION</span>
+    <h1>מצוק ריבית</h1>
+    <p>מה יקרה כשהריבית המשתנה תתעדכן? צפה בתרחישי תשלום עתידיים</p>
+  </div>
+  <div class="two-col">
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><span class="card-title">🎛️ הגדרות תרחיש</span></div>
+        <div class="card-body">
+          <div class="field">
+            <div class="f-label">תרחיש אופטימי — שינוי ריבית <span class="f-val" id="cliff-opt-disp">-1%</span></div>
+            <input type="range" id="cliff-opt-rate" min="-2" max="0" step="0.1" value="-1" oninput="document.getElementById('cliff-opt-disp').textContent=this.value+'%'; renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">תרחיש שמרני — שינוי ריבית <span class="f-val" id="cliff-pes-disp">+2%</span></div>
+            <input type="range" id="cliff-pes-rate" min="0" max="4" step="0.1" value="2" oninput="document.getElementById('cliff-pes-disp').textContent='+'+this.value+'%'; renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">הכנסה חודשית נטו (₪)</div>
+            <input type="number" id="cliff-income" placeholder="20000" oninput="renderCliff()">
+          </div>
+          <div class="field">
+            <div class="f-label">סף אזהרה — % מהכנסה <span class="f-val" id="cliff-threshold-disp">33%</span></div>
+            <input type="range" id="cliff-threshold" min="25" max="50" step="1" value="33" oninput="document.getElementById('cliff-threshold-disp').textContent=this.value+'%'; renderCliff()">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-title">📋 סיכום</span></div>
+        <div class="card-body" id="cliff-summary">
+          <p style="opacity:0.5;font-size:0.9rem;">הגדר מסלולים בדף "משכנתא נוכחית" כדי לראות ניתוח</p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><span class="card-title">📈 ציר זמן תשלומים</span></div>
+        <div class="card-body"><div class="chart-wrap"><canvas id="cliff-chart"></canvas></div></div>
       </div>
     </div>
   </div>
@@ -1320,6 +1369,7 @@ function showPage(id, btn) {
   if(id==='p-refi') renderRefiPage();
   if(id==='p-penalty') renderPenaltyPage();
   if(id==='p-stress') { setTimeout(updateStress,50); }
+  if(id==='p-cliff') { setTimeout(renderCliff,50); }
   if(id==='p-tax') { setTimeout(updateTax,50); }
   if(id==='p-graph') { setTimeout(updateGraph,50); }
 
@@ -2558,6 +2608,129 @@ function updateGraph() {
       interaction:{mode:'index',intersect:false}
     }
   });
+}
+
+// ═══════════════════════════ CREDIT CLIFF ═══════════════════════════
+let cliffChart = null;
+
+function renderCliff() {
+  if (!currentTranches || currentTranches.length === 0) return;
+
+  const optChange = parseFloat(document.getElementById('cliff-opt-rate')?.value) || -1;
+  const pesChange = parseFloat(document.getElementById('cliff-pes-rate')?.value) || 2;
+  const income = parseFloat(document.getElementById('cliff-income')?.value) ||
+                 parseFloat(localStorage.getItem('mortgage_monthly_income')) || 20000;
+  const threshold = parseFloat(document.getElementById('cliff-threshold')?.value) || 33;
+
+  if (!document.getElementById('cliff-income').value) {
+    document.getElementById('cliff-income').value = income;
+  }
+
+  const maxMonths = Math.max(...currentTranches.map(t => t.months));
+
+  function buildTimeline(rateChange) {
+    const timeline = [];
+    const bals = currentTranches.map(t => t.principal);
+    for (let m = 1; m <= maxMonths; m++) {
+      let payment = 0;
+      currentTranches.forEach((t, i) => {
+        if (bals[i] <= 0 || m > t.months) return;
+        const isVar = ['prime','var5','var1'].includes(t.type);
+        let effectiveRate = t.rate;
+        if (isVar && rateChange !== 0) {
+          const resetPeriod = t.type === 'var5' ? 60 : t.type === 'var1' ? 12 : 1;
+          if (m >= resetPeriod) effectiveRate = t.rate + rateChange;
+        }
+        effectiveRate = Math.max(0.1, effectiveRate);
+        const mr = effectiveRate / 12 / 100;
+        const rem = t.months - m + 1;
+        const mp = bals[i] * mr * Math.pow(1+mr, rem) / (Math.pow(1+mr, rem) - 1);
+        const intPart = bals[i] * (effectiveRate / 12 / 100);
+        bals[i] = Math.max(0, bals[i] - (mp - intPart));
+        payment += mp;
+      });
+      timeline.push(payment);
+    }
+    return timeline;
+  }
+
+  const currentTL = buildTimeline(0);
+  const optTL = buildTimeline(optChange);
+  const pesTL = buildTimeline(pesChange);
+
+  // Find cliff months
+  const cliffMonths = [];
+  currentTranches.forEach(t => {
+    if (t.type === 'var5') { for (let m = 60; m <= t.months; m += 60) cliffMonths.push(m); }
+    else if (t.type === 'var1') { for (let m = 12; m <= t.months; m += 12) cliffMonths.push(m); }
+    else if (t.type === 'prime') { cliffMonths.push(1); }
+  });
+
+  // Sample yearly for chart
+  const yearLabels = [], curData = [], optData = [], pesData = [], threshData = [];
+  const thresholdAmt = income * threshold / 100;
+  for (let y = 0; y < Math.ceil(maxMonths / 12); y++) {
+    const m = y * 12;
+    if (m >= currentTL.length) break;
+    yearLabels.push(`שנה ${y + 1}`);
+    curData.push(Math.round(currentTL[m]));
+    optData.push(Math.round(optTL[m]));
+    pesData.push(Math.round(pesTL[m]));
+    threshData.push(Math.round(thresholdAmt));
+  }
+
+  // Chart
+  const ctx = document.getElementById('cliff-chart');
+  if (!ctx) return;
+  if (cliffChart) cliffChart.destroy();
+  cliffChart = new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: yearLabels,
+      datasets: [
+        { label: 'תשלום נוכחי', data: curData, borderColor: '#4f7cff', fill: false, tension: 0.2, pointRadius: 3, borderWidth: 2.5 },
+        { label: 'תרחיש אופטימי', data: optData, borderColor: '#2dd87a', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
+        { label: 'תרחיש שמרני', data: pesData, borderColor: '#ef4444', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
+        { label: `סף ${threshold}% מהכנסה`, data: threshData, borderColor: '#f5a623', borderDash: [8,4], pointRadius: 0, fill: false, borderWidth: 1.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo', size: 11 } } } },
+      scales: {
+        y: { position: 'right', title: { display: true, text: '₪ תשלום חודשי' },
+             ticks: { callback: v => '₪' + Math.round(v).toLocaleString() } }
+      }
+    }
+  });
+
+  // Summary
+  const summaryEl = document.getElementById('cliff-summary');
+  const dangerMonths = pesTL.filter(p => p > thresholdAmt).length;
+  const firstCliff = cliffMonths.length > 0 ? Math.min(...cliffMonths) : null;
+  let html = '';
+
+  if (dangerMonths > 0) {
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.25);margin-bottom:10px;">
+      <strong style="color:#ef4444;">🚨 סיכון נטל</strong><br>
+      <span style="font-size:0.88rem;">בתרחיש שמרני, ההחזר עולה על ${threshold}% מההכנסה ב-<strong>${dangerMonths}</strong> חודשים</span>
+    </div>`;
+  }
+  if (firstCliff) {
+    const yrs = Math.floor(firstCliff / 12);
+    const mos = firstCliff % 12;
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(245,166,35,0.1);border:1px solid rgba(245,166,35,0.25);margin-bottom:10px;">
+      <strong style="color:#f5a623;">⏰ מצוק ריבית ראשון</strong><br>
+      <span style="font-size:0.88rem;">בעוד ${yrs} שנים${mos > 0 ? ` ו-${mos} חודשים` : ''} (חודש ${firstCliff})</span>
+    </div>`;
+  }
+  if (dangerMonths === 0) {
+    html += `<div style="padding:10px 14px;border-radius:8px;background:rgba(45,216,122,0.1);border:1px solid rgba(45,216,122,0.25);">
+      <strong style="color:#2dd87a;">✅ עמידות טובה</strong><br>
+      <span style="font-size:0.88rem;">גם בתרחיש שמרני, ההחזר נשאר מתחת לסף</span>
+    </div>`;
+  }
+  summaryEl.innerHTML = html;
 }
 
 // ═══════════════════════════ INIT ═══════════════════════════
