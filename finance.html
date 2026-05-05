@@ -1909,6 +1909,49 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- Income Growth Projection -->
+                <div class="glass p-4 rounded-xl mt-6">
+                    <h3 class="font-bold text-lg mb-4">📈 תחזית גידול הכנסה</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                        <div>
+                            <label class="text-sm text-gray-500">שנות תחזית: <strong id="igp-years-disp">10</strong></label>
+                            <input type="range" id="igp-years" min="5" max="20" value="10" class="w-full"
+                                   oninput="document.getElementById('igp-years-disp').textContent=this.value; renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">גידול הכנסה שנתי (%)</label>
+                            <input type="number" id="igp-income-growth" value="5" step="0.5" min="0" max="25"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">גידול הוצאות / אינפלציה (%)</label>
+                            <input type="number" id="igp-expense-growth" value="3" step="0.5" min="0" max="15"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                        <div>
+                            <label class="text-sm text-gray-500">הכנסה חודשית נוכחית (₪)</label>
+                            <input type="number" id="igp-current-income" placeholder="זיהוי אוטומטי"
+                                   class="w-full p-2 rounded-lg border" onchange="renderIncomeGrowth()">
+                        </div>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px;">
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">הכנסה חודשית בסוף התקופה</div>
+                            <div id="igp-future-income" style="font-size: 1.3rem; font-weight: 800; color: #22c55e;">—</div>
+                        </div>
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">אחוז חיסכון בסוף התקופה</div>
+                            <div id="igp-future-savings-rate" style="font-size: 1.3rem; font-weight: 800; color: #3b82f6;">—</div>
+                        </div>
+                        <div class="glass p-3 rounded-xl text-center">
+                            <div class="text-sm text-gray-500">פער חיסכון חודשי</div>
+                            <div id="igp-savings-gap" style="font-size: 1.3rem; font-weight: 800;">—</div>
+                        </div>
+                    </div>
+                    <div style="position:relative;height:300px;"><canvas id="igp-chart"></canvas></div>
+                    <div id="igp-milestones" style="margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap;"></div>
+                </div>
             </div>
 
             <!-- ═══════════════ FIRE CALCULATOR TAB ═══════════════ -->
@@ -2459,7 +2502,7 @@
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
             if(tab==='networth') { renderNetWorth(); }
             if(tab==='bills') { renderBills(); }
-            if(tab==='cashflow') { renderCashFlow(); }
+            if(tab==='cashflow') { renderCashFlow(); renderIncomeGrowth(); }
             if(tab==='fire') { renderFIRE(); }
             if(tab==='debt') { renderDebtSimulator(); }
         }
@@ -8379,6 +8422,119 @@
                 </tr>`).join('');
             }
         }
+
+        // ═══════════════ INCOME GROWTH PROJECTION ═══════════════
+        let igpChart = null;
+
+        function renderIncomeGrowth() {
+            const years = parseInt(document.getElementById('igp-years')?.value) || 10;
+            const incGrowth = parseFloat(document.getElementById('igp-income-growth')?.value) || 5;
+            const expGrowth = parseFloat(document.getElementById('igp-expense-growth')?.value) || 3;
+
+            // Auto-detect current income
+            let currentIncome = parseFloat(document.getElementById('igp-current-income')?.value) || 0;
+            if (!currentIncome) {
+                const now = new Date();
+                let total = 0, count = 0;
+                for (let i = 1; i <= 3; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    const summary = getMonthSummary(m);
+                    if (summary.income > 0) { total += summary.income; count++; }
+                }
+                currentIncome = count > 0 ? total / count : 0;
+            }
+
+            // Auto-detect current expense
+            let currentExpense = 0;
+            {
+                const now = new Date();
+                let total = 0, count = 0;
+                for (let i = 1; i <= 3; i++) {
+                    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+                    const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                    const summary = getMonthSummary(m);
+                    if (summary.expense > 0) { total += summary.expense; count++; }
+                }
+                currentExpense = count > 0 ? total / count : currentIncome * 0.7;
+            }
+
+            if (currentIncome <= 0) {
+                document.getElementById('igp-future-income').textContent = '—';
+                return;
+            }
+
+            const labels = [];
+            const incomeData = [], expenseData = [], savingsData = [];
+            let inc = currentIncome * 12;
+            let exp = currentExpense * 12;
+            const initialIncome = inc;
+            const milestones = [];
+
+            for (let y = 0; y <= years; y++) {
+                labels.push(new Date().getFullYear() + y);
+                incomeData.push(Math.round(inc));
+                expenseData.push(Math.round(exp));
+                const savings = inc - exp;
+                savingsData.push(Math.round(savings));
+
+                const rate = inc > 0 ? (savings / inc) * 100 : 0;
+                if (inc >= initialIncome * 2 && !milestones.find(m => m.type === 'double')) {
+                    milestones.push({ type: 'double', year: new Date().getFullYear() + y, label: '💰 הכנסה הוכפלה' });
+                }
+                if (rate >= 50 && !milestones.find(m => m.type === 'rate50')) {
+                    milestones.push({ type: 'rate50', year: new Date().getFullYear() + y, label: '🎯 חיסכון 50%' });
+                }
+
+                inc *= (1 + incGrowth / 100);
+                exp *= (1 + expGrowth / 100);
+            }
+
+            // Update summary
+            const finalIncome = incomeData[years] / 12;
+            const finalExpense = expenseData[years] / 12;
+            const finalSavings = savingsData[years] / 12;
+            const finalRate = incomeData[years] > 0 ? (savingsData[years] / incomeData[years] * 100) : 0;
+
+            document.getElementById('igp-future-income').textContent = `₪${Math.round(finalIncome).toLocaleString('he-IL')}`;
+            document.getElementById('igp-future-savings-rate').textContent = `${finalRate.toFixed(1)}%`;
+            const gapEl = document.getElementById('igp-savings-gap');
+            gapEl.textContent = `₪${Math.round(finalSavings).toLocaleString('he-IL')}`;
+            gapEl.style.color = finalSavings >= 0 ? '#22c55e' : '#ef4444';
+
+            // Chart
+            const ctx = document.getElementById('igp-chart');
+            if (!ctx) return;
+            if (igpChart) igpChart.destroy();
+            igpChart = new Chart(ctx.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'הכנסה שנתית', data: incomeData, borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.08)', fill: false, tension: 0.3, pointRadius: 3 },
+                        { label: 'הוצאות שנתיות', data: expenseData, borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.08)', fill: false, tension: 0.3, pointRadius: 3 },
+                        { label: 'חיסכון שנתי', data: savingsData, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)', fill: true, tension: 0.3, pointRadius: 3 }
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo' } } } },
+                    scales: {
+                        y: { position: 'right', title: { display: true, text: '₪ שנתי' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+                    }
+                }
+            });
+
+            // Milestones
+            const msEl = document.getElementById('igp-milestones');
+            if (msEl) {
+                msEl.innerHTML = milestones.map(m =>
+                    `<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:8px;font-size:0.82rem;background:rgba(59,130,246,0.1);color:#60a5fa;border:1px solid rgba(59,130,246,0.2);">${m.label} — ${m.year}</span>`
+                ).join('');
+            }
+        }
+
+        window.renderIncomeGrowth = renderIncomeGrowth;
 
         // ═══════════════ FIRE CALCULATOR ═══════════════
         let fireChart = null;
