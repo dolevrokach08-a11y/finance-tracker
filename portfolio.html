@@ -2570,6 +2570,34 @@
                     </div>
                 </div>
 
+                <!-- ===== Attribution by Asset Type ===== -->
+                <div class="glass" style="padding: 25px; margin-top: 24px;">
+                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
+                        <span style="font-size: 1.5rem;">📊</span>
+                        <span>תרומה לתשואה לפי סוג נכס</span>
+                    </h3>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
+                        כמה כל סוג נכס תורם לתשואה הכוללת של התיק
+                    </div>
+                    <div style="width: 100%; max-width: 700px; margin: 0 auto;">
+                        <canvas id="attribution-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- ===== Bond vs Stock Overlay ===== -->
+                <div class="glass" style="padding: 25px; margin-top: 24px;">
+                    <h3 style="color: var(--text-primary); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; font-size: 1.25rem;">
+                        <span style="font-size: 1.5rem;">⚖️</span>
+                        <span>מניות מול אג"ח — שווי מצטבר</span>
+                    </h3>
+                    <div style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 18px;">
+                        השוואת ביצועים מצטברים בין רכיב המניות לרכיב האג"ח בתיק
+                    </div>
+                    <div style="width: 100%; max-width: 700px; margin: 0 auto;">
+                        <canvas id="bond-stock-overlay-chart"></canvas>
+                    </div>
+                </div>
+
             </div>
 
 
@@ -12470,6 +12498,10 @@ ${msg}`, 'warning');
 
             // Draw Correlation Heatmap
             renderCorrelationHeatmap();
+
+            // Draw Attribution & Bond vs Stock overlay
+            renderAttributionChart();
+            renderBondStockOverlay();
         }
 
         // ========== Sector & Geography Breakdown Charts ==========
@@ -12954,6 +12986,247 @@ ${msg}`, 'warning');
                     ctx.fillText(v.toFixed(2), x + cellSize / 2, y + cellSize / 2);
                 }
             }
+        }
+
+        // ========== Attribution by Asset Type (2G) ==========
+        let attributionChartInstance = null;
+        function renderAttributionChart() {
+            const canvas = document.getElementById('attribution-chart');
+            if (!canvas) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            // Group holdings by asset type using SYMBOL_SECTOR_MAP
+            const groups = {};
+            const holdings = portfolio.holdings || [];
+            const bonds = portfolio.bonds || [];
+
+            holdings.forEach(h => {
+                const sg = getHoldingSectorGeo(h.symbol);
+                const type = sg.sector.includes('אג"ח') ? 'אג"ח' :
+                             sg.sector.includes('נדל"ן') ? 'נדל"ן' : 'מניות';
+                if (!groups[type]) groups[type] = { invested: 0, current: 0 };
+                const cost = (h.shares || 0) * (h.costBasis || 0);
+                const curr = (h.shares || 0) * (h.currentPrice || h.costBasis || 0);
+                groups[type].invested += convertToILS(cost, h.currency);
+                groups[type].current += convertToILS(curr, h.currency);
+            });
+
+            bonds.forEach(b => {
+                if (!groups['אג"ח']) groups['אג"ח'] = { invested: 0, current: 0 };
+                const cost = (b.units || 0) * (b.costBasis || 0);
+                const curr = (b.units || 0) * (b.currentPrice || b.costBasis || 0);
+                groups['אג"ח'].invested += convertToILS(cost, b.currency || 'ILS');
+                groups['אג"ח'].current += convertToILS(curr, b.currency || 'ILS');
+            });
+
+            // Add cash
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+            const cashILS = (portfolio.cash.ILS || 0) +
+                convertToILS(portfolio.cash.USD || 0, 'USD') +
+                convertToILS(portfolio.cash.EUR || 0, 'EUR');
+            if (cashILS > 0) {
+                groups['מזומן'] = { invested: cashILS, current: cashILS };
+            }
+
+            const totalValue = Object.values(groups).reduce((s, g) => s + g.current, 0);
+            if (totalValue <= 0) return;
+
+            const labels = Object.keys(groups);
+            const contributions = labels.map(l => {
+                const g = groups[l];
+                const returnPct = g.invested > 0 ? ((g.current - g.invested) / g.invested) * 100 : 0;
+                const weight = g.current / totalValue;
+                return {
+                    label: l,
+                    return: returnPct,
+                    weight: weight * 100,
+                    contribution: returnPct * weight,
+                    profit: g.current - g.invested
+                };
+            });
+
+            const colorMap = {
+                'מניות': '#22d3ee',
+                'אג"ח': '#a78bfa',
+                'נדל"ן': '#f59e0b',
+                'מזומן': '#6b7280'
+            };
+
+            if (attributionChartInstance) attributionChartInstance.destroy();
+            attributionChartInstance = new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: contributions.map(c => c.label),
+                    datasets: [{
+                        label: 'תרומה לתשואה (%)',
+                        data: contributions.map(c => c.contribution),
+                        backgroundColor: contributions.map(c => colorMap[c.label] || '#64748b'),
+                        borderRadius: 8,
+                        borderSkipped: false,
+                        barThickness: 50
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: (ctx) => {
+                                    const c = contributions[ctx.dataIndex];
+                                    return [
+                                        `משקל: ${c.weight.toFixed(1)}%`,
+                                        `תשואה: ${c.return.toFixed(1)}%`,
+                                        `תרומה: ${c.contribution.toFixed(2)}%`,
+                                        `רווח: ₪${Math.round(c.profit).toLocaleString()}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: {
+                                color: isDark ? '#94a3b8' : '#64748b',
+                                callback: v => v.toFixed(1) + '%'
+                            }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: {
+                                color: isDark ? '#e2e8f0' : '#334155',
+                                font: { family: "'Heebo', sans-serif", weight: 600, size: 13 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== Bond vs Stock Overlay (2I) ==========
+        let bondStockChartInstance = null;
+        function renderBondStockOverlay() {
+            const canvas = document.getElementById('bond-stock-overlay-chart');
+            if (!canvas) return;
+            const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+
+            const snapshots = portfolio.snapshots || [];
+            if (snapshots.length < 2) {
+                canvas.parentElement.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:120px;color:var(--text-muted);font-size:1.1rem;">נדרשים לפחות 2 תמונות מצב להשוואה</div>';
+                return;
+            }
+
+            // Sort snapshots chronologically
+            const sorted = [...snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+            const labels = sorted.map(s => {
+                const d = new Date(s.date);
+                return d.toLocaleDateString('he-IL', { month: 'short', year: '2-digit' });
+            });
+
+            // Calculate stock vs bond values from each snapshot
+            const stockValues = [];
+            const bondValues = [];
+
+            sorted.forEach(snap => {
+                let stockVal = 0, bondVal = 0;
+                // Snapshot might have holdingsSnapshot with per-holding data
+                if (snap.holdingsSnapshot && Array.isArray(snap.holdingsSnapshot)) {
+                    snap.holdingsSnapshot.forEach(h => {
+                        const sg = getHoldingSectorGeo(h.symbol);
+                        const val = (h.shares || 0) * (h.price || 0);
+                        const rate = h.currency === 'USD' ? (snap.exchange_rates?.USD || portfolio.rates?.USD || 3.6) :
+                                     h.currency === 'EUR' ? (snap.exchange_rates?.EUR || portfolio.rates?.EUR || 3.9) : 1;
+                        const ilsVal = val * rate;
+                        if (sg.sector.includes('אג"ח')) bondVal += ilsVal;
+                        else stockVal += ilsVal;
+                    });
+                }
+                if (snap.bondsSnapshot && Array.isArray(snap.bondsSnapshot)) {
+                    snap.bondsSnapshot.forEach(b => {
+                        bondVal += (b.units || 0) * (b.currentPrice || b.price || 0);
+                    });
+                }
+                // Fallback: if no per-holding breakdown, use total
+                if (stockVal === 0 && bondVal === 0 && snap.total_value) {
+                    // Estimate based on current allocation
+                    const totalHoldings = getTotalValueILS();
+                    const totalBonds = (portfolio.bonds || []).reduce((s, b) => s + b.units * b.currentPrice, 0);
+                    const bondRatio = totalHoldings > 0 ? totalBonds / (totalHoldings + totalBonds) : 0;
+                    bondVal = snap.total_value * bondRatio;
+                    stockVal = snap.total_value * (1 - bondRatio);
+                }
+                stockValues.push(stockVal);
+                bondValues.push(bondVal);
+            });
+
+            if (bondStockChartInstance) bondStockChartInstance.destroy();
+            bondStockChartInstance = new Chart(canvas, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        {
+                            label: 'מניות',
+                            data: stockValues,
+                            borderColor: '#22d3ee',
+                            backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5
+                        },
+                        {
+                            label: 'אג"ח',
+                            data: bondValues,
+                            borderColor: '#a78bfa',
+                            backgroundColor: 'rgba(167, 139, 250, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            pointRadius: 3,
+                            pointHoverRadius: 6,
+                            borderWidth: 2.5
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            rtl: true,
+                            labels: { color: isDark ? '#e2e8f0' : '#334155', font: { family: "'Heebo', sans-serif", size: 12 } }
+                        },
+                        tooltip: {
+                            rtl: true,
+                            textDirection: 'rtl',
+                            callbacks: {
+                                label: ctx => `${ctx.dataset.label}: ₪${Math.round(ctx.raw).toLocaleString()}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: { color: isDark ? '#94a3b8' : '#64748b', font: { size: 11 } }
+                        },
+                        y: {
+                            grid: { color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' },
+                            ticks: {
+                                color: isDark ? '#94a3b8' : '#64748b',
+                                callback: v => '₪' + Math.round(v / 1000) + 'K'
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         function drawTreemap() {
