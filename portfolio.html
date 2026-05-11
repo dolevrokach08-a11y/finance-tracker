@@ -11033,7 +11033,8 @@ ${msg}`, 'warning');
             const bondsValue = Array.isArray(portfolio.bonds) ? 
                 portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0) : 0;
             const bondsCount = Array.isArray(portfolio.bonds) ? portfolio.bonds.length : 0;
-            const totalValue = getTotalPortfolioValue();
+            const totalValue = getTotalPortfolioValue(); // net worth — includes pensions, for display only
+            const investmentValue = getTotalPortfolioValueEnhanced(); // stocks+bonds+cash only — for P&L
             
             // ✅ FIX: Calculate available cash from portfolio.cash (includes currency exchanges!)
             if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
@@ -11094,8 +11095,8 @@ ${msg}`, 'warning');
                     document.getElementById('twr-breakdown').textContent = '';
                 }
                 
-                // Absolute Profit
-                const profit = totalValue - totalDeposits + totalWithdrawals;
+                // Absolute Profit — investment portfolio only, pensions excluded
+                const profit = investmentValue - totalDeposits + totalWithdrawals;
                 document.getElementById('main-profit-display').textContent = 
                     `${profit >= 0 ? '+' : ''}₪${Math.round(profit).toLocaleString()}`;
                 document.getElementById('main-profit-display').style.color = profit >= 0 ? '#10b981' : '#ef4444';
@@ -11225,8 +11226,8 @@ ${msg}`, 'warning');
             if (totalValueEl) totalValueEl.textContent = `₪${Math.round(totalValue).toLocaleString()}`;
             if (totalValue2El) {
                 totalValue2El.textContent = `₪${Math.round(totalValue).toLocaleString()}`;
-                // Add total P/L indicator below
-                const totalPL = totalValue - totalDeposits;
+                // Add total P/L indicator below — investment portfolio only, pensions excluded
+                const totalPL = investmentValue - totalDeposits;
                 const totalPLpct = totalDeposits > 0 ? ((totalPL / totalDeposits) * 100).toFixed(1) : 0;
                 let plIndicator = totalValue2El.parentElement.querySelector('.portfolio-pl-indicator');
                 if (!plIndicator) {
