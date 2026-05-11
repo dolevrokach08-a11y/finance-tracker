@@ -2251,7 +2251,7 @@
                         <div class="section-card">
                             <div class="section-title">
                                 <div class="card-icon" style="width:32px;height:32px;margin-bottom:0;background:rgba(245,166,35,0.12);color:#f5a623;display:flex;align-items:center;justify-content:center;border-radius:8px;"><i data-lucide="landmark" style="width:18px;height:18px;"></i></div>
-                                פנסיות
+                                פנסיות והשתלמות
                                 <span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:0.68rem;background:rgba(245,166,35,0.12);color:#f5a623;border:1px solid rgba(245,166,35,0.2);margin-right:8px;">לא נזיל</span>
                             </div>
                             <div style="margin-bottom: 12px;">
@@ -2767,15 +2767,15 @@
 
             <!-- Pensions Tab -->
             <div id="tab-pensions" class="tab-content">
-                <h3 style="margin-bottom: 20px;">🏛️ חסכונות פנסיוניים</h3>
+                <h3 style="margin-bottom: 20px;">🏛️ פנסיות וקרנות השתלמות</h3>
 
                 <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <button onclick="showAddPensionForm()" class="btn btn-success">➕ הוסף חיסכון פנסיוני</button>
+                    <button onclick="showAddPensionForm()" class="btn btn-success">➕ הוסף פנסיה / קרן השתלמות</button>
                 </div>
 
                 <!-- Add Pension Form -->
                 <div id="add-pension-form" style="display: none; margin-bottom: 30px;" class="glass">
-                    <h4 style="margin-bottom: 15px;">הוסף/ערוך חיסכון פנסיוני</h4>
+                    <h4 style="margin-bottom: 15px;">הוסף/ערוך פנסיה או קרן השתלמות</h4>
                     <div class="form-grid">
                         <div class="form-group">
                             <label>שם החיסכון</label>
@@ -7088,7 +7088,7 @@ function calculateTWRv3(startDate = null) {
                 subTabs: [
                     { id: 'holdings', label: 'מניות', icon: 'briefcase' },
                     { id: 'bonds', label: 'אג"ח', icon: 'file-text' },
-                    { id: 'pensions', label: 'פנסיות', icon: 'landmark' },
+                    { id: 'pensions', label: 'פנסיות והשתלמות', icon: 'landmark' },
                     { id: 'cashflow', label: 'תזרים', icon: 'dollar-sign' }
                 ],
                 default: 'holdings'
@@ -8989,7 +8989,7 @@ ${msg}`, 'warning');
         }
 
         function deletePension(id) {
-            if (!confirm('למחוק חיסכון פנסיוני זה?')) return;
+            if (!confirm('למחוק רשומה זו?')) return;
             portfolio.pensions = (portfolio.pensions || []).filter(p => p.id !== id);
             saveData();
             renderPensionsList();
@@ -9005,8 +9005,8 @@ ${msg}`, 'warning');
             if (portfolio.pensions.length === 0) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px; color: var(--text-secondary);">
-                        <p style="font-size: 1.2rem; margin-bottom: 10px;">אין חסכונות פנסיוניים עדיין</p>
-                        <p>לחץ על "הוסף חיסכון פנסיוני" כדי להתחיל</p>
+                        <p style="font-size: 1.2rem; margin-bottom: 10px;">אין פנסיות או קרנות השתלמות עדיין</p>
+                        <p>לחץ על "הוסף פנסיה / קרן השתלמות" כדי להתחיל</p>
                     </div>`;
                 return;
             }
