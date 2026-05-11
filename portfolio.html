@@ -2800,10 +2800,6 @@
                             <label>קבוצת מניות</label>
                             <select id="pension-group"></select>
                         </div>
-                        <div class="form-group">
-                            <label>קבוצת אג"ח / שאר</label>
-                            <select id="pension-bonds-group"></select>
-                        </div>
                     </div>
                     <div style="display: flex; gap: 10px; margin-top: 15px;">
                         <button onclick="savePension()" class="btn btn-success">💾 שמור</button>
@@ -8937,16 +8933,12 @@ ${msg}`, 'warning');
             editingPensionId = null;
         }
 
-        function populatePensionGroupDropdown(stocksGroupId, bondsGroupId) {
-            const opts = portfolio.groups.map(g =>
+        function populatePensionGroupDropdown(stocksGroupId) {
+            const sel = document.getElementById('pension-group');
+            sel.innerHTML = portfolio.groups.map(g =>
                 `<option value="${g.id}">${g.name}</option>`
             ).join('');
-            const sel = document.getElementById('pension-group');
-            sel.innerHTML = opts;
             if (stocksGroupId != null) sel.value = stocksGroupId;
-            const selB = document.getElementById('pension-bonds-group');
-            selB.innerHTML = opts;
-            if (bondsGroupId != null) selB.value = bondsGroupId;
         }
 
         function savePension() {
@@ -8954,7 +8946,6 @@ ${msg}`, 'warning');
             const owner = document.getElementById('pension-owner').value;
             const currentValue = parseFloat(document.getElementById('pension-value').value) || 0;
             const groupId = parseInt(document.getElementById('pension-group').value);
-            const bondsGroupId = parseInt(document.getElementById('pension-bonds-group').value);
             const stocksPercent = Math.min(100, Math.max(0, parseFloat(document.getElementById('pension-stocks-pct').value) || 100));
             if (!name || currentValue <= 0) { notify('נא למלא שם וסכום', 'warning'); return; }
 
@@ -8962,10 +8953,10 @@ ${msg}`, 'warning');
 
             if (editingPensionId) {
                 const p = portfolio.pensions.find(p => p.id === editingPensionId);
-                if (p) { p.name = name; p.owner = owner; p.currentValue = currentValue; p.groupId = groupId; p.bondsGroupId = bondsGroupId; p.stocksPercent = stocksPercent; p.lastUpdate = new Date().toISOString(); }
+                if (p) { p.name = name; p.owner = owner; p.currentValue = currentValue; p.groupId = groupId; p.stocksPercent = stocksPercent; p.lastUpdate = new Date().toISOString(); }
             } else {
                 portfolio.pensions.push({
-                    id: Date.now(), name, owner, currentValue, groupId, bondsGroupId, stocksPercent,
+                    id: Date.now(), name, owner, currentValue, groupId, stocksPercent,
                     isNonLiquid: true, lastUpdate: new Date().toISOString()
                 });
             }
@@ -8984,21 +8975,17 @@ ${msg}`, 'warning');
             document.getElementById('pension-owner').value = p.owner;
             document.getElementById('pension-value').value = p.currentValue;
             document.getElementById('pension-stocks-pct').value = p.stocksPercent ?? 100;
-            populatePensionGroupDropdown(p.groupId, p.bondsGroupId ?? p.groupId);
+            populatePensionGroupDropdown(p.groupId);
             document.getElementById('add-pension-form').style.display = 'block';
         }
 
-        // Returns the portion of a pension's value that belongs to a given allocation group.
-        // stocksPercent (0-100) of the value goes to groupId; the rest goes to bondsGroupId.
-        // For backward compat, missing stocksPercent defaults to 100 (all value in groupId).
+        // Returns the stocks portion of a pension that belongs to a given allocation group.
+        // Only stocksPercent% of the value participates in allocation; bonds portion is excluded.
+        // For backward compat, missing stocksPercent defaults to 100.
         function getPensionGroupValue(p, groupId) {
+            if (p.groupId !== groupId) return 0;
             const stocksPct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
-            const bondsPct = 1 - stocksPct;
-            const bondsTarget = p.bondsGroupId != null ? p.bondsGroupId : p.groupId;
-            let val = 0;
-            if (p.groupId === groupId) val += (p.currentValue || 0) * stocksPct;
-            if (bondsTarget === groupId) val += (p.currentValue || 0) * bondsPct;
-            return val;
+            return (p.currentValue || 0) * stocksPct;
         }
 
         function deletePension(id) {
@@ -9039,14 +9026,13 @@ ${msg}`, 'warning');
                 const stocksPct = p.stocksPercent != null ? p.stocksPercent : 100;
                 const bondsPct = 100 - stocksPct;
                 const stocksGroup = portfolio.groups.find(g => g.id === p.groupId);
-                const bondsGroup = portfolio.groups.find(g => g.id === (p.bondsGroupId ?? p.groupId));
                 let allocationLabel;
                 if (stocksPct === 100) {
                     allocationLabel = stocksGroup ? stocksGroup.name : '—';
                 } else if (stocksPct === 0) {
-                    allocationLabel = bondsGroup ? bondsGroup.name : '—';
+                    allocationLabel = 'אג"ח (לא מאוזן)';
                 } else {
-                    allocationLabel = `${stocksPct}% ${stocksGroup ? stocksGroup.name : '?'} / ${bondsPct}% ${bondsGroup ? bondsGroup.name : '?'}`;
+                    allocationLabel = `${stocksPct}% ${stocksGroup ? stocksGroup.name : '?'} + ${bondsPct}% אג"ח`;
                 }
                 html += `<tr style="border-bottom: 1px solid var(--border);">
                     <td style="padding: 15px; font-weight: 700; color: var(--text-primary);">${p.name}</td>
@@ -11293,8 +11279,12 @@ ${msg}`, 'warning');
         
         function renderAllocationComparison() {
             const container = document.getElementById('allocation-comparison');
-            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
-            const totalValue = getTotalValueILS() + pensionsTotal;
+            // Only the stocks portion of pensions participates in allocation; bonds portion is excluded.
+            const pensionsStocksTotal = (portfolio.pensions || []).reduce((s, p) => {
+                const pct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                return s + (p.currentValue || 0) * pct;
+            }, 0);
+            const totalValue = getTotalValueILS() + pensionsStocksTotal;
 
             const html = `<div class="allocation-grid">` + portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => {
@@ -11381,8 +11371,11 @@ ${msg}`, 'warning');
                 charts.portfolio.destroy();
             }
 
-            const pensionsTotal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
-            const totalValue = getTotalValueILS() + pensionsTotal;
+            const pensionsStocksTotal = (portfolio.pensions || []).reduce((s, p) => {
+                const pct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                return s + (p.currentValue || 0) * pct;
+            }, 0);
+            const totalValue = getTotalValueILS() + pensionsStocksTotal;
             const data = portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
                 const holdingsVal = groupHoldings.reduce((sum, h) => {
