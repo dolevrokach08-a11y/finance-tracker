@@ -6804,7 +6804,10 @@ function calculateTWRv3(startDate = null) {
             
             let currentTotalValue;
             try {
-                const pensionsVal = (portfolio.pensions || []).reduce((s, p) => s + (p.currentValue || 0), 0);
+                const pensionsVal = (portfolio.pensions || []).reduce((s, p) => {
+                    const pct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                    return s + (p.currentValue || 0) * pct;
+                }, 0);
                 currentTotalValue = getTotalValueILS() + pensionsVal;
                 console.log('💰 Current total value:', currentTotalValue);
             } catch (e) {
