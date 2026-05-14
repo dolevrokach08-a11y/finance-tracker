@@ -11467,15 +11467,22 @@ ${msg}`, 'warning');
         
         function renderGroupsList() {
             const container = document.getElementById('groups-list');
-            const totalValue = getTotalValueILS();
-            
+            const pensionsStocksTotal = (portfolio.pensions || []).reduce((s, p) => {
+                const pct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                return s + (p.currentValue || 0) * pct;
+            }, 0);
+            const totalValue = getTotalValueILS() + pensionsStocksTotal;
+
             const html = portfolio.groups.map(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
-                const groupValue = groupHoldings.reduce((sum, h) => {
+                const holdingsValue = groupHoldings.reduce((sum, h) => {
                     const value = h.shares * (h.currentPrice || h.costBasis);
                     return sum + convertToILS(value, h.currency);
                 }, 0);
-                
+                const groupPensions = (portfolio.pensions || []).filter(p => p.groupId === group.id && (p.stocksPercent != null ? p.stocksPercent : 100) > 0);
+                const pensionValue = (portfolio.pensions || []).reduce((s, p) => s + getPensionGroupValue(p, group.id), 0);
+                const groupValue = holdingsValue + pensionValue;
+
                 const actualPercent = totalValue > 0 ? (groupValue / totalValue) * 100 : 0;
                 
                 return `
@@ -11507,14 +11514,30 @@ ${msg}`, 'warning');
                                 const holdingPercentOfGroup = groupValue > 0 ? (valueILS / groupValue * 100) : 0;
                                 const positionTarget = group.positionTargets && group.positionTargets[h.symbol];
                                 const targetDiff = positionTarget ? (holdingPercentOfGroup - positionTarget) : null;
-                                
                                 return `
                                     <div style="display: flex; justify-content: space-between; padding: 10px; background: var(--bg-surface); border-radius: 8px; align-items: center; flex-wrap: wrap; gap: 5px;">
                                         <span style="font-weight: 600;">${h.symbol}</span>
                                         <span style="color: var(--text-secondary); font-size: 0.9rem;">
-                                            ₪${Math.round(valueILS).toLocaleString()} 
+                                            ₪${Math.round(valueILS).toLocaleString()}
                                             <span style="color: ${group.color}; font-weight: 600;">(${holdingPercentOfGroup.toFixed(0)}% מהקבוצה)</span>
                                             ${positionTarget ? `<span style="color: ${targetDiff >= 0 ? '#10b981' : '#f59e0b'}; font-size: 0.8rem;"> יעד: ${positionTarget}%</span>` : ''}
+                                            <span style="color: #9ca3af;"> | ${holdingPercentOfTotal.toFixed(1)}% מהתיק</span>
+                                        </span>
+                                    </div>
+                                `;
+                            }).join('')}
+                            ${groupPensions.map(p => {
+                                const stocksPct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                                const valueILS = (p.currentValue || 0) * stocksPct;
+                                const holdingPercentOfTotal = totalValue > 0 ? (valueILS / totalValue * 100) : 0;
+                                const holdingPercentOfGroup = groupValue > 0 ? (valueILS / groupValue * 100) : 0;
+                                return `
+                                    <div style="display: flex; justify-content: space-between; padding: 10px; background: var(--bg-surface); border-radius: 8px; align-items: center; flex-wrap: wrap; gap: 5px; border-right: 3px solid #f5a623;">
+                                        <span style="font-weight: 600; color: #f5a623;">🏛️ ${p.name}</span>
+                                        <span style="color: var(--text-secondary); font-size: 0.9rem;">
+                                            ₪${Math.round(valueILS).toLocaleString()}
+                                            ${stocksPct < 1 ? `<span style="color: var(--text-muted); font-size: 0.78rem;"> (${Math.round(stocksPct*100)}% מניות)</span>` : ''}
+                                            <span style="color: ${group.color}; font-weight: 600;"> (${holdingPercentOfGroup.toFixed(0)}% מהקבוצה)</span>
                                             <span style="color: #9ca3af;"> | ${holdingPercentOfTotal.toFixed(1)}% מהתיק</span>
                                         </span>
                                     </div>
@@ -11685,17 +11708,23 @@ ${msg}`, 'warning');
         
         function renderRecommendations() {
             const container = document.getElementById('recommendations-list');
-            const totalValue = getTotalValueILS();
-            
+            const pensionsStocksTotal = (portfolio.pensions || []).reduce((s, p) => {
+                const pct = (p.stocksPercent != null ? p.stocksPercent : 100) / 100;
+                return s + (p.currentValue || 0) * pct;
+            }, 0);
+            const totalValue = getTotalValueILS() + pensionsStocksTotal;
+
             const recommendations = [];
-            
+
             portfolio.groups.forEach(group => {
                 const groupHoldings = portfolio.holdings.filter(h => parseInt(h.groupId) === group.id);
-                const groupValue = groupHoldings.reduce((sum, h) => {
+                const holdingsValue = groupHoldings.reduce((sum, h) => {
                     const value = h.shares * (h.currentPrice || h.costBasis);
                     return sum + convertToILS(value, h.currency);
                 }, 0);
-                
+                const pensionValue = (portfolio.pensions || []).reduce((s, p) => s + getPensionGroupValue(p, group.id), 0);
+                const groupValue = holdingsValue + pensionValue;
+
                 const actualPercent = totalValue > 0 ? (groupValue / totalValue) * 100 : 0;
                 const diff = group.target - actualPercent;
                 
