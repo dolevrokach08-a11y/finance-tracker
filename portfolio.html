@@ -6858,6 +6858,7 @@ function calculateTWRv3(startDate = null) {
                     currentValue,
                     targetValue,
                     needed,
+                    pensionValue,
                     holdings: groupHoldings
                 };
             });
@@ -6984,6 +6985,7 @@ function calculateTWRv3(startDate = null) {
                 return {
                     group: status.group.name,
                     amount: allocatedAmount,
+                    pensionValue: status.pensionValue || 0,
                     holdings: holdingAllocations
                 };
             });
@@ -7024,6 +7026,9 @@ function calculateTWRv3(startDate = null) {
                     console.log(`✅ Adding group: ${alloc.group} with amount: ${alloc.amount}`);
                     html += `<div style="margin-bottom: 15px;">`;
                     html += `<div style="font-weight: 600; color: var(--accent); margin-bottom: 8px;">${alloc.group} - ₪${Math.round(alloc.amount).toLocaleString()}</div>`;
+                    if (alloc.pensionValue > 0) {
+                        html += `<div style="font-size: 0.78rem; color: #f5a623; margin-bottom: 6px; padding: 4px 8px; background: rgba(245,166,35,0.08); border-radius: 6px; border-right: 2px solid #f5a623;">🏛️ ₪${Math.round(alloc.pensionValue).toLocaleString()} מכוסה מפנסיות/השתלמות (קבוע — לא נדרשת רכישה)</div>`;
+                    }
                     
                     alloc.holdings.forEach((holding, hIndex) => {
                         console.log(`  📈 Holding ${hIndex}:`, holding);
