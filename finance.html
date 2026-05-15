@@ -2480,8 +2480,11 @@
                 selectedContent.classList.remove('hidden');
             }
             
-            event.target.classList.remove('text-gray-600');
-            event.target.classList.add('bg-blue-100', 'text-blue-700');
+            const activeSubBtn = document.querySelector(`.report-sub-btn[onclick*="'${subTab}'"]`);
+            if (activeSubBtn) {
+                activeSubBtn.classList.remove('text-gray-600');
+                activeSubBtn.classList.add('bg-blue-100', 'text-blue-700');
+            }
             
             if (subTab === 'overview') {
                 renderTrendChart();
