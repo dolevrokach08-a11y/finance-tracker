@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>תנאי שימוש ופרטיות</title>
+    <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared-theme.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Heebo', -apple-system, sans-serif;
+            background: var(--bg-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 48px 20px;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.9rem;
+            margin-bottom: 32px;
+        }
+        .back-link:hover { text-decoration: underline; }
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        .updated {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+        }
+        h2 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 32px 0 12px;
+        }
+        p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        ul {
+            margin: 8px 0 12px 0;
+            padding-right: 20px;
+        }
+        ul li {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 6px;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid var(--border);
+            margin: 40px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="#" class="back-link" onclick="history.length > 1 ? history.back() : window.close(); return false;">← חזרה / סגור</a>
+
+        <h1>תנאי שימוש ומדיניות פרטיות</h1>
+        <p class="updated">עודכן לאחרונה: מאי 2026 | גרסה 1.0</p>
+
+        <h2>1. אודות האפליקציה</h2>
+        <p>
+            אפליקציית המעקב הפיננסי האישי ("האפליקציה") היא כלי לניהול ומעקב אישי אחר תיק השקעות, תקציב משפחתי ומשכנתא. האפליקציה מיועדת לשימוש אישי בלבד.
+        </p>
+
+        <h2>2. המידע שנאסף</h2>
+        <p>האפליקציה אוספת ומאחסנת את הפרטים הבאים:</p>
+        <ul>
+            <li>כתובת המייל ושם המשתמש מחשבון Google (לצורך הזדהות)</li>
+            <li>נתוני תיק השקעות שאתה מכניס ידנית (אחזקות, עסקאות, תנועות כסף)</li>
+            <li>נתוני תקציב והוצאות שאתה מכניס ידנית</li>
+            <li>נתוני משכנתא שאתה מכניס ידנית</li>
+            <li>תאריך ואישור קבלת תנאי השימוש</li>
+        </ul>
+
+        <h2>3. אחסון המידע</h2>
+        <p>
+            כל המידע מאוחסן ב-Firebase של Google (Firestore). הנתונים שלך מאובטחים תחת מזהה המשתמש הייחודי שלך ומוגנים על ידי כללי אבטחה — אף משתמש אחר אינו יכול לגשת אליהם.
+        </p>
+        <p>
+            כבעל הפרויקט, למנהל האפליקציה גישה טכנית לנתונים דרך Firebase Console לצרכי תפעול ותמיכה בלבד.
+        </p>
+
+        <h2>4. שיתוף מידע עם צדדים שלישיים</h2>
+        <p>
+            המידע שלך אינו נמכר, מועבר או משותף עם כל גורם שלישי. המידע היחיד שעובר לשירות חיצוני הוא בקשות מחיר ומדדים בזמן אמת לשרתי Yahoo Finance (דרך proxy) — בקשות אלו אינן כוללות נתונים אישיים שלך.
+        </p>
+
+        <h2>5. אחריות מוגבלת</h2>
+        <p>
+            האפליקציה אינה מספקת ייעוץ פיננסי, השקעתי, מיסויי או משפטי מכל סוג שהוא. כל המידע המוצג הוא לצורכי מעקב ומידע אישי בלבד. כל החלטה פיננסית היא באחריותך הבלעדית.
+        </p>
+        <p>
+            המנהל אינו אחראי לכל נזק, הפסד כספי או תקלה טכנית שעלולים לנבוע משימוש באפליקציה.
+        </p>
+
+        <h2>6. מחיקת נתונים</h2>
+        <p>
+            אם תרצה למחוק את כל הנתונים שלך מהמערכת, פנה למנהל האפליקציה ישירות. הבקשה תטופל בתוך 14 ימי עסקים.
+        </p>
+
+        <h2>7. שינויים בתנאים</h2>
+        <p>
+            תנאי שימוש אלו עשויים להתעדכן מעת לעת. במקרה של שינוי מהותי, תתבקש לאשר את התנאים החדשים בכניסה הבאה.
+        </p>
+
+        <hr class="divider">
+        <p style="font-size: 0.8rem; color: var(--text-secondary);">בשאלות ניתן לפנות למנהל האפליקציה.</p>
+    </div>
+</body>
+</html>
