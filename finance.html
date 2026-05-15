@@ -975,7 +975,15 @@
                 </div>
                 <div class="glass p-6">
                     <h3 class="text-xl font-semibold mb-4">רשומות החודש</h3>
-                    <div id="month-list" class="space-y-2"></div>
+                    <div class="mb-6">
+                        <h4 class="text-lg font-semibold mb-3 text-green-700">💚 הכנסות</h4>
+                        <div id="income-list" class="space-y-2"></div>
+                    </div>
+                    <hr class="my-4 border-gray-200">
+                    <div>
+                        <h4 class="text-lg font-semibold mb-3 text-red-700">🔴 הוצאות</h4>
+                        <div id="expense-list" class="space-y-2"></div>
+                    </div>
                 </div>
             </div>
 
@@ -3829,18 +3837,21 @@
 
         function loadMonthTransactions() {
             const month = getAddMonth();
-            const trans = data.transactions.filter(t=>t.month===month).sort((a,b)=>new Date(b.time)-new Date(a.time));
+            const trans = data.transactions.filter(t=>t.month===month);
             const fixInc = data.fixedIncomes.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'income',fixed:true}));
             const fixExp = data.fixedExpenses.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'expense',fixed:true}));
-            const all = [...trans,...fixInc,...fixExp];
-            
-            document.getElementById('month-list').innerHTML = all.length ? all.map(t => {
+
+            const incomes = [...trans.filter(t=>t.type==='income'), ...fixInc]
+                .sort((a,b)=>(a.desc||a.description||'').localeCompare(b.desc||b.description||'', 'he'));
+            const expenses = [...trans.filter(t=>t.type==='expense'), ...fixExp]
+                .sort((a,b)=>(a.desc||a.description||'').localeCompare(b.desc||b.description||'', 'he'));
+
+            function renderRow(t) {
                 const showRuleBtn = !t.fixed && t.cat === 'אחר';
                 const isIncome = t.type === 'income';
                 const isExempt = t.titheExempt || false;
                 const canToggleExempt = isIncome && !t.fixed;
                 const earnerLabel = t.earner === 'father' ? '👨 אב' : t.earner === 'mother' ? '👩 אם' : '';
-
                 return `<div class="item-${t.type} p-3 rounded-lg flex justify-between items-center">
                     <div class="flex-1">
                         <div class="font-medium">
@@ -3852,13 +3863,20 @@
                         <div class="text-sm text-gray-600">${t.cat||t.category}</div>
                     </div>
                     <div class="flex items-center gap-2">
-                        <div class="font-bold ${t.type==='income'?'text-green-600':'text-red-600'}">${t.type==='income'?'+':'-'}₪${(t.amt||t.amount).toLocaleString()}</div>
+                        <div class="font-bold ${isIncome?'text-green-600':'text-red-600'}">${isIncome?'+':'-'}₪${(t.amt||t.amount).toLocaleString()}</div>
                         ${canToggleExempt ? `<button onclick="toggleTitheExempt(${t.id})" class="text-orange-500 hover:text-orange-700 px-2 text-sm" title="${isExempt ? 'הסר פטור ממעשר' : 'סמן כפטור ממעשר'}">${isExempt ? '💰' : '🚫'}</button>` : ''}
                         ${showRuleBtn ? `<button onclick="quickAddRule(${t.id})" class="text-purple-500 hover:text-purple-700 px-2 text-xs" title="סווג לקטגוריה">🔖</button>` : ''}
                         ${!t.fixed ? `<button onclick="startEdit(${t.id})" class="text-blue-500 hover:text-blue-700 px-2 text-sm">✏️</button><button onclick="delTrans(${t.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>` : ''}
                     </div>
                 </div>`;
-            }).join('') : '<div class="text-gray-500 text-center py-8">אין רשומות</div>';
+            }
+
+            document.getElementById('income-list').innerHTML = incomes.length
+                ? incomes.map(renderRow).join('')
+                : '<div class="text-gray-500 text-center py-4">אין הכנסות</div>';
+            document.getElementById('expense-list').innerHTML = expenses.length
+                ? expenses.map(renderRow).join('')
+                : '<div class="text-gray-500 text-center py-4">אין הוצאות</div>';
         }
 
         function toggleTitheExempt(id) {
