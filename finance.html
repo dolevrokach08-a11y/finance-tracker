@@ -975,14 +975,15 @@
                 </div>
                 <div class="glass p-6">
                     <h3 class="text-xl font-semibold mb-4">רשומות החודש</h3>
-                    <div class="mb-6">
-                        <h4 class="text-lg font-semibold mb-3 text-green-700">💚 הכנסות</h4>
-                        <div id="income-list" class="space-y-2"></div>
-                    </div>
-                    <hr class="my-4 border-gray-200">
-                    <div>
-                        <h4 class="text-lg font-semibold mb-3 text-red-700">🔴 הוצאות</h4>
-                        <div id="expense-list" class="space-y-2"></div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div style="display:flex;flex-direction:column;">
+                            <h4 class="text-lg font-semibold mb-3 text-green-700">💚 הכנסות</h4>
+                            <div id="income-list" class="space-y-2" style="overflow-y:auto;max-height:420px;padding-left:4px;"></div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;">
+                            <h4 class="text-lg font-semibold mb-3 text-red-700">🔴 הוצאות</h4>
+                            <div id="expense-list" class="space-y-2" style="overflow-y:auto;max-height:420px;padding-left:4px;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
