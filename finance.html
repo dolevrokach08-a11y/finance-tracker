@@ -928,7 +928,8 @@
                     <div class="mb-4">
                         <label class="text-sm font-medium block mb-2">בחר סוג קובץ:</label>
                         <select id="import-type" class="p-2 border rounded-lg text-sm mb-2">
-                            <option value="credit">כרטיס אשראי</option>
+                            <option value="auto">זיהוי אוטומטי</option>
+                            <option value="credit">כרטיס אשראי (ישראכרט)</option>
                             <option value="bank">תנועות בנק (בחובה/בזכות)</option>
                         </select>
                     </div>
@@ -2770,11 +2771,13 @@
         // ========== Import Functionality (Credit Card + Bank) ==========
         function handleImportFile(event) {
             const importType = document.getElementById('import-type').value;
-            
+
             if (importType === 'credit') {
                 handleCreditCardFile(event);
             } else if (importType === 'bank') {
                 handleBankFile(event);
+            } else if (importType === 'auto') {
+                handleSmartImport(event);
             }
         }
 
@@ -3077,6 +3080,356 @@
             reader.readAsArrayBuffer(file);
             event.target.value = '';
         }
+
+        // ========== Universal Smart Import ==========
+        const COLUMN_KEYWORDS = {
+            description: ['שם בית העסק', 'שם בית עסק', 'שם העסק', 'בית עסק', 'תיאור', 'תאור', 'פירוט', 'פרטים', 'פעולה', 'תיאור הפעולה', 'שם'],
+            amount: ['סכום חיוב', 'סכום העסקה', 'סכום עסקה', 'סכום בש"ח', 'סכום בש״ח', 'סכום'],
+            debit: ['בחובה', 'חובה', 'הוצאה', 'חיוב'],
+            credit: ['בזכות', 'זכות', 'הכנסה', 'זיכוי'],
+            date: ['תאריך עסקה', 'תאריך חיוב', 'תאריך ערך', 'תאריך'],
+            category: ['קטגוריה', 'קטגוריית עסקה', 'ענף', 'סוג עסקה']
+        };
+
+        function findHeaderRow(jsonData) {
+            for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+                const row = jsonData[i];
+                if (!row) continue;
+                const textCells = row.filter(c => c && typeof String(c) === 'string' && String(c).trim().length > 1 && isNaN(c));
+                if (textCells.length >= 2) {
+                    const rowStr = row.map(c => String(c || '')).join(' ');
+                    const allKeywords = Object.values(COLUMN_KEYWORDS).flat();
+                    const matchCount = allKeywords.filter(kw => rowStr.includes(kw)).length;
+                    if (matchCount >= 2) return { row, index: i };
+                }
+            }
+            for (let i = 0; i < Math.min(20, jsonData.length); i++) {
+                const row = jsonData[i];
+                if (!row) continue;
+                const textCells = row.filter(c => c && String(c).trim().length > 1 && isNaN(c));
+                if (textCells.length >= 3) return { row, index: i };
+            }
+            return null;
+        }
+
+        function fuzzyMatchColumn(headerText, keywords) {
+            const h = String(headerText || '').trim();
+            if (!h) return false;
+            for (const kw of keywords) {
+                if (h === kw || h.includes(kw)) return true;
+                if (kw.includes(h) && h.length >= kw.length * 0.6) return true;
+            }
+            return false;
+        }
+
+        function detectColumnsByHeaders(headerRow) {
+            const mapping = { descIdx: -1, amountIdx: -1, debitIdx: -1, creditIdx: -1, dateIdx: -1, categoryIdx: -1 };
+            const used = new Set();
+
+            const tryMatch = (field, keywords) => {
+                for (let i = 0; i < headerRow.length; i++) {
+                    if (used.has(i)) continue;
+                    if (fuzzyMatchColumn(headerRow[i], keywords)) {
+                        mapping[field] = i;
+                        used.add(i);
+                        return true;
+                    }
+                }
+                return false;
+            };
+
+            tryMatch('descIdx', COLUMN_KEYWORDS.description);
+            tryMatch('debitIdx', COLUMN_KEYWORDS.debit);
+            tryMatch('creditIdx', COLUMN_KEYWORDS.credit);
+            tryMatch('amountIdx', COLUMN_KEYWORDS.amount);
+            tryMatch('dateIdx', COLUMN_KEYWORDS.date);
+            tryMatch('categoryIdx', COLUMN_KEYWORDS.category);
+
+            return mapping;
+        }
+
+        function isDateLike(val) {
+            if (!val) return false;
+            const s = String(val).trim();
+            return /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(s) ||
+                   /^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$/.test(s) ||
+                   (typeof val === 'number' && val > 30000 && val < 60000);
+        }
+
+        function isNumberLike(val) {
+            if (val == null || val === '') return false;
+            if (typeof val === 'number') return true;
+            const s = String(val).replace(/[,₪\s]/g, '').trim();
+            return s.length > 0 && !isNaN(parseFloat(s));
+        }
+
+        function detectColumnsByContent(jsonData, headerIndex) {
+            const dataRows = jsonData.slice(headerIndex + 1, headerIndex + 20).filter(r => r && r.length > 0);
+            if (dataRows.length < 2) return null;
+
+            const numCols = Math.max(...dataRows.map(r => r.length));
+            const colTypes = [];
+
+            for (let c = 0; c < numCols; c++) {
+                const vals = dataRows.map(r => r[c]).filter(v => v != null && String(v).trim() !== '');
+                if (vals.length === 0) { colTypes.push('empty'); continue; }
+                const dateCount = vals.filter(isDateLike).length;
+                const numCount = vals.filter(isNumberLike).length;
+                const ratio = vals.length;
+                if (dateCount / ratio > 0.6) colTypes.push('date');
+                else if (numCount / ratio > 0.6) colTypes.push('number');
+                else colTypes.push('text');
+            }
+
+            const mapping = { descIdx: -1, amountIdx: -1, debitIdx: -1, creditIdx: -1, dateIdx: -1, categoryIdx: -1 };
+            const numberCols = colTypes.map((t, i) => t === 'number' ? i : -1).filter(i => i >= 0);
+            const textCols = colTypes.map((t, i) => t === 'text' ? i : -1).filter(i => i >= 0);
+            const dateCols = colTypes.map((t, i) => t === 'date' ? i : -1).filter(i => i >= 0);
+
+            if (dateCols.length > 0) mapping.dateIdx = dateCols[0];
+            if (textCols.length > 0) {
+                const longest = textCols.reduce((best, ci) => {
+                    const avgLen = dataRows.reduce((sum, r) => sum + String(r[ci] || '').length, 0) / dataRows.length;
+                    return avgLen > best.avgLen ? { idx: ci, avgLen } : best;
+                }, { idx: textCols[0], avgLen: 0 });
+                mapping.descIdx = longest.idx;
+            }
+            if (numberCols.length === 1) {
+                mapping.amountIdx = numberCols[0];
+            } else if (numberCols.length >= 2) {
+                mapping.debitIdx = numberCols[0];
+                mapping.creditIdx = numberCols[1];
+            }
+
+            return mapping;
+        }
+
+        function hasMinimumMapping(mapping) {
+            const hasDesc = mapping.descIdx >= 0;
+            const hasAmount = mapping.amountIdx >= 0 || (mapping.debitIdx >= 0 || mapping.creditIdx >= 0);
+            return hasDesc && hasAmount;
+        }
+
+        function showColumnMappingDialog(jsonData, headerRow, headerIndex, selectedMonth, onComplete) {
+            const previewRows = jsonData.slice(headerIndex + 1, headerIndex + 6).filter(r => r);
+            const numCols = headerRow.length;
+
+            let tableHtml = '<table style="width:100%;border-collapse:collapse;font-size:14px;direction:rtl;text-align:right">';
+            tableHtml += '<tr>';
+            for (let c = 0; c < numCols; c++) {
+                tableHtml += `<th style="border:1px solid hsl(220,14%,20%);padding:10px 12px;background:hsl(220,16%,18%);color:hsl(142,60%,55%);font-weight:700;font-size:14px">${headerRow[c] || `עמודה ${c+1}`}</th>`;
+            }
+            tableHtml += '</tr>';
+            for (const row of previewRows) {
+                tableHtml += '<tr>';
+                for (let c = 0; c < numCols; c++) {
+                    tableHtml += `<td style="border:1px solid hsl(220,14%,16%);padding:8px 12px;color:hsl(210,20%,88%);font-size:14px">${row[c] != null ? row[c] : ''}</td>`;
+                }
+                tableHtml += '</tr>';
+            }
+            tableHtml += '</table>';
+
+            let selectorsHtml = '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;direction:rtl">';
+            for (let c = 0; c < numCols; c++) {
+                selectorsHtml += `<div style="flex:1;min-width:130px">
+                    <label style="font-size:13px;display:block;margin-bottom:4px;font-weight:600;color:hsl(210,20%,75%)">${headerRow[c] || `עמודה ${c+1}`}</label>
+                    <select id="col-map-${c}" style="width:100%;padding:8px;border:1px solid hsl(220,14%,20%);border-radius:8px;font-size:14px;background:hsl(220,16%,18%);color:hsl(210,20%,92%);cursor:pointer">
+                        <option value="ignore">התעלם</option>
+                        <option value="desc">תיאור / שם עסק</option>
+                        <option value="amount">סכום (כולל)</option>
+                        <option value="debit">סכום הוצאה</option>
+                        <option value="credit">סכום הכנסה</option>
+                        <option value="date">תאריך</option>
+                        <option value="category">קטגוריה</option>
+                    </select>
+                </div>`;
+            }
+            selectorsHtml += '</div>';
+
+            const overlay = document.createElement('div');
+            overlay.id = 'column-mapping-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
+            overlay.innerHTML = `<div style="background:hsl(220,18%,10%);border:1px solid hsl(220,14%,20%);border-radius:16px;padding:28px;max-width:90vw;max-height:85vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+                <h3 style="margin:0 0 10px;font-size:20px;direction:rtl;text-align:right;color:hsl(210,20%,92%);font-weight:700">🔍 זיהוי עמודות</h3>
+                <p style="font-size:15px;color:hsl(210,20%,75%);margin:0 0 16px;direction:rtl;text-align:right;line-height:1.5">לא הצלחנו לזהות את מבנה הקובץ אוטומטית.<br>בחר מה כל עמודה מייצגת:</p>
+                <div style="overflow-x:auto;margin-bottom:16px;border-radius:10px;border:1px solid hsl(220,14%,16%)">${tableHtml}</div>
+                ${selectorsHtml}
+                <div style="display:flex;gap:12px;margin-top:20px;justify-content:flex-start;direction:rtl">
+                    <button id="col-map-confirm" style="padding:10px 28px;background:#3b82f6;color:white;border:none;border-radius:10px;cursor:pointer;font-size:15px;font-weight:600;transition:background 0.2s">ייבא</button>
+                    <button id="col-map-cancel" style="padding:10px 28px;background:hsl(220,16%,18%);color:hsl(210,20%,75%);border:1px solid hsl(220,14%,20%);border-radius:10px;cursor:pointer;font-size:15px;transition:background 0.2s">ביטול</button>
+                </div>
+            </div>`;
+
+            document.body.appendChild(overlay);
+
+            document.getElementById('col-map-cancel').onclick = () => overlay.remove();
+            document.getElementById('col-map-confirm').onclick = () => {
+                const mapping = { descIdx: -1, amountIdx: -1, debitIdx: -1, creditIdx: -1, dateIdx: -1, categoryIdx: -1 };
+                for (let c = 0; c < numCols; c++) {
+                    const val = document.getElementById(`col-map-${c}`).value;
+                    if (val === 'desc') mapping.descIdx = c;
+                    else if (val === 'amount') mapping.amountIdx = c;
+                    else if (val === 'debit') mapping.debitIdx = c;
+                    else if (val === 'credit') mapping.creditIdx = c;
+                    else if (val === 'date') mapping.dateIdx = c;
+                    else if (val === 'category') mapping.categoryIdx = c;
+                }
+                overlay.remove();
+                if (!hasMinimumMapping(mapping)) {
+                    notify('❌ חובה לבחור לפחות עמודת תיאור ועמודת סכום');
+                    return;
+                }
+                onComplete(mapping);
+            };
+        }
+
+        function importWithMapping(jsonData, headerIndex, mapping, selectedMonth) {
+            const categoryMap = {
+                'מזון וצריכה': 'מזון', 'עיצוב הבית': 'קניות', 'עירייה וממשלה': 'חשבונות',
+                'דלק, חשמל וגז': 'תחבורה', 'רפואה ובתי מרקחת': 'בריאות', 'שונות': 'אחר',
+                'ביגוד והנעלה': 'קניות', 'חינוך': 'חינוך', 'תחבורה': 'תחבורה', 'בידור': 'בילויים'
+            };
+
+            let importedIncome = 0, importedExpense = 0, skipped = 0;
+            const existingTransactions = data.transactions.filter(t => t.month === selectedMonth);
+
+            for (let i = headerIndex + 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (!row) continue;
+
+                const desc = mapping.descIdx >= 0 ? String(row[mapping.descIdx] || '').trim() : '';
+                if (!desc) continue;
+
+                let debitAmt = 0, creditAmt = 0;
+                if (mapping.amountIdx >= 0) {
+                    const raw = String(row[mapping.amountIdx] || '').replace(/[,₪\s]/g, '');
+                    const val = parseFloat(raw);
+                    if (!isNaN(val)) {
+                        if (val > 0) debitAmt = val;
+                        else if (val < 0) creditAmt = Math.abs(val);
+                    }
+                } else {
+                    if (mapping.debitIdx >= 0) {
+                        const raw = String(row[mapping.debitIdx] || '').replace(/[,₪\s]/g, '');
+                        debitAmt = parseFloat(raw) || 0;
+                    }
+                    if (mapping.creditIdx >= 0) {
+                        const raw = String(row[mapping.creditIdx] || '').replace(/[,₪\s]/g, '');
+                        creditAmt = parseFloat(raw) || 0;
+                    }
+                }
+
+                if (debitAmt === 0 && creditAmt === 0) continue;
+
+                const fileCat = mapping.categoryIdx >= 0 ? String(row[mapping.categoryIdx] || '') : '';
+
+                if (debitAmt > 0) {
+                    const isDup = existingTransactions.some(t => t.type === 'expense' && t.desc === desc && Math.abs(t.amt - debitAmt) < 0.01);
+                    if (isDup) { skipped++; }
+                    else {
+                        const cat = fileCat ? (categoryMap[fileCat] || findCategoryByRules(desc, 'expense')) : findCategoryByRules(desc, 'expense');
+                        data.transactions.push({ id: Date.now() + importedExpense * 10, type: 'expense', desc, amt: debitAmt, cat, month: selectedMonth, time: new Date().toISOString() });
+                        importedExpense++;
+                    }
+                }
+
+                if (creditAmt > 0) {
+                    const isDup = existingTransactions.some(t => t.type === 'income' && t.desc === desc && Math.abs(t.amt - creditAmt) < 0.01);
+                    if (isDup) { skipped++; }
+                    else {
+                        const cat = findCategoryByRules(desc, 'income');
+                        const earner = findEarnerByRules(desc);
+                        data.transactions.push({ id: Date.now() + importedIncome * 10 + 5, type: 'income', desc, amt: creditAmt, cat, earner, month: selectedMonth, time: new Date().toISOString() });
+                        importedIncome++;
+                    }
+                }
+            }
+
+            const totalImported = importedIncome + importedExpense;
+            if (totalImported > 0) {
+                saveToLocalStorage();
+                populateYearMonthSelectors();
+                loadMonthTransactions();
+                updateOverview();
+                updateTithe();
+            }
+
+            if (totalImported > 0 && importedIncome > 0) {
+                setTimeout(() => {
+                    if (confirm(`יובאו ${importedIncome} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
+                        showTitheExemptDialog(selectedMonth);
+                    }
+                    setTimeout(() => {
+                        const untagged = data.transactions.filter(t => t.month === selectedMonth && t.type === 'income' && !t.earner);
+                        if (untagged.length > 0) showEarnerDialog(selectedMonth);
+                        else notify(`✅ יובאו ${totalImported} תנועות (${importedIncome} הכנסות, ${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
+                    }, 300);
+                }, 500);
+            } else if (totalImported > 0) {
+                notify(`✅ יובאו ${totalImported} תנועות (${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
+            } else if (skipped > 0) {
+                notify(`ℹ️ כל ${skipped} התנועות כבר קיימות במערכת`);
+            } else {
+                notify('❌ לא נמצאו תנועות לייבוא בקובץ');
+            }
+        }
+
+        function handleSmartImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (typeof XLSX === 'undefined') {
+                notify('❌ שגיאה: ספריית XLSX לא נטענה. רענן את הדף ונסה שוב.');
+                return;
+            }
+
+            const selectedMonth = getImportMonth();
+            if (!selectedMonth) { notify('❌ בחר חודש לייבוא'); return; }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const arrayData = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(arrayData, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+                    const header = findHeaderRow(jsonData);
+                    if (!header) {
+                        notify('❌ לא נמצאה שורת כותרות בקובץ');
+                        return;
+                    }
+
+                    let mapping = detectColumnsByHeaders(header.row);
+                    const headerMatchCount = Object.values(mapping).filter(v => v >= 0).length;
+
+                    if (!hasMinimumMapping(mapping) && headerMatchCount > 0) {
+                        const contentMapping = detectColumnsByContent(jsonData, header.index);
+                        if (contentMapping && hasMinimumMapping(contentMapping)) {
+                            mapping = contentMapping;
+                        }
+                    }
+
+                    if (hasMinimumMapping(mapping)) {
+                        console.log('Smart import - auto-detected mapping:', mapping);
+                        importWithMapping(jsonData, header.index, mapping, selectedMonth);
+                    } else {
+                        console.log('Smart import - falling back to manual mapping');
+                        showColumnMappingDialog(jsonData, header.row, header.index, selectedMonth, (manualMapping) => {
+                            importWithMapping(jsonData, header.index, manualMapping, selectedMonth);
+                        });
+                    }
+
+                } catch (error) {
+                    console.error('Smart import error:', error);
+                    notify(`❌ שגיאה בקריאת הקובץ: ${error.message}`);
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+        // ========== End Universal Smart Import ==========
 
         function showTitheExemptDialog(month) {
             const incomes = data.transactions.filter(t => t.month === month && t.type === 'income' && !t.titheExempt);
