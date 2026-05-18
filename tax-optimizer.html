@@ -1580,14 +1580,24 @@ function App() {
       const baseP = isMother ? 2.75 : 2.25;
       const childP = ages.reduce((s, a) => s + (isMother ? motherChildPoints(a) : fatherChildPoints(a)), 0);
       const totalP = baseP + childP;
-      const pVal = Math.round(totalP * CREDIT_POINT_VALUE_2026);
-      const sCredit = stl ? Math.round(Math.min(annual, SETTLEMENT_CEILING) * SETTLEMENT_RATE) : 0;
-      const totalCr = pVal + sCredit;
+      // הפרדה לפי החוק:
+      // • נק' תושב/אישה (בסיס) — מקזזות כל הכנסה חייבת, כולל מס רווחי הון (סע' 34, 36א)
+      // • נק' ילדים (סע' 40) + זיכוי יישוב מזכה (סע' 11) — מקזזות רק מס על הכנסה מיגיעה אישית
+      const baseCr = Math.round(baseP * CREDIT_POINT_VALUE_2026);     // CG-eligible
+      const childCr = Math.round(childP * CREDIT_POINT_VALUE_2026);   // work-only
+      const sCredit = stl ? Math.round(Math.min(annual, SETTLEMENT_CEILING) * SETTLEMENT_RATE) : 0; // work-only
+      const workOnlyCr = childCr + sCredit;
+      const pVal = baseCr + childCr;        // נשמר לתאימות תצוגה
+      const totalCr = pVal + sCredit;       // נשמר לתאימות תצוגה
       const tax = calcTax(annual);
-      const unused = Math.max(0, totalCr - tax);
+      // קיזוז אופטימלי: קודם מנצלים את זיכויי יגיעה-אישית-בלבד מול מס העבודה
+      // (אין להם שימוש אחר), ואז זיכויי הבסיס מכסים את היתרה. הנותר זמין לרווחי הון.
+      const workTaxAfterWorkOnly = Math.max(0, tax - workOnlyCr);
+      const workOnlyLost = Math.max(0, workOnlyCr - tax);  // נקודות ילדים/יישוב שמתאדות
+      const unused = Math.max(0, baseCr - workTaxAfterWorkOnly);  // זמין לקיזוז מס רווח הון
       const wg = calcGrant(monthly, nK);
       const tg = calcToddler(monthly, nT, nK);
-      return { annual, baseP, childP, totalP, pVal, sCredit, totalCr, tax, unused, wg, tg };
+      return { annual, baseP, childP, totalP, baseCr, childCr, sCredit, workOnlyCr, workOnlyLost, pVal, totalCr, tax, unused, wg, tg };
     };
 
     const f = calc(fM, false), m = calc(mM, true);
@@ -2006,31 +2016,44 @@ function App() {
 
         {/* CREDIT POINTS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>📊 נקודות זיכוי</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 6px" }}>📊 נקודות זיכוי</h2>
+          <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", marginBottom: 12, lineHeight: 1.5 }}>
+            לפי הפקודה (סע' 11, 40) — נקודות ילדים וזיכוי יישוב מזכה מקזזים <strong>רק מס על הכנסה מיגיעה אישית</strong>. רק נק' תושב/אישה מקזזות גם רווחי הון.
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[{ d: r.f, icon: "👨", clr: "#7ab8e0", lbl: "האב", base: "2.25 (תושב)" },
               { d: r.m, icon: "👩", clr: "#d898c8", lbl: "האם", base: "2.75 (תושבת+אישה)" }].map(({ d, icon, clr, lbl, base }) => (
               <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
-                <R label="בסיס" amount={base} />
-                <R label="ילדים" amount={d.childP.toFixed(1)} />
-                <R label="סה״כ נקודות" amount={d.totalP.toFixed(2)} bold />
-                <div style={{ marginTop: 8 }}>
-                  <R label="שווי נקודות" amount={`${fm(d.pVal)} ₪`} />
-                  {stl && <R label="זיכוי ישוב" amount={`${fm(d.sCredit)} ₪`} />}
-                  <R label="סה״כ זיכויים" amount={`${fm(d.totalCr)} ₪`} color="hsl(142, 60%, 50%)" bold />
+
+                {/* CG-eligible bucket */}
+                <div style={{ fontSize: 10, color: "hsl(142, 60%, 50%)", letterSpacing: 0.5, marginBottom: 4, fontWeight: 600 }}>
+                  ◆ מקזז כל הכנסה (כולל ר״ה)
                 </div>
-                <div style={{ marginTop: 8 }}>
-                  <R label="מס הכנסה שנתי" amount={`${fm(d.tax)} ₪`} color="#e07070" />
-                  <R label="עודפים" amount={`${fm(d.unused)} ₪`} color="hsl(142, 60%, 50%)" bold />
+                <R label={`בסיס ${base}`} amount={`${fm(d.baseCr)} ₪`} />
+
+                {/* Work-only bucket */}
+                <div style={{ fontSize: 10, color: "#e0a878", letterSpacing: 0.5, margin: "10px 0 4px", fontWeight: 600 }}>
+                  ◆ מקזז רק מס על יגיעה אישית
+                </div>
+                <R label={`ילדים (${d.childP.toFixed(1)} נק')`} amount={`${fm(d.childCr)} ₪`} />
+                {stl && <R label="זיכוי יישוב מזכה" amount={`${fm(d.sCredit)} ₪`} />}
+
+                {/* Cascade */}
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dashed rgba(255,255,255,0.08)" }}>
+                  <R label="מס על יגיעה אישית" amount={`${fm(d.tax)} ₪`} color="#e07070" />
+                  {d.workOnlyLost > 0 && (
+                    <R label="נק' ילדים/יישוב שמתאדות" amount={`-${fm(d.workOnlyLost)} ₪`} color="#a0808a" />
+                  )}
+                  <R label="זמין לקיזוז ר״ה" amount={`${fm(d.unused)} ₪`} color="hsl(142, 60%, 50%)" bold />
                 </div>
               </div>
             ))}
           </div>
           <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(76,175,80,0.08)", borderRadius: 10, textAlign: "center" }}>
-            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>סה״כ זיכויים עודפים למשק הבית</div>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>סה״כ זמין לקיזוז מס רווחי הון</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>{fm(r.hUnused)} ₪</div>
-            <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>הולכים לאיבוד — אלא אם מממשים רווחי הון</div>
+            <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>הולך לאיבוד — אלא אם מממשים רווחי הון</div>
           </div>
         </div>
 
