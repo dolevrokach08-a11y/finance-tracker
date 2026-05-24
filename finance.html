@@ -943,6 +943,14 @@
                             <input type="file" accept=".xlsx,.xls" onchange="handleImportFile(event)" class="hidden">
                         </label>
                     </div>
+
+                    <div class="mt-4 pt-4" style="border-top: 1px solid hsla(0,0%,100%,0.08);">
+                        <h4 class="text-sm font-semibold mb-2">ייצוא נתונים</h4>
+                        <p class="text-xs text-gray-500 mb-2">הורד את כל העסקאות במערכת כקובץ אקסל — לאודיט, גיבוי, או הכנה למיגרציה לבסיס צבירה</p>
+                        <button onclick="exportAllTransactions()" class="btn bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg text-sm">
+                            ⬇ ייצוא כל העסקאות לאקסל
+                        </button>
+                    </div>
                 </div>
 
 
@@ -964,6 +972,10 @@
                                 <option value="mother">👩 אם</option>
                             </select>
                         </div>
+                        <div class="mb-3">
+                            <label class="text-xs text-gray-600 block mb-1">תאריך עסקה אמיתי (מתי הכסף באמת נכנס)</label>
+                            <input type="date" id="inc-date" class="w-full p-3 border rounded-lg">
+                        </div>
                         <button onclick="addIncome()" class="btn btn-success w-full text-white py-3 rounded-lg font-medium">הוסף הכנסה</button>
                     </div>
                     <div class="glass p-6">
@@ -971,6 +983,10 @@
                         <input type="text" id="exp-desc" placeholder="תיאור" class="w-full p-3 border rounded-lg mb-3">
                         <input type="number" id="exp-amt" placeholder="סכום" class="w-full p-3 border rounded-lg mb-3">
                         <select id="exp-cat" class="w-full p-3 border rounded-lg mb-3"></select>
+                        <div class="mb-3">
+                            <label class="text-xs text-gray-600 block mb-1">תאריך עסקה אמיתי (מתי הכסף באמת יצא)</label>
+                            <input type="date" id="exp-date" class="w-full p-3 border rounded-lg">
+                        </div>
                         <button onclick="addExpense()" class="btn btn-danger w-full text-white py-3 rounded-lg font-medium">הוסף הוצאה</button>
                     </div>
                 </div>
@@ -2768,6 +2784,59 @@
         // =============================================
 
         
+        // ========== Export All Transactions ==========
+        function exportAllTransactions() {
+            if (typeof XLSX === 'undefined') {
+                notify('❌ ספריית XLSX לא נטענה. רענן ונסה שוב.');
+                return;
+            }
+            const txs = (data.transactions || []).slice();
+            if (txs.length === 0) {
+                notify('ℹ️ אין עסקאות לייצוא');
+                return;
+            }
+            // Sort by month, then by transactionDate, then by time — easier to scan.
+            txs.sort((a, b) => {
+                const ma = a.month || '', mb = b.month || '';
+                if (ma !== mb) return ma.localeCompare(mb);
+                const da = a.transactionDate || '', db = b.transactionDate || '';
+                if (da !== db) return da.localeCompare(db);
+                return (a.time || '').localeCompare(b.time || '');
+            });
+
+            const earnerLabel = e => e === 'father' ? 'אב' : e === 'mother' ? 'אם' : '';
+            const rows = txs.map(t => ({
+                'מזהה': t.id,
+                'סוג': t.type === 'income' ? 'הכנסה' : t.type === 'expense' ? 'הוצאה' : t.type,
+                'חודש מערכת (מזומן)': t.month || '',
+                'תאריך עסקה אמיתי': t.transactionDate || '',
+                'תיאור': t.desc || '',
+                'סכום': t.amt || 0,
+                'קטגוריה': t.cat || '',
+                'בעל הכנסה': earnerLabel(t.earner),
+                'פטור ממעשר': t.titheExempt ? 'כן' : '',
+                'נוצר במערכת': t.time || '',
+                'תאריך חסר?': t.transactionDate ? '' : '⚠️ חסר'
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(rows);
+            // Set column widths for readability
+            ws['!cols'] = [
+                {wch: 16}, {wch: 10}, {wch: 16}, {wch: 16}, {wch: 32},
+                {wch: 10}, {wch: 14}, {wch: 12}, {wch: 12}, {wch: 22}, {wch: 12}
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'עסקאות');
+
+            const today = todayISO();
+            const filename = `finance-export-${today}.xlsx`;
+            XLSX.writeFile(wb, filename);
+
+            const withDate = txs.filter(t => t.transactionDate).length;
+            const withoutDate = txs.length - withDate;
+            notify(`✅ יוצאו ${txs.length} עסקאות (${withDate} עם תאריך, ${withoutDate} ללא)`);
+        }
+
         // ========== Import Functionality (Credit Card + Bank) ==========
         function handleImportFile(event) {
             const importType = document.getElementById('import-type').value;
@@ -2820,8 +2889,9 @@
                     const nameIdx = headers.findIndex(h => h && String(h).includes('שם בית העסק'));
                     const amountIdx = headers.findIndex(h => h && String(h).includes('סכום חיוב'));
                     const categoryIdx = headers.findIndex(h => h && String(h).includes('קטגוריה'));
-                    
-                    console.log('Column indexes:', {nameIdx, amountIdx, categoryIdx});
+                    const dateIdx = headers.findIndex(h => h && String(h).includes('תאריך'));
+
+                    console.log('Column indexes:', {nameIdx, amountIdx, categoryIdx, dateIdx});
                     
                     if (nameIdx === -1 || amountIdx === -1) {
                         notify('❌ לא נמצאו העמודות הנדרשות בקובץ');
@@ -2865,7 +2935,8 @@
                                 skipped++;
                                 console.log('Skipped duplicate:', name, amount);
                             } else {
-                                data.transactions.push({
+                                const transactionDate = dateIdx >= 0 ? parseExcelDate(row[dateIdx]) : null;
+                                const tx = {
                                     id: Date.now() + imported * 10,
                                     type: 'expense',
                                     desc: name,
@@ -2873,7 +2944,9 @@
                                     cat: mappedCategory,
                                     month: selectedMonth,
                                     time: new Date().toISOString()
-                                });
+                                };
+                                if (transactionDate) tx.transactionDate = transactionDate;
+                                data.transactions.push(tx);
                                 imported++;
                             }
                         }
@@ -2966,9 +3039,10 @@
                     const descIdx = headerRow.findIndex(h => h && String(h).includes('תיאור'));
                     const debitIdx = headerRow.findIndex(h => h && String(h).includes('בחובה'));
                     const creditIdx = headerRow.findIndex(h => h && String(h).includes('בזכות'));
-                    
-                    console.log('Column indexes:', {descIdx, debitIdx, creditIdx});
-                    
+                    const dateIdx = headerRow.findIndex(h => h && String(h).includes('תאריך'));
+
+                    console.log('Column indexes:', {descIdx, debitIdx, creditIdx, dateIdx});
+
                     if (descIdx === -1 || debitIdx === -1 || creditIdx === -1) {
                         notify('❌ לא נמצאו העמודות הנדרשות (תיאור, בחובה, בזכות)');
                         return;
@@ -2990,14 +3064,16 @@
                         
                         if (!desc || (debitAmount === 0 && creditAmount === 0)) continue;
                         
+                        const transactionDate = dateIdx >= 0 ? parseExcelDate(row[dateIdx]) : null;
+
                         if (debitAmount > 0) {
-                            const isDuplicate = existingTransactions.some(t => 
+                            const isDuplicate = existingTransactions.some(t =>
                                 t.type === 'expense' && t.desc === desc && Math.abs(t.amt - debitAmount) < 0.01
                             );
-                            
+
                             if (!isDuplicate) {
                                 const category = findCategoryByRules(desc, 'expense');
-                                data.transactions.push({
+                                const tx = {
                                     id: Date.now() + importedExpense * 10,
                                     type: 'expense',
                                     desc: desc,
@@ -3005,13 +3081,15 @@
                                     cat: category,
                                     month: selectedMonth,
                                     time: new Date().toISOString()
-                                });
+                                };
+                                if (transactionDate) tx.transactionDate = transactionDate;
+                                data.transactions.push(tx);
                                 importedExpense++;
                             } else {
                                 skipped++;
                             }
                         }
-                        
+
                         if (creditAmount > 0) {
                             const isDuplicate = existingTransactions.some(t =>
                                 t.type === 'income' && t.desc === desc && Math.abs(t.amt - creditAmount) < 0.01
@@ -3020,7 +3098,7 @@
                             if (!isDuplicate) {
                                 const category = findCategoryByRules(desc, 'income');
                                 const earner = findEarnerByRules(desc);
-                                data.transactions.push({
+                                const tx = {
                                     id: Date.now() + importedIncome * 10 + 5,
                                     type: 'income',
                                     desc: desc,
@@ -3029,7 +3107,9 @@
                                     earner: earner,
                                     month: selectedMonth,
                                     time: new Date().toISOString()
-                                });
+                                };
+                                if (transactionDate) tx.transactionDate = transactionDate;
+                                data.transactions.push(tx);
                                 importedIncome++;
                             } else {
                                 skipped++;
@@ -3154,6 +3234,42 @@
             return /^\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}$/.test(s) ||
                    /^\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}$/.test(s) ||
                    (typeof val === 'number' && val > 30000 && val < 60000);
+        }
+
+        // Parse a date value from various formats into ISO YYYY-MM-DD.
+        // Handles: Excel serial numbers, DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY, YYYY-MM-DD.
+        // Returns null if unparseable.
+        function parseExcelDate(val) {
+            if (val == null || val === '') return null;
+            // Excel serial number (days since 1900-01-01, with the 1900 leap-year bug)
+            if (typeof val === 'number' && val > 30000 && val < 60000) {
+                const ms = (val - 25569) * 86400 * 1000;
+                const d = new Date(ms);
+                if (isNaN(d.getTime())) return null;
+                const y = d.getUTCFullYear();
+                const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(d.getUTCDate()).padStart(2, '0');
+                return `${y}-${m}-${day}`;
+            }
+            const s = String(val).trim();
+            // DD/MM/YYYY, DD-MM-YYYY, DD.MM.YYYY  (Israeli convention)
+            let m = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+            if (m) {
+                let [, dd, mm, yy] = m;
+                if (yy.length === 2) yy = (parseInt(yy) > 50 ? '19' : '20') + yy;
+                const d = parseInt(dd), mo = parseInt(mm), y = parseInt(yy);
+                if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+                return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+            // YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+            m = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+            if (m) {
+                const [, yy, mm, dd] = m;
+                const d = parseInt(dd), mo = parseInt(mm);
+                if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+                return `${yy}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            }
+            return null;
         }
 
         function isNumberLike(val) {
@@ -3322,13 +3438,16 @@
                 if (debitAmt === 0 && creditAmt === 0) continue;
 
                 const fileCat = mapping.categoryIdx >= 0 ? String(row[mapping.categoryIdx] || '') : '';
+                const transactionDate = mapping.dateIdx >= 0 ? parseExcelDate(row[mapping.dateIdx]) : null;
 
                 if (debitAmt > 0) {
                     const isDup = existingTransactions.some(t => t.type === 'expense' && t.desc === desc && Math.abs(t.amt - debitAmt) < 0.01);
                     if (isDup) { skipped++; }
                     else {
                         const cat = fileCat ? (categoryMap[fileCat] || findCategoryByRules(desc, 'expense')) : findCategoryByRules(desc, 'expense');
-                        data.transactions.push({ id: Date.now() + importedExpense * 10, type: 'expense', desc, amt: debitAmt, cat, month: selectedMonth, time: new Date().toISOString() });
+                        const tx = { id: Date.now() + importedExpense * 10, type: 'expense', desc, amt: debitAmt, cat, month: selectedMonth, time: new Date().toISOString() };
+                        if (transactionDate) tx.transactionDate = transactionDate;
+                        data.transactions.push(tx);
                         importedExpense++;
                     }
                 }
@@ -3339,7 +3458,9 @@
                     else {
                         const cat = findCategoryByRules(desc, 'income');
                         const earner = findEarnerByRules(desc);
-                        data.transactions.push({ id: Date.now() + importedIncome * 10 + 5, type: 'income', desc, amt: creditAmt, cat, earner, month: selectedMonth, time: new Date().toISOString() });
+                        const tx = { id: Date.now() + importedIncome * 10 + 5, type: 'income', desc, amt: creditAmt, cat, earner, month: selectedMonth, time: new Date().toISOString() };
+                        if (transactionDate) tx.transactionDate = transactionDate;
+                        data.transactions.push(tx);
                         importedIncome++;
                     }
                 }
@@ -4139,6 +4260,11 @@
         }
 
         // Transactions
+        function todayISO() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
         function addIncome() {
             const desc = document.getElementById('inc-desc').value.trim();
             const amt = parseFloat(document.getElementById('inc-amt').value);
@@ -4146,9 +4272,11 @@
             const month = getAddMonth();
             const exempt = document.getElementById('inc-exempt').checked;
             const earner = document.getElementById('inc-earner').value || null;
+            const dateEl = document.getElementById('inc-date');
+            const transactionDate = dateEl && dateEl.value ? dateEl.value : null;
 
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
-            data.transactions.push({
+            const tx = {
                 id:Date.now(),
                 type:'income',
                 desc,
@@ -4158,13 +4286,16 @@
                 titheExempt: exempt,
                 earner,
                 time:new Date().toISOString()
-            });
+            };
+            if (transactionDate) tx.transactionDate = transactionDate;
+            data.transactions.push(tx);
             notify('נוסף');
             saveToLocalStorage();
             document.getElementById('inc-desc').value = '';
             document.getElementById('inc-amt').value = '';
             document.getElementById('inc-exempt').checked = false;
             document.getElementById('inc-earner').value = '';
+            if (dateEl) dateEl.value = todayISO();
             loadMonthTransactions();
             updateTithe();
             updateOverview();
@@ -4175,12 +4306,18 @@
             const amt = parseFloat(document.getElementById('exp-amt').value);
             const cat = document.getElementById('exp-cat').value;
             const month = getAddMonth();
+            const dateEl = document.getElementById('exp-date');
+            const transactionDate = dateEl && dateEl.value ? dateEl.value : null;
+
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
-            data.transactions.push({id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()});
+            const tx = {id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()};
+            if (transactionDate) tx.transactionDate = transactionDate;
+            data.transactions.push(tx);
             notify('נוסף');
             saveToLocalStorage();
             document.getElementById('exp-desc').value = '';
             document.getElementById('exp-amt').value = '';
+            if (dateEl) dateEl.value = todayISO();
             loadMonthTransactions();
         }
 
@@ -4193,6 +4330,12 @@
         }
 
         function loadMonthTransactions() {
+            // Default the date inputs to today on every render of this tab (if empty).
+            const incDate = document.getElementById('inc-date');
+            const expDate = document.getElementById('exp-date');
+            if (incDate && !incDate.value) incDate.value = todayISO();
+            if (expDate && !expDate.value) expDate.value = todayISO();
+
             const month = getAddMonth();
             const trans = data.transactions.filter(t=>t.month===month);
             const fixInc = data.fixedIncomes.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'income',fixed:true}));
@@ -7403,6 +7546,7 @@
         window.toggleTitheExempt = toggleTitheExempt;
         window.delDonation = delDonation;
         window.handleImportFile = handleImportFile;
+        window.exportAllTransactions = exportAllTransactions;
         window.importData = importData;
         window.loadMonthTransactions = loadMonthTransactions;
         window.renderCharts = renderCharts;
