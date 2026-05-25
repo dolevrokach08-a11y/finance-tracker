@@ -33,6 +33,7 @@
         #tab-cashflow:not(.hidden) { display: block !important; }
         #tab-fire:not(.hidden) { display: block !important; }
         #tab-debt:not(.hidden) { display: block !important; }
+        #tab-migrate:not(.hidden) { display: block !important; }
 
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -836,6 +837,7 @@
                     <button onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
                     <button onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
                     <button onclick="showTab('debt')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">סימולטור חוב</button>
+                    <button id="migrate-tab-btn" onclick="showTab('migrate')" class="tab-btn px-6 py-2 rounded-lg font-medium text-orange-600 hover:text-orange-800 hidden" style="border:1px dashed currentColor;">🔧 העשרת היסטוריה</button>
                 </div>
             </div>
 
@@ -976,6 +978,13 @@
                             <label class="text-xs text-gray-600 block mb-1">תאריך עסקה אמיתי (מתי הכסף באמת נכנס)</label>
                             <input type="date" id="inc-date" class="w-full p-3 border rounded-lg">
                         </div>
+                        <div class="flex items-start gap-2 mb-3">
+                            <input type="checkbox" id="inc-assign-current" class="w-4 h-4 rounded mt-1">
+                            <label for="inc-assign-current" class="text-sm text-gray-700">
+                                שייך לחודש הקבלה (לא לחודש הקודם)
+                                <span class="block text-xs text-gray-500" style="margin-top:2px;">סמן רק אם זו הכנסה ששייכת לחודש שהתקבלה (שכ"ד שאתה מקבל, החזרים)</span>
+                            </label>
+                        </div>
                         <button onclick="addIncome()" class="btn btn-success w-full text-white py-3 rounded-lg font-medium">הוסף הכנסה</button>
                     </div>
                     <div class="glass p-6">
@@ -1059,6 +1068,21 @@
                                 <option value="mother">👩 אם</option>
                             </select>
                         </div>
+                        <div class="edit-field" id="edit-assign-current-field" style="display: none;">
+                            <label class="flex items-center gap-2" style="cursor:pointer;">
+                                <input type="checkbox" id="edit-assign-current">
+                                <span>שייך לחודש הקבלה (לא לחודש הקודם)</span>
+                            </label>
+                            <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">
+                                ברירת מחדל: הכנסות מתויגות בצבירה לחודש הקודם (משכורת = חודש העבודה).
+                                סמן רק להכנסות שבאמת שייכות לחודש שהתקבלו (שכ"ד שאתה מקבל, החזרי מס וכו').
+                            </div>
+                        </div>
+                        <div class="edit-field">
+                            <label>תאריך עסקה אמיתי <span style="opacity:0.6;font-weight:normal;">(אופציונלי — מתי הכסף באמת זז)</span></label>
+                            <input type="date" id="edit-transaction-date" class="edit-input">
+                            <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">השאר ריק כדי להסיר תאריך</div>
+                        </div>
                     </div>
                     <div class="edit-modal-footer">
                         <button onclick="closeEditModal()" class="edit-btn edit-btn-cancel">ביטול</button>
@@ -1114,6 +1138,12 @@
 
             <!-- Reports Tab -->
             <div id="tab-reports" class="tab-content hidden">
+                <div class="glass p-3 mb-4" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                    <div class="text-sm" style="color: var(--text-muted);">
+                        <strong style="color: hsl(210, 80%, 55%);">📐 בסיס צבירה</strong> — הדוחות מציגים הוצאות והכנסות בחודש שאליו הן <em>שייכות</em>. נתונים מ-2025-09 ואחורה הם מצרפיים בלבד.
+                    </div>
+                </div>
+
                 <!-- תבחר תקופה -->
                 <div class="glass p-4 mb-6">
                     <label class="text-sm font-medium mr-2">תקופת דוח:</label>
@@ -1371,7 +1401,14 @@
             <!-- Advanced Analysis Tab -->
             <div id="tab-analysis" class="tab-content hidden">
                 <h2 class="text-2xl font-bold mb-6">📊 ניתוח מתקדם</h2>
-                
+
+                <div class="glass p-3 mb-4" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                    <div class="text-sm" style="color: var(--text-muted);">
+                        <strong style="color: hsl(210, 80%, 55%);">📐 בסיס צבירה</strong> — הניתוח כאן מציג כל הכנסה/הוצאה בחודש שאליו היא <em>שייכת</em> (לא בחודש המזומן). למשל: משכורת אפריל שנכנסה ב-10/5 מופיעה תחת אפריל.
+                        <span style="display:inline-block;margin-right:8px;">⚠️ נתונים מ-2025-09 ואחורה הם מצרפיים בלבד (לפני שהמערכת תמכה בעסקאות בודדות).</span>
+                    </div>
+                </div>
+
                 <!-- Month Selector -->
                 <div class="glass p-4 mb-6">
                     <label class="block text-sm font-medium mb-2">בחר חודש לניתוח</label>
@@ -1538,6 +1575,13 @@
                         <div class="grid grid-cols-2 gap-2 mb-3">
                             <div><label class="text-xs text-gray-600 block mb-1">מחודש</label><select id="fix-inc-start" class="w-full p-3 border rounded-lg"></select></div>
                             <div><label class="text-xs text-gray-600 block mb-1">עד חודש</label><select id="fix-inc-end" class="w-full p-3 border rounded-lg"></select></div>
+                        </div>
+                        <div class="flex items-start gap-2 mb-3 p-3 rounded-lg" style="background: hsla(0,0%,100%,0.03); border:1px solid hsla(0,0%,100%,0.08);">
+                            <input type="checkbox" id="fix-inc-assign-current" class="w-4 h-4 rounded mt-1">
+                            <label for="fix-inc-assign-current" class="text-sm text-gray-700">
+                                שייך לחודש הקבלה (לא לחודש הקודם)
+                                <span class="block text-xs text-gray-500" style="margin-top:2px;">בצבירה: ההכנסה תיוחס לחודש שבה התקבלה. למשל: שכ"ד שאתה מקבל. ברירת מחדל (לא מסומן): הכנסה מוסטת לחודש הקודם (משכורת).</span>
+                            </label>
                         </div>
                         <div class="flex gap-2">
                             <button id="fix-inc-add" onclick="addFixedIncome()" class="btn btn-success flex-1 text-white py-3 rounded-lg font-medium">הוסף</button>
@@ -2120,6 +2164,134 @@
                 </div>
             </div>
 
+            <!-- Migrate Tab (hidden, dev-only) -->
+            <div id="tab-migrate" class="tab-content hidden">
+                <div class="glass p-4 mb-4" style="border:2px dashed hsl(30, 80%, 55%); background: hsla(30, 80%, 55%, 0.05);">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span style="font-size: 1.5rem;">🔧</span>
+                        <h2 class="text-xl font-bold" style="color: hsl(30, 80%, 55%);">כלי העשרת היסטוריה (DEV ONLY)</h2>
+                    </div>
+                    <p class="text-sm" style="color: var(--text-muted);">
+                        טען קובץ אקסל היסטורי (אשראי או בנק) כדי להוסיף תאריך עסקה אמיתי לעסקאות קיימות במערכת.
+                        הכלי לא מוסיף עסקאות חדשות — רק מעשיר את הקיימות. תמיד dry-run תחילה.
+                    </p>
+                </div>
+
+                <!-- Step 1: Upload + system month -->
+                <div class="glass p-4 mb-4">
+                    <h3 class="text-lg font-semibold mb-3">שלב 1: בחירת קובץ + חודש מערכת</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="text-sm font-medium block mb-1">סוג קובץ:</label>
+                            <select id="migrate-file-type" class="w-full p-2 border rounded-lg text-sm">
+                                <option value="auto">זיהוי אוטומטי</option>
+                                <option value="credit">כרטיס אשראי (MAX)</option>
+                                <option value="bank">תנועות בנק</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-sm font-medium block mb-1">קובץ זה יובא במקור כחודש:</label>
+                            <div class="flex gap-2">
+                                <select id="migrate-year" class="flex-1 p-2 border rounded-lg text-sm"></select>
+                                <select id="migrate-month-num" class="flex-1 p-2 border rounded-lg text-sm"></select>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3 flex gap-3 items-center">
+                        <label class="btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
+                            📄 בחר קובץ
+                            <input type="file" id="migrate-file-input" accept=".xlsx,.xls" onchange="handleMigrateFileSelect(event)" class="hidden">
+                        </label>
+                        <span id="migrate-file-name" class="text-sm text-gray-500"></span>
+                    </div>
+                </div>
+
+                <!-- Step 2: Analysis results -->
+                <div id="migrate-results" class="hidden">
+                    <div class="glass p-4 mb-4">
+                        <h3 class="text-lg font-semibold mb-3">שלב 2: תוצאות ניתוח (Dry Run)</h3>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div class="p-3 rounded-lg" style="background: hsla(142, 60%, 50%, 0.1);">
+                                <div class="text-xs text-gray-500">התאמות ודאיות</div>
+                                <div id="migrate-stat-matched" class="text-2xl font-bold" style="color: hsl(142, 60%, 50%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(45, 90%, 55%, 0.1);">
+                                <div class="text-xs text-gray-500">מסופקות (מרובות)</div>
+                                <div id="migrate-stat-ambiguous" class="text-2xl font-bold" style="color: hsl(45, 90%, 55%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(0, 70%, 60%, 0.1);">
+                                <div class="text-xs text-gray-500">ללא התאמה</div>
+                                <div id="migrate-stat-unmatched" class="text-2xl font-bold" style="color: hsl(0, 70%, 60%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(210, 80%, 55%, 0.1);">
+                                <div class="text-xs text-gray-500">כבר יש להן תאריך</div>
+                                <div id="migrate-stat-already" class="text-2xl font-bold" style="color: hsl(210, 80%, 55%);">0</div>
+                            </div>
+                        </div>
+                        <div id="migrate-details" style="max-height: 500px; overflow-y: auto;"></div>
+                    </div>
+
+                    <!-- Step 3: Apply -->
+                    <div class="glass p-4 mb-4">
+                        <h3 class="text-lg font-semibold mb-3">שלב 3: כתיבה</h3>
+                        <p class="text-sm text-gray-500 mb-3">
+                            לפני הכתיבה יורד גיבוי JSON אוטומטית.
+                            רק התאמות ודאיות + מסופקות שבחרת בהן ייכתבו. ללא התאמה — לא נוגעים.
+                        </p>
+                        <button onclick="applyEnrichment()" class="btn bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm">
+                            ✅ אישור והחלת התאמות
+                        </button>
+                    </div>
+                </div>
+
+                <!-- ===== Section B: bulk update via edited export ===== -->
+                <div class="glass p-4 mb-4" style="border-top: 2px dashed hsla(0,0%,100%,0.15); margin-top: 24px;">
+                    <h3 class="text-lg font-semibold mb-2">📥 עדכון בצובר מקובץ ייצוא ערוך</h3>
+                    <p class="text-sm text-gray-500 mb-3">
+                        ייצוא את כל העסקאות לאקסל, ערוך את עמודת "תאריך עסקה אמיתי" לשורות שחסר להן, וטען חזרה.
+                        המערכת מזהה לפי עמודת <code>מזהה</code> ומעדכנת רק את התאריך — שאר השדות לא ייגעו.
+                    </p>
+                    <div class="flex gap-3 items-center mb-3">
+                        <label class="btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
+                            📄 בחר קובץ ייצוא ערוך
+                            <input type="file" id="bulk-update-file-input" accept=".xlsx,.xls" onchange="handleBulkUpdateFileSelect(event)" class="hidden">
+                        </label>
+                        <span id="bulk-update-file-name" class="text-sm text-gray-500"></span>
+                    </div>
+
+                    <div id="bulk-update-results" class="hidden">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                            <div class="p-3 rounded-lg" style="background: hsla(142, 60%, 50%, 0.1);">
+                                <div class="text-xs text-gray-500">יתעדכנו</div>
+                                <div id="bulk-stat-update" class="text-2xl font-bold" style="color: hsl(142, 60%, 50%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(45, 90%, 55%, 0.1);">
+                                <div class="text-xs text-gray-500">דריסות (היה תאריך)</div>
+                                <div id="bulk-stat-overwrite" class="text-2xl font-bold" style="color: hsl(45, 90%, 55%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(0, 0%, 50%, 0.1);">
+                                <div class="text-xs text-gray-500">ללא שינוי</div>
+                                <div id="bulk-stat-nochange" class="text-2xl font-bold" style="color: hsl(0, 0%, 60%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(0, 70%, 60%, 0.1);">
+                                <div class="text-xs text-gray-500">דולגו (id לא נמצא / תאריך לא תקין)</div>
+                                <div id="bulk-stat-skipped" class="text-2xl font-bold" style="color: hsl(0, 70%, 60%);">0</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3 mb-3">
+                            <label class="flex items-center gap-2 text-sm" style="cursor:pointer;">
+                                <input type="checkbox" id="bulk-allow-overwrite">
+                                <span>אפשר דריסה של תאריך קיים</span>
+                            </label>
+                        </div>
+                        <div id="bulk-update-details" style="max-height: 400px; overflow-y: auto;"></div>
+                        <button onclick="applyBulkUpdate()" class="btn bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm mt-3">
+                            ✅ אישור והחלת עדכון בצובר
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
     </div> <!-- End mainContent -->
@@ -2352,7 +2524,14 @@
                 const banner = document.getElementById('offlineBanner');
                 if (banner) banner.style.display = 'block';
             }
+            initMigrateTabVisibility();
         });
+
+        // Module scripts can load after DOMContentLoaded already fired — call init defensively.
+        if (document.readyState === 'interactive' || document.readyState === 'complete') {
+            // Defer to next tick so functions declared further down are hoisted/available.
+            queueMicrotask(() => { try { initMigrateTabVisibility(); } catch (e) { console.warn('initMigrateTabVisibility:', e); } });
+        }
 
         // Utils
         function notify(msg) {
@@ -2456,6 +2635,67 @@
             return r;
         }
 
+        // ===== Accrual Basis Computation (Phase 3) =====
+        // Aggregate-only legacy data: months <= LEGACY_BOUNDARY (no granular transactionDate).
+        // From the next month onwards: data is granular and mostly carries transactionDate.
+        const LEGACY_BOUNDARY = '2025-09';
+
+        function monthMinusOne(monthStr) {
+            if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return monthStr;
+            const [y, m] = monthStr.split('-').map(Number);
+            return m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
+        }
+
+        function monthFromDate(dateStr) {
+            if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return null;
+            return dateStr.slice(0, 7);
+        }
+
+        // Resolves whether an income transaction is flagged "current month" (vs. default previous month).
+        // Priority: 1) own flag, 2) matching fixedIncome's flag, 3) default false.
+        function incomeAssignsToCurrentMonth(tx) {
+            if (typeof tx.assignToCurrentMonth === 'boolean') return tx.assignToCurrentMonth;
+            const fi = (data && data.fixedIncomes) ? data.fixedIncomes : [];
+            const hit = fi.find(f =>
+                f.assignToCurrentMonth === true &&
+                f.description && tx.desc &&
+                (tx.desc === f.description ||
+                 tx.desc.includes(f.description) ||
+                 f.description.includes(tx.desc))
+            );
+            return !!hit;
+        }
+
+        // Returns YYYY-MM string for the accrual-basis month the transaction belongs to.
+        function computeAssignedMonth(tx) {
+            if (!tx || !tx.month) return tx ? tx.month : null;
+
+            if (tx.type === 'income') {
+                return incomeAssignsToCurrentMonth(tx) ? tx.month : monthMinusOne(tx.month);
+            }
+
+            if (tx.type === 'expense') {
+                if (tx.transactionDate) return monthFromDate(tx.transactionDate) || tx.month;
+                // Legacy aggregate period — uniform shift -1
+                if (tx.month <= LEGACY_BOUNDARY) return monthMinusOne(tx.month);
+                // Granular period without date — fallback to cash month
+                return tx.month;
+            }
+
+            // manual-tithe and any other type: pass-through
+            return tx.month;
+        }
+
+        // Helper for chart/report code: filter transactions where their accrual month matches `targetMonth`.
+        function filterByAssignedMonth(transactions, targetMonth) {
+            return (transactions || []).filter(t => computeAssignedMonth(t) === targetMonth);
+        }
+
+        // Helper: returns true if a YYYY-MM string is in the legacy aggregate period.
+        function isLegacyMonth(monthStr) {
+            return monthStr && monthStr <= LEGACY_BOUNDARY;
+        }
+
         // Tabs
         function showTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
@@ -2479,6 +2719,469 @@
             if(tab==='cashflow') { renderCashFlow(); renderIncomeGrowth(); }
             if(tab==='fire') { renderFIRE(); }
             if(tab==='debt') { renderDebtSimulator(); }
+            if(tab==='migrate') { initMigrateTab(); }
+        }
+
+        // ========== Migrate Tab (DEV: enrich historical transactions with real dates) ==========
+        // Gated to localhost + ?migrate=1 — will not render in production even if accidentally pushed.
+        function isMigrateAllowed() {
+            const host = window.location.hostname;
+            const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '' || host === '0.0.0.0';
+            const wantsMigrate = new URLSearchParams(window.location.search).get('migrate') === '1';
+            return isLocal && wantsMigrate;
+        }
+
+        function initMigrateTabVisibility() {
+            const btn = document.getElementById('migrate-tab-btn');
+            if (btn && isMigrateAllowed()) btn.classList.remove('hidden');
+        }
+
+        let migrateAnalysisState = null; // { rows: [...], systemMonth: '...', results: {...} }
+
+        function initMigrateTab() {
+            // Populate year/month selectors for the "imported as" picker (reuse existing source list)
+            const years = getDataYears();
+            const hebrewMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const ySel = document.getElementById('migrate-year');
+            const mSel = document.getElementById('migrate-month-num');
+            if (ySel) {
+                ySel.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+            }
+            if (mSel) {
+                mSel.innerHTML = hebrewMonths.map((name, i) =>
+                    `<option value="${String(i+1).padStart(2,'0')}">${name}</option>`).join('');
+            }
+        }
+
+        function handleMigrateFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            document.getElementById('migrate-file-name').textContent = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const arrayData = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(arrayData, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+
+                    const fileType = document.getElementById('migrate-file-type').value;
+                    const y = document.getElementById('migrate-year').value;
+                    const m = document.getElementById('migrate-month-num').value;
+                    const systemMonth = `${y}-${m}`;
+
+                    const rows = parseMigrateFileRows(jsonData, fileType);
+                    if (!rows || rows.length === 0) {
+                        notify('❌ לא נמצאו שורות לפענוח בקובץ');
+                        return;
+                    }
+                    const results = analyzeEnrichment(rows, systemMonth);
+                    migrateAnalysisState = { rows, systemMonth, results };
+                    renderMigrateResults(results, systemMonth);
+                } catch (err) {
+                    console.error('Migrate parse error:', err);
+                    notify(`❌ שגיאה בקריאת הקובץ: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        // Parse the uploaded file into a list of { date, desc, amount, type } rows.
+        // Reuses existing header detection / column mapping logic.
+        function parseMigrateFileRows(jsonData, fileType) {
+            const header = findHeaderRow(jsonData);
+            if (!header) return null;
+            const headerIndex = header.index;
+
+            let mapping = detectColumnsByHeaders(header.row);
+            if (!hasMinimumMapping(mapping)) {
+                mapping = detectColumnsByContent(jsonData, headerIndex);
+            }
+            if (!mapping || !hasMinimumMapping(mapping)) return null;
+
+            const out = [];
+            for (let i = headerIndex + 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                if (!row) continue;
+                const desc = mapping.descIdx >= 0 ? String(row[mapping.descIdx] || '').trim() : '';
+                if (!desc) continue;
+
+                let debit = 0, credit = 0;
+                if (mapping.amountIdx >= 0) {
+                    const raw = String(row[mapping.amountIdx] || '').replace(/[,₪\s]/g, '');
+                    const v = parseFloat(raw);
+                    if (!isNaN(v)) { if (v > 0) debit = v; else if (v < 0) credit = Math.abs(v); }
+                } else {
+                    if (mapping.debitIdx >= 0) debit = parseFloat(String(row[mapping.debitIdx] || '').replace(/[,₪\s]/g,'')) || 0;
+                    if (mapping.creditIdx >= 0) credit = parseFloat(String(row[mapping.creditIdx] || '').replace(/[,₪\s]/g,'')) || 0;
+                }
+                if (debit === 0 && credit === 0) continue;
+
+                const transactionDate = mapping.dateIdx >= 0 ? parseExcelDate(row[mapping.dateIdx]) : null;
+                if (!transactionDate) continue; // no date = nothing to enrich with
+
+                if (debit > 0) out.push({ date: transactionDate, desc, amount: debit, type: 'expense' });
+                if (credit > 0) out.push({ date: transactionDate, desc, amount: credit, type: 'income' });
+            }
+            return out;
+        }
+
+        // For a list of file rows and a target system-month, classify each row against existing transactions.
+        // Returns: { matched: [{row, tx}], ambiguous: [{row, candidates: [tx,...]}], unmatched: [row], alreadyDated: [{row, tx}] }
+        function analyzeEnrichment(rows, systemMonth) {
+            const monthTxs = (data.transactions || []).filter(t => t.month === systemMonth);
+
+            // Track which txs have been claimed so we don't double-assign.
+            const claimedTxIds = new Set();
+            const matched = [];
+            const ambiguous = [];
+            const unmatched = [];
+            const alreadyDated = [];
+
+            for (const row of rows) {
+                // Find candidates: same type, same desc, amount within 0.01
+                const candidates = monthTxs.filter(t =>
+                    t.type === row.type &&
+                    t.desc === row.desc &&
+                    Math.abs((t.amt || 0) - row.amount) < 0.01 &&
+                    !claimedTxIds.has(t.id)
+                );
+
+                if (candidates.length === 0) {
+                    unmatched.push(row);
+                } else if (candidates.length === 1) {
+                    const tx = candidates[0];
+                    if (tx.transactionDate) {
+                        alreadyDated.push({ row, tx });
+                    } else {
+                        matched.push({ row, tx });
+                        claimedTxIds.add(tx.id);
+                    }
+                } else {
+                    // Multiple candidates with same desc+amount in same month — auto-assign 1:1 in order.
+                    // We accumulate ambiguous rows first; resolved at the end by greedy pairing.
+                    ambiguous.push({ row, candidates });
+                }
+            }
+
+            // Greedy pair-up of ambiguous rows: for each row, take the first un-claimed candidate.
+            // This is fine because all candidates have identical desc/amt — only the date distinguishes them,
+            // and we're trying to attach dates, not match by date. Order is irrelevant for an aggregate match.
+            const ambResolved = [];
+            const ambStillAmbig = [];
+            for (const item of ambiguous) {
+                const free = item.candidates.filter(t => !claimedTxIds.has(t.id));
+                if (free.length === 0) {
+                    unmatched.push(item.row);
+                } else {
+                    const tx = free[0];
+                    if (tx.transactionDate) {
+                        alreadyDated.push({ row: item.row, tx });
+                    } else {
+                        ambResolved.push({ row: item.row, tx });
+                        claimedTxIds.add(tx.id);
+                    }
+                }
+            }
+            matched.push(...ambResolved);
+
+            return { matched, ambiguous: ambStillAmbig, unmatched, alreadyDated };
+        }
+
+        function renderMigrateResults(results, systemMonth) {
+            document.getElementById('migrate-results').classList.remove('hidden');
+            document.getElementById('migrate-stat-matched').textContent = results.matched.length;
+            document.getElementById('migrate-stat-ambiguous').textContent = results.ambiguous.length;
+            document.getElementById('migrate-stat-unmatched').textContent = results.unmatched.length;
+            document.getElementById('migrate-stat-already').textContent = results.alreadyDated.length;
+
+            const detailsEl = document.getElementById('migrate-details');
+            let html = '';
+
+            if (results.matched.length > 0) {
+                html += `<details open><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(142, 60%, 50%);">✅ התאמות (${results.matched.length}) — יקבלו תאריך</summary>`;
+                html += '<table class="w-full text-sm" style="border-collapse:collapse;"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">סכום</th><th class="text-right p-2">סוג</th><th class="text-right p-2">תאריך חדש</th></tr></thead><tbody>';
+                for (const m of results.matched.slice(0, 200)) {
+                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(m.row.desc)}</td><td class="p-2">${m.row.amount.toFixed(2)}</td><td class="p-2">${m.row.type === 'income' ? '💚' : '🔴'}</td><td class="p-2" style="color: hsl(142, 60%, 50%);">${m.row.date}</td></tr>`;
+                }
+                if (results.matched.length > 200) html += `<tr><td colspan="4" class="p-2 text-center text-gray-500">...ועוד ${results.matched.length - 200} שורות</td></tr>`;
+                html += '</tbody></table></details>';
+            }
+
+            if (results.unmatched.length > 0) {
+                html += `<details><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(0, 70%, 60%);">❌ ללא התאמה (${results.unmatched.length}) — לא ייגעו</summary>`;
+                html += '<table class="w-full text-sm" style="border-collapse:collapse;"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">סכום</th><th class="text-right p-2">סוג</th><th class="text-right p-2">תאריך</th></tr></thead><tbody>';
+                for (const r of results.unmatched.slice(0, 200)) {
+                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(r.desc)}</td><td class="p-2">${r.amount.toFixed(2)}</td><td class="p-2">${r.type === 'income' ? '💚' : '🔴'}</td><td class="p-2 text-gray-500">${r.date}</td></tr>`;
+                }
+                if (results.unmatched.length > 200) html += `<tr><td colspan="4" class="p-2 text-center text-gray-500">...ועוד ${results.unmatched.length - 200} שורות</td></tr>`;
+                html += '</tbody></table></details>';
+            }
+
+            if (results.alreadyDated.length > 0) {
+                html += `<details><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(210, 80%, 55%);">ℹ️ כבר יש תאריך (${results.alreadyDated.length}) — לא יידרסו</summary>`;
+                html += '<p class="text-xs text-gray-500 p-2">העסקאות האלו כבר מוקצה להן תאריך עסקה. הכלי לא דורס.</p></details>';
+            }
+
+            detailsEl.innerHTML = html;
+        }
+
+        function escapeHtml(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function applyEnrichment() {
+            if (!migrateAnalysisState || !migrateAnalysisState.results) {
+                notify('❌ אין ניתוח להחיל. טען קובץ קודם.');
+                return;
+            }
+            const { matched } = migrateAnalysisState.results;
+            if (matched.length === 0) {
+                notify('ℹ️ אין התאמות להחיל');
+                return;
+            }
+            if (!confirm(`לכתוב transactionDate ל-${matched.length} עסקאות?\nגיבוי JSON ירד אוטומטית לפני הכתיבה.`)) return;
+
+            // 1. Auto-backup
+            downloadJSONBackup();
+
+            // 2. Apply writes
+            let written = 0;
+            for (const m of matched) {
+                // Look up tx in data.transactions by id (the matched ref might be stale if data mutated)
+                const tx = data.transactions.find(t => t.id === m.tx.id);
+                if (tx && !tx.transactionDate) {
+                    tx.transactionDate = m.row.date;
+                    written++;
+                }
+            }
+            saveToLocalStorage();
+            notify(`✅ נכתבו ${written} תאריכים. גיבוי ירד.`);
+
+            // Reset state so user doesn't accidentally re-apply
+            migrateAnalysisState = null;
+            document.getElementById('migrate-results').classList.add('hidden');
+            document.getElementById('migrate-file-name').textContent = '';
+        }
+
+        // ===== Bulk Update from edited export file =====
+        // Reads the exported XLSX, matches rows by `מזהה` (id), and stages transactionDate updates.
+        let bulkUpdateState = null; // { plan: [{id, oldDate, newDate, action}], summary: {...} }
+
+        function handleBulkUpdateFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            document.getElementById('bulk-update-file-name').textContent = file.name;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const arrayData = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(arrayData, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+                    if (!rows || rows.length === 0) {
+                        notify('❌ הקובץ ריק');
+                        return;
+                    }
+
+                    // Identify columns: id, transactionDate, assignToCurrentMonth flag
+                    const sample = rows[0];
+                    const keys = Object.keys(sample);
+                    const idKey = keys.find(k => k.includes('מזהה'));
+                    const dateKey = keys.find(k => k.includes('תאריך עסקה אמיתי') || k.includes('תאריך עסקה'));
+                    const assignKey = keys.find(k => k.includes('שייך לחודש הקבלה'));
+                    if (!idKey) {
+                        notify('❌ לא נמצאה עמודת "מזהה" בקובץ. ודא שזה קובץ ייצוא מהמערכת.');
+                        return;
+                    }
+                    if (!dateKey) {
+                        notify('❌ לא נמצאה עמודת "תאריך עסקה אמיתי" בקובץ.');
+                        return;
+                    }
+
+                    const truthyAssign = v => {
+                        if (v === true || v === 1) return true;
+                        const s = String(v == null ? '' : v).trim().toLowerCase();
+                        return s === 'כן' || s === 'true' || s === '1' || s === 'yes' || s === '✓' || s === 'x' || s === 'v';
+                    };
+
+                    const plan = [];
+                    const summary = { update: 0, overwrite: 0, nochange: 0, skipped: 0 };
+                    const skippedReasons = [];
+
+                    for (const row of rows) {
+                        const rawId = row[idKey];
+                        if (rawId == null || rawId === '') { summary.skipped++; continue; }
+                        const id = Number(rawId);
+                        if (!Number.isFinite(id)) { summary.skipped++; skippedReasons.push({ rawId, reason: 'id לא מספרי' }); continue; }
+
+                        const tx = data.transactions.find(t => t.id === id);
+                        if (!tx) { summary.skipped++; skippedReasons.push({ rawId: id, reason: 'id לא קיים במערכת' }); continue; }
+
+                        const rawDate = row[dateKey];
+                        const newDate = rawDate ? parseExcelDate(rawDate) : null;
+                        if (rawDate && !newDate) { summary.skipped++; skippedReasons.push({ rawId: id, reason: `תאריך לא תקין: "${rawDate}"` }); continue; }
+
+                        // assignToCurrentMonth (income only): determine intended value, undefined if column missing
+                        let newAssign;
+                        if (assignKey) {
+                            const rawAssign = row[assignKey];
+                            newAssign = tx.type === 'income'
+                                ? (rawAssign == null || String(rawAssign).trim() === '' ? false : truthyAssign(rawAssign))
+                                : undefined;
+                        } else {
+                            newAssign = undefined; // column not in file — don't touch
+                        }
+                        const oldAssign = tx.assignToCurrentMonth === true;
+
+                        const oldDate = tx.transactionDate || null;
+                        const dateUnchanged = newDate === oldDate;
+                        const assignUnchanged = newAssign === undefined || newAssign === oldAssign;
+
+                        if (dateUnchanged && assignUnchanged) { summary.nochange++; continue; }
+
+                        let action;
+                        if (!dateUnchanged && oldDate && newDate) action = 'overwrite';
+                        else if (!dateUnchanged && newDate) action = 'add';
+                        else if (!dateUnchanged) action = 'clear';
+                        else action = 'flag-only'; // only assignToCurrentMonth changed
+
+                        plan.push({ id, oldDate, newDate, action, desc: tx.desc, amt: tx.amt, type: tx.type, month: tx.month, oldAssign, newAssign, assignChanged: !assignUnchanged });
+                        if (action === 'overwrite') summary.overwrite++;
+                        else summary.update++;
+                    }
+
+                    bulkUpdateState = { plan, summary, skippedReasons };
+                    renderBulkUpdateResults();
+                } catch (err) {
+                    console.error('Bulk update parse error:', err);
+                    notify(`❌ שגיאה בקריאת הקובץ: ${err.message}`);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+            event.target.value = '';
+        }
+
+        function renderBulkUpdateResults() {
+            if (!bulkUpdateState) return;
+            const { plan, summary, skippedReasons } = bulkUpdateState;
+            document.getElementById('bulk-update-results').classList.remove('hidden');
+            document.getElementById('bulk-stat-update').textContent = summary.update;
+            document.getElementById('bulk-stat-overwrite').textContent = summary.overwrite;
+            document.getElementById('bulk-stat-nochange').textContent = summary.nochange;
+            document.getElementById('bulk-stat-skipped').textContent = summary.skipped;
+
+            const detailsEl = document.getElementById('bulk-update-details');
+            let html = '';
+
+            // Updates table
+            const updates = plan.filter(p => p.action === 'add' || p.action === 'clear' || p.action === 'flag-only');
+            if (updates.length > 0) {
+                html += `<details open><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(142, 60%, 50%);">✅ עדכונים (${updates.length})</summary>`;
+                html += '<table class="w-full text-sm" style="border-collapse:collapse;"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">סכום</th><th class="text-right p-2">חודש</th><th class="text-right p-2">תאריך ישן</th><th class="text-right p-2">תאריך חדש</th><th class="text-right p-2">שייך לקבלה?</th></tr></thead><tbody>';
+                for (const p of updates.slice(0, 200)) {
+                    const flagCell = p.assignChanged ? `<span style="color:${p.newAssign?'hsl(142,60%,50%)':'hsl(0,70%,60%)'}">${p.oldAssign?'✓':'✗'} → ${p.newAssign?'✓':'✗'}</span>` : '';
+                    const dateOld = p.action === 'flag-only' ? '—' : (p.oldDate || '—');
+                    const dateNew = p.action === 'flag-only' ? '—' : (p.newDate || '— (clear)');
+                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(p.desc)}</td><td class="p-2">${p.amt}</td><td class="p-2">${p.month || ''}</td><td class="p-2 text-gray-500">${dateOld}</td><td class="p-2" style="color: hsl(142, 60%, 50%);">${dateNew}</td><td class="p-2">${flagCell}</td></tr>`;
+                }
+                if (updates.length > 200) html += `<tr><td colspan="6" class="p-2 text-center text-gray-500">...ועוד ${updates.length - 200}</td></tr>`;
+                html += '</tbody></table></details>';
+            }
+
+            // Overwrites (only if any)
+            const overwrites = plan.filter(p => p.action === 'overwrite');
+            if (overwrites.length > 0) {
+                html += `<details><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(45, 90%, 55%);">⚠️ דריסות (${overwrites.length}) — דורש סימון checkbox למעלה</summary>`;
+                html += '<table class="w-full text-sm"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">תאריך נוכחי</th><th class="text-right p-2">תאריך מהקובץ</th></tr></thead><tbody>';
+                for (const p of overwrites.slice(0, 100)) {
+                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(p.desc)}</td><td class="p-2" style="color: hsl(0, 70%, 60%);">${p.oldDate}</td><td class="p-2" style="color: hsl(45, 90%, 55%);">${p.newDate}</td></tr>`;
+                }
+                html += '</tbody></table></details>';
+            }
+
+            // Skipped reasons (top 50)
+            if (skippedReasons && skippedReasons.length > 0) {
+                html += `<details><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(0, 70%, 60%);">❌ דולגו (${skippedReasons.length}) — סיבות</summary>`;
+                html += '<ul class="text-xs p-2" style="color: hsl(210, 20%, 70%);">';
+                for (const s of skippedReasons.slice(0, 50)) {
+                    html += `<li>id ${s.rawId}: ${escapeHtml(s.reason)}</li>`;
+                }
+                if (skippedReasons.length > 50) html += `<li>...ועוד ${skippedReasons.length - 50}</li>`;
+                html += '</ul></details>';
+            }
+
+            detailsEl.innerHTML = html;
+        }
+
+        function applyBulkUpdate() {
+            if (!bulkUpdateState) { notify('❌ אין מה להחיל'); return; }
+            const { plan } = bulkUpdateState;
+            const allowOverwrite = document.getElementById('bulk-allow-overwrite').checked;
+
+            const eligible = plan.filter(p => {
+                if (p.action === 'overwrite' && !allowOverwrite) return false;
+                return true;
+            });
+
+            if (eligible.length === 0) {
+                notify('ℹ️ אין עדכונים זמינים (אם יש דריסות — סמן את התיבה למעלה)');
+                return;
+            }
+
+            const summary = `${eligible.length} שינויים:\n- ${eligible.filter(p=>p.action==='add').length} הוספת תאריך\n- ${eligible.filter(p=>p.action==='overwrite').length} דריסות\n- ${eligible.filter(p=>p.action==='clear').length} מחיקות תאריך`;
+            if (!confirm(`לעדכן ${summary}?\nגיבוי JSON ירד אוטומטית לפני הכתיבה.`)) return;
+
+            downloadJSONBackup();
+
+            let written = 0;
+            for (const p of eligible) {
+                const tx = data.transactions.find(t => t.id === p.id);
+                if (!tx) continue;
+                // Date update
+                if (p.action === 'clear') {
+                    delete tx.transactionDate;
+                } else if (p.action !== 'flag-only') {
+                    tx.transactionDate = p.newDate;
+                }
+                // assignToCurrentMonth update
+                if (p.assignChanged) {
+                    if (p.newAssign === true) tx.assignToCurrentMonth = true;
+                    else delete tx.assignToCurrentMonth;
+                }
+                written++;
+            }
+            saveToLocalStorage();
+            notify(`✅ עודכנו ${written} עסקאות. גיבוי ירד.`);
+
+            bulkUpdateState = null;
+            document.getElementById('bulk-update-results').classList.add('hidden');
+            document.getElementById('bulk-update-file-name').textContent = '';
+        }
+
+        function downloadJSONBackup() {
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+            const payload = {
+                exportedAt: now.toISOString(),
+                purpose: 'pre-enrichment-backup',
+                transactionCount: (data.transactions || []).length,
+                data: data
+            };
+            const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `finance-backup-pre-enrich-${stamp}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
 
         // טאבים פנימיים בדוחות
@@ -2815,6 +3518,8 @@
                 'קטגוריה': t.cat || '',
                 'בעל הכנסה': earnerLabel(t.earner),
                 'פטור ממעשר': t.titheExempt ? 'כן' : '',
+                'שייך לחודש הקבלה': (t.type === 'income' && t.assignToCurrentMonth) ? 'כן' : '',
+                'חודש צבירה (מחושב)': computeAssignedMonth(t) || '',
                 'נוצר במערכת': t.time || '',
                 'תאריך חסר?': t.transactionDate ? '' : '⚠️ חסר'
             }));
@@ -2823,7 +3528,7 @@
             // Set column widths for readability
             ws['!cols'] = [
                 {wch: 16}, {wch: 10}, {wch: 16}, {wch: 16}, {wch: 32},
-                {wch: 10}, {wch: 14}, {wch: 12}, {wch: 12}, {wch: 22}, {wch: 12}
+                {wch: 10}, {wch: 14}, {wch: 12}, {wch: 12}, {wch: 16}, {wch: 16}, {wch: 22}, {wch: 12}
             ];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'עסקאות');
@@ -4077,15 +4782,23 @@
 
             const exemptField = document.getElementById('edit-exempt-field');
             const earnerField = document.getElementById('edit-earner-field');
+            const assignCurrentField = document.getElementById('edit-assign-current-field');
             if (trans.type === 'income') {
                 exemptField.style.display = '';
                 earnerField.style.display = '';
+                if (assignCurrentField) assignCurrentField.style.display = '';
                 document.getElementById('edit-exempt').checked = trans.titheExempt || false;
                 document.getElementById('edit-earner').value = trans.earner || '';
+                const acEl = document.getElementById('edit-assign-current');
+                if (acEl) acEl.checked = trans.assignToCurrentMonth === true;
             } else {
                 exemptField.style.display = 'none';
                 earnerField.style.display = 'none';
+                if (assignCurrentField) assignCurrentField.style.display = 'none';
             }
+
+            const dateEl = document.getElementById('edit-transaction-date');
+            if (dateEl) dateEl.value = trans.transactionDate || '';
 
             document.getElementById('editModalTitle').textContent = trans.type === 'income' ? 'עריכת הכנסה' : 'עריכת הוצאה';
             document.getElementById('editModal').style.display = 'flex';
@@ -4116,6 +4829,20 @@
             if (trans.type === 'income') {
                 trans.titheExempt = document.getElementById('edit-exempt').checked;
                 trans.earner = document.getElementById('edit-earner').value || null;
+                const acEl = document.getElementById('edit-assign-current');
+                if (acEl && acEl.checked) {
+                    trans.assignToCurrentMonth = true;
+                } else {
+                    delete trans.assignToCurrentMonth;
+                }
+            }
+
+            const dateEl = document.getElementById('edit-transaction-date');
+            const newDate = dateEl ? dateEl.value : '';
+            if (newDate) {
+                trans.transactionDate = newDate;
+            } else {
+                delete trans.transactionDate;
             }
 
             saveToLocalStorage();
@@ -4274,6 +5001,8 @@
             const earner = document.getElementById('inc-earner').value || null;
             const dateEl = document.getElementById('inc-date');
             const transactionDate = dateEl && dateEl.value ? dateEl.value : null;
+            const assignCurrentEl = document.getElementById('inc-assign-current');
+            const assignToCurrent = assignCurrentEl && assignCurrentEl.checked;
 
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
             const tx = {
@@ -4288,6 +5017,7 @@
                 time:new Date().toISOString()
             };
             if (transactionDate) tx.transactionDate = transactionDate;
+            if (assignToCurrent) tx.assignToCurrentMonth = true;
             data.transactions.push(tx);
             notify('נוסף');
             saveToLocalStorage();
@@ -4295,6 +5025,7 @@
             document.getElementById('inc-amt').value = '';
             document.getElementById('inc-exempt').checked = false;
             document.getElementById('inc-earner').value = '';
+            if (assignCurrentEl) assignCurrentEl.checked = false;
             if (dateEl) dateEl.value = todayISO();
             loadMonthTransactions();
             updateTithe();
@@ -4341,10 +5072,26 @@
             const fixInc = data.fixedIncomes.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'income',fixed:true}));
             const fixExp = data.fixedExpenses.filter(f=>getMonthsInRange(f.start,f.end).includes(month)).map(f=>({...f,type:'expense',fixed:true}));
 
-            const incomes = [...trans.filter(t=>t.type==='income'), ...fixInc]
-                .sort((a,b)=>(a.desc||a.description||'').localeCompare(b.desc||b.description||'', 'he'));
-            const expenses = [...trans.filter(t=>t.type==='expense'), ...fixExp]
-                .sort((a,b)=>(a.desc||a.description||'').localeCompare(b.desc||b.description||'', 'he'));
+            // Sort: dated transactions first (by date asc), then undated, then fixed items
+            const sortByDateThenDesc = (a, b) => {
+                const ad = a.transactionDate || '';
+                const bd = b.transactionDate || '';
+                if (ad && !bd) return -1;
+                if (!ad && bd) return 1;
+                if (ad && bd && ad !== bd) return ad.localeCompare(bd);
+                return (a.desc||a.description||'').localeCompare(b.desc||b.description||'', 'he');
+            };
+            const incomes = [...trans.filter(t=>t.type==='income'), ...fixInc].sort(sortByDateThenDesc);
+            const expenses = [...trans.filter(t=>t.type==='expense'), ...fixExp].sort(sortByDateThenDesc);
+
+            // Compare the transaction's calendar month vs system month to flag split-cycle rows.
+            const systemMonthShort = month; // e.g., "2025-05"
+
+            function formatShortDate(iso) {
+                // "2025-04-22" → "22.4"
+                const [y, m, d] = iso.split('-');
+                return `${parseInt(d)}.${parseInt(m)}`;
+            }
 
             function renderRow(t) {
                 const showRuleBtn = !t.fixed && t.cat === 'אחר';
@@ -4352,6 +5099,16 @@
                 const isExempt = t.titheExempt || false;
                 const canToggleExempt = isIncome && !t.fixed;
                 const earnerLabel = t.earner === 'father' ? '👨 אב' : t.earner === 'mother' ? '👩 אם' : '';
+
+                // Date badge — shows transaction's actual date; tinted orange when it falls in the previous calendar month
+                let dateBadge = '';
+                if (t.transactionDate) {
+                    const txMonth = t.transactionDate.slice(0, 7);
+                    const isPrevMonth = txMonth !== systemMonthShort;
+                    const bg = isPrevMonth ? 'background:hsla(30,90%,55%,0.18);color:hsl(30,90%,45%);' : 'background:hsla(0,0%,60%,0.15);color:hsl(0,0%,55%);';
+                    dateBadge = `<span class="text-xs px-2 py-1 rounded" style="${bg}font-weight:600;" title="${t.transactionDate}">${formatShortDate(t.transactionDate)}</span>`;
+                }
+
                 return `<div class="item-${t.type} p-3 rounded-lg flex justify-between items-center">
                     <div class="flex-1">
                         <div class="font-medium">
@@ -4360,7 +5117,10 @@
                             ${isExempt?' <span class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">פטור ממעשר</span>':''}
                             ${earnerLabel?' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">'+earnerLabel+'</span>':''}
                         </div>
-                        <div class="text-sm text-gray-600">${t.cat||t.category}</div>
+                        <div class="text-sm text-gray-600 flex items-center gap-2">
+                            <span>${t.cat||t.category}</span>
+                            ${dateBadge}
+                        </div>
                     </div>
                     <div class="flex items-center gap-2">
                         <div class="font-bold ${isIncome?'text-green-600':'text-red-600'}">${isIncome?'+':'-'}₪${(t.amt||t.amount).toLocaleString()}</div>
@@ -4480,12 +5240,17 @@
             const earner = document.getElementById('fix-inc-earner').value || null;
             const start = document.getElementById('fix-inc-start').value;
             const end = document.getElementById('fix-inc-end').value;
+            const acEl = document.getElementById('fix-inc-assign-current');
+            const assignToCurrentMonth = !!(acEl && acEl.checked);
             if(!desc||!amt||amt<=0) return notify('מלא את כל השדות');
-            data.fixedIncomes.push({id:Date.now(),description:desc,amount:amt,category:cat,earner,start,end});
+            const fi = {id:Date.now(),description:desc,amount:amt,category:cat,earner,start,end};
+            if (assignToCurrentMonth) fi.assignToCurrentMonth = true;
+            data.fixedIncomes.push(fi);
             saveToLocalStorage();
             document.getElementById('fix-inc-desc').value='';
             document.getElementById('fix-inc-amt').value='';
             document.getElementById('fix-inc-earner').value='';
+            if (acEl) acEl.checked = false;
             renderFixedItems();
             updateTithe();
             notify('הכנסה קבועה נוספה');
@@ -4516,6 +5281,8 @@
             document.getElementById('fix-inc-earner').value = f.earner || '';
             document.getElementById('fix-inc-start').value = f.start;
             document.getElementById('fix-inc-end').value = f.end;
+            const acEl = document.getElementById('fix-inc-assign-current');
+            if (acEl) acEl.checked = f.assignToCurrentMonth === true;
             document.getElementById('fix-inc-add').classList.add('hidden');
             document.getElementById('fix-inc-upd').classList.remove('hidden');
             document.getElementById('fix-inc-can').classList.remove('hidden');
@@ -4530,9 +5297,16 @@
             const earner = document.getElementById('fix-inc-earner').value || null;
             const start = document.getElementById('fix-inc-start').value;
             const end = document.getElementById('fix-inc-end').value;
+            const acEl = document.getElementById('fix-inc-assign-current');
+            const assignToCurrentMonth = !!(acEl && acEl.checked);
             if(!desc||!amt||amt<=0) return notify('מלא את כל השדות');
             const idx = data.fixedIncomes.findIndex(x=>x.id===editingFixed.id);
-            if(idx!==-1) { data.fixedIncomes[idx] = {id:editingFixed.id,description:desc,amount:amt,category:cat,earner,start,end}; saveToLocalStorage(); }
+            if(idx!==-1) {
+                const fi = {id:editingFixed.id,description:desc,amount:amt,category:cat,earner,start,end};
+                if (assignToCurrentMonth) fi.assignToCurrentMonth = true;
+                data.fixedIncomes[idx] = fi;
+                saveToLocalStorage();
+            }
             cancelEditFixedIncome();
             renderFixedItems();
             updateTithe();
@@ -4543,6 +5317,8 @@
             editingFixed = null;
             document.getElementById('fix-inc-desc').value='';
             document.getElementById('fix-inc-amt').value='';
+            const acEl = document.getElementById('fix-inc-assign-current');
+            if (acEl) acEl.checked = false;
             document.getElementById('fix-inc-add').classList.remove('hidden');
             document.getElementById('fix-inc-upd').classList.add('hidden');
             document.getElementById('fix-inc-can').classList.add('hidden');
@@ -5148,8 +5924,8 @@
             const container = document.getElementById('rule-503020');
             if (!container) return;
             
-            const sum = getMonthSummary(month);
-            const categoryBreakdown = getCategoryBreakdown(month);
+            const sum = getMonthSummary(month, 'accrual');
+            const categoryBreakdown = getCategoryBreakdown(month, 'accrual');
             
             const needs = ['מזון', 'דיור', 'חשבונות', 'תחבורה', 'בריאות', 'חינוך'];
             const wants = ['בילויים', 'קניות'];
@@ -5221,19 +5997,20 @@
             }
         }
         
-        function getCategoryBreakdown(month) {
+        function getCategoryBreakdown(month, basis = 'cash') {
             const breakdown = {};
-            
-            data.transactions.filter(t => t.month === month && t.type === 'expense').forEach(t => {
+            const monthOf = (t) => basis === 'accrual' ? computeAssignedMonth(t) : t.month;
+
+            data.transactions.filter(t => monthOf(t) === month && t.type === 'expense').forEach(t => {
                 breakdown[t.cat] = (breakdown[t.cat] || 0) + t.amt;
             });
-            
+
             data.fixedExpenses.forEach(f => {
                 if (getMonthsInRange(f.start, f.end).includes(month)) {
                     breakdown[f.category] = (breakdown[f.category] || 0) + f.amount;
                 }
             });
-            
+
             return breakdown;
         }
         
@@ -5245,8 +6022,8 @@
             const prevDate = new Date(year, monthNum - 2);
             const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
             
-            const current = getMonthSummary(month);
-            const prev = getMonthSummary(prevMonth);
+            const current = getMonthSummary(month, 'accrual');
+            const prev = getMonthSummary(prevMonth, 'accrual');
             
             const insights = [];
             
@@ -5279,8 +6056,8 @@
                 });
             }
             
-            const currentCat = getCategoryBreakdown(month);
-            const prevCat = getCategoryBreakdown(prevMonth);
+            const currentCat = getCategoryBreakdown(month, 'accrual');
+            const prevCat = getCategoryBreakdown(prevMonth, 'accrual');
             
             Object.entries(currentCat).forEach(([cat, amt]) => {
                 const prevAmt = prevCat[cat] || 0;
@@ -5323,7 +6100,7 @@
             const container = document.getElementById('category-budgets');
             if (!container) return;
             
-            const breakdown = getCategoryBreakdown(month);
+            const breakdown = getCategoryBreakdown(month, 'accrual');
             const budgets = Object.entries(data.budgets);
             
             if (budgets.length === 0) {
@@ -5378,7 +6155,7 @@
             const months = [];
             for (let i = 0; i < 12; i++) {
                 const month = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
-                months.push({ month, data: getMonthSummary(month) });
+                months.push({ month, data: getMonthSummary(month, 'accrual') });
             }
             
             const totalIncome = months.reduce((sum, m) => sum + m.data.inc, 0);
@@ -5558,7 +6335,7 @@
             const labels = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 const rate = sum.inc > 0 ? ((sum.inc - sum.exp) / sum.inc) * 100 : 0;
                 rates.push(Math.round(rate * 10) / 10);
                 labels.push(m.name);
@@ -5666,12 +6443,13 @@
             const monthLabels = months.map(m => m.name);
 
             // Build category -> month -> amount matrix from transactions + fixedExpenses
+            // ACCRUAL: bucket by assignedMonth, not cash month
             const catMap = {};
-            // Regular expense transactions
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
                 const cat = t.cat || 'אחר';
+                const m = computeAssignedMonth(t);
                 if (!catMap[cat]) catMap[cat] = {};
-                catMap[cat][t.month] = (catMap[cat][t.month] || 0) + t.amt;
+                catMap[cat][m] = (catMap[cat][m] || 0) + t.amt;
             });
             // Fixed expenses
             data.fixedExpenses.forEach(f => {
@@ -5917,9 +6695,9 @@
                 fixedTotal += (f.amount || 0) * activeMonths.length;
             });
 
-            // All expenses in period
+            // All expenses in period (ACCRUAL)
             let allExpenseTotal = 0;
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
                 allExpenseTotal += t.amt || 0;
             });
             // Add fixed expenses to total (they may not be in transactions)
@@ -5992,12 +6770,13 @@
             const monthKeys = months.map(m => m.key);
             const monthLabels = months.map(m => m.name);
 
-            // Aggregate expenses by category × month
+            // Aggregate expenses by category × month (ACCRUAL)
             const catMap = {};
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(t.month)).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
                 const cat = t.cat || 'אחר';
+                const m = computeAssignedMonth(t);
                 if (!catMap[cat]) catMap[cat] = {};
-                catMap[cat][t.month] = (catMap[cat][t.month] || 0) + (t.amt || 0);
+                catMap[cat][m] = (catMap[cat][m] || 0) + (t.amt || 0);
             });
 
             // Top 5 categories by total
@@ -6264,7 +7043,7 @@
             const expData = [], incData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 expData.push(sum.exp);
                 incData.push(sum.inc);
             });
@@ -6458,14 +7237,14 @@
             const prevCatSpending = {};
 
             recentMonths.forEach(m => {
-                data.transactions.filter(t => t.month === m.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => computeAssignedMonth(t) === m.key && t.type === 'expense').forEach(t => {
                     catSpending[t.cat] = (catSpending[t.cat] || 0) + t.amt;
                 });
             });
 
             const olderMonths = months.slice(-6, -3);
             olderMonths.forEach(m => {
-                data.transactions.filter(t => t.month === m.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => computeAssignedMonth(t) === m.key && t.type === 'expense').forEach(t => {
                     prevCatSpending[t.cat] = (prevCatSpending[t.cat] || 0) + t.amt;
                 });
             });
@@ -6501,7 +7280,7 @@
             const currentMonth = months[months.length - 1];
             if (currentMonth) {
                 const currentCats = {};
-                data.transactions.filter(t => t.month === currentMonth.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => computeAssignedMonth(t) === currentMonth.key && t.type === 'expense').forEach(t => {
                     currentCats[t.cat] = (currentCats[t.cat] || 0) + t.amt;
                 });
                 Object.entries(data.budgets || {}).forEach(([cat, budget]) => {
@@ -6592,11 +7371,12 @@
             return months;
         }
 
-        function getMonthSummary(month) {
-            let inc = data.transactions.filter(t=>t.month===month&&t.type==='income').reduce((s,t)=>s+t.amt,0);
-            let incTaxable = data.transactions.filter(t=>t.month===month&&t.type==='income'&&!t.titheExempt).reduce((s,t)=>s+t.amt,0);
-            let exp = data.transactions.filter(t=>t.month===month&&t.type==='expense').reduce((s,t)=>s+t.amt,0);
-            
+        function getMonthSummary(month, basis = 'cash') {
+            const monthOf = (t) => basis === 'accrual' ? computeAssignedMonth(t) : t.month;
+            let inc = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income').reduce((s,t)=>s+t.amt,0);
+            let incTaxable = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income'&&!t.titheExempt).reduce((s,t)=>s+t.amt,0);
+            let exp = data.transactions.filter(t=>monthOf(t)===month&&t.type==='expense').reduce((s,t)=>s+t.amt,0);
+
             data.fixedIncomes.forEach(f=>{
                 if(getMonthsInRange(f.start,f.end).includes(month)) {
                     inc += f.amount;
@@ -6631,7 +7411,7 @@
             const incData = [], expData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 incData.push(sum.inc);
                 expData.push(sum.exp);
             });
@@ -6753,7 +7533,7 @@
             const balData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 balData.push(sum.available);
             });
 
@@ -6849,10 +7629,10 @@
             const catTotals = {};
             
             months.forEach(m => {
-                data.transactions.filter(t=>t.month===m.key&&t.type==='expense').forEach(t=>{
+                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='expense').forEach(t=>{
                     catTotals[t.cat] = (catTotals[t.cat]||0) + t.amt;
                 });
-                
+
                 const today = new Date();
                 const [y,mn] = m.key.split('-').map(Number);
                 const monthDate = new Date(y, mn-1);
@@ -6949,10 +7729,10 @@
             const catTotals = {};
             
             months.forEach(m => {
-                data.transactions.filter(t=>t.month===m.key&&t.type==='income').forEach(t=>{
+                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='income').forEach(t=>{
                     catTotals[t.cat] = (catTotals[t.cat]||0) + t.amt;
                 });
-                
+
                 const today = new Date();
                 const [y,mn] = m.key.split('-').map(Number);
                 const monthDate = new Date(y, mn-1);
@@ -7070,8 +7850,8 @@
 
             filteredMonths.forEach(m => {
                 const txItems = data.transactions
-                    .filter(t => t.month === m.key && t.type === type && (t.cat === category || (!t.cat && category === 'אחר')))
-                    .map(t => ({ desc: t.desc || '-', amt: t.amt, date: t.date || m.key, fixed: false }));
+                    .filter(t => computeAssignedMonth(t) === m.key && t.type === type && (t.cat === category || (!t.cat && category === 'אחר')))
+                    .map(t => ({ desc: t.desc || '-', amt: t.amt, date: t.transactionDate || t.date || m.key, fixed: false }));
 
                 // Fixed items
                 const fixedList = type === 'expense' ? (data.fixedExpenses || []) : (data.fixedIncomes || []);
@@ -7139,12 +7919,12 @@
             let totalIncome = 0;
 
             months.forEach(m => {
-                data.transactions.filter(t=>t.month===m.key&&t.type==='income').forEach(t=>{
+                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='income').forEach(t=>{
                     incomeByCategory[t.cat] = (incomeByCategory[t.cat]||0) + t.amt;
                     totalIncome += t.amt;
                 });
 
-                data.transactions.filter(t=>t.month===m.key&&t.type==='expense').forEach(t=>{
+                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='expense').forEach(t=>{
                     expenseByCategory[t.cat] = (expenseByCategory[t.cat]||0) + t.amt;
                 });
 
@@ -7366,7 +8146,7 @@
             let totalIncome = 0, totalExpense = 0;
             
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 totalIncome += sum.inc;
                 totalExpense += sum.exp;
             });
@@ -7462,7 +8242,7 @@
             let total = 0;
             
             months.forEach(m => {
-                const sum = getMonthSummary(m.key);
+                const sum = getMonthSummary(m.key, 'accrual');
                 total += sum.available;
                 cumulativeSavings.push(total);
             });
@@ -7547,6 +8327,11 @@
         window.delDonation = delDonation;
         window.handleImportFile = handleImportFile;
         window.exportAllTransactions = exportAllTransactions;
+        window.handleMigrateFileSelect = handleMigrateFileSelect;
+        window.applyEnrichment = applyEnrichment;
+        window.handleBulkUpdateFileSelect = handleBulkUpdateFileSelect;
+        window.applyBulkUpdate = applyBulkUpdate;
+        window.initMigrateTabVisibility = initMigrateTabVisibility;
         window.importData = importData;
         window.loadMonthTransactions = loadMonthTransactions;
         window.renderCharts = renderCharts;
