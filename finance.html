@@ -996,6 +996,13 @@
                             <label class="text-xs text-gray-600 block mb-1">תאריך עסקה אמיתי (מתי הכסף באמת יצא)</label>
                             <input type="date" id="exp-date" class="w-full p-3 border rounded-lg">
                         </div>
+                        <div class="flex items-start gap-2 mb-3">
+                            <input type="checkbox" id="exp-assign-prev" class="w-4 h-4 rounded mt-1">
+                            <label for="exp-assign-prev" class="text-sm text-gray-700">
+                                הוצאה בדיעבד — שייך לחודש הקודם
+                                <span class="block text-xs text-gray-500" style="margin-top:2px;">סמן אם זו הוצאה שמשלמים בדיעבד עבור החודש שעבר (פעוטון, חשמל, מים)</span>
+                            </label>
+                        </div>
                         <button onclick="addExpense()" class="btn btn-danger w-full text-white py-3 rounded-lg font-medium">הוסף הוצאה</button>
                     </div>
                 </div>
@@ -1076,6 +1083,16 @@
                             <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">
                                 ברירת מחדל: הכנסות מתויגות בצבירה לחודש הקודם (משכורת = חודש העבודה).
                                 סמן רק להכנסות שבאמת שייכות לחודש שהתקבלו (שכ"ד שאתה מקבל, החזרי מס וכו').
+                            </div>
+                        </div>
+                        <div class="edit-field" id="edit-assign-prev-field" style="display: none;">
+                            <label class="flex items-center gap-2" style="cursor:pointer;">
+                                <input type="checkbox" id="edit-assign-prev">
+                                <span>הוצאה בדיעבד — שייך לחודש הקודם</span>
+                            </label>
+                            <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">
+                                ברירת מחדל: הוצאות מתויגות בצבירה לחודש שבו בוצעה הקנייה.
+                                סמן רק להוצאות שמשלמים בדיעבד עבור החודש הקודם (פעוטון, חשמל, מים, חשבונאי וכו').
                             </div>
                         </div>
                         <div class="edit-field">
@@ -2675,11 +2692,14 @@
             }
 
             if (tx.type === 'expense') {
-                if (tx.transactionDate) return monthFromDate(tx.transactionDate) || tx.month;
-                // Legacy aggregate period — uniform shift -1
-                if (tx.month <= LEGACY_BOUNDARY) return monthMinusOne(tx.month);
-                // Granular period without date — fallback to cash month
-                return tx.month;
+                let base;
+                if (tx.transactionDate) base = monthFromDate(tx.transactionDate) || tx.month;
+                else if (tx.month <= LEGACY_BOUNDARY) base = monthMinusOne(tx.month);
+                else base = tx.month;
+                // In-arrears expense override: shift back one more month (e.g., daycare,
+                // utilities billed in arrears).
+                if (tx.assignToPreviousMonth === true) return monthMinusOne(base);
+                return base;
             }
 
             // manual-tithe and any other type: pass-through
@@ -2988,12 +3008,13 @@
                         return;
                     }
 
-                    // Identify columns: id, transactionDate, assignToCurrentMonth flag
+                    // Identify columns: id, transactionDate, assignToCurrentMonth + assignToPreviousMonth flags
                     const sample = rows[0];
                     const keys = Object.keys(sample);
                     const idKey = keys.find(k => k.includes('מזהה'));
                     const dateKey = keys.find(k => k.includes('תאריך עסקה אמיתי') || k.includes('תאריך עסקה'));
                     const assignKey = keys.find(k => k.includes('שייך לחודש הקבלה'));
+                    const prevKey = keys.find(k => k.includes('הוצאה בדיעבד') || k.includes('בדיעבד'));
                     if (!idKey) {
                         notify('❌ לא נמצאה עמודת "מזהה" בקובץ. ודא שזה קובץ ייצוא מהמערכת.');
                         return;
@@ -3026,7 +3047,7 @@
                         const newDate = rawDate ? parseExcelDate(rawDate) : null;
                         if (rawDate && !newDate) { summary.skipped++; skippedReasons.push({ rawId: id, reason: `תאריך לא תקין: "${rawDate}"` }); continue; }
 
-                        // assignToCurrentMonth (income only): determine intended value, undefined if column missing
+                        // assignToCurrentMonth (income only): undefined if column missing → don't touch
                         let newAssign;
                         if (assignKey) {
                             const rawAssign = row[assignKey];
@@ -3034,23 +3055,36 @@
                                 ? (rawAssign == null || String(rawAssign).trim() === '' ? false : truthyAssign(rawAssign))
                                 : undefined;
                         } else {
-                            newAssign = undefined; // column not in file — don't touch
+                            newAssign = undefined;
                         }
                         const oldAssign = tx.assignToCurrentMonth === true;
+
+                        // assignToPreviousMonth (expense only)
+                        let newPrev;
+                        if (prevKey) {
+                            const rawPrev = row[prevKey];
+                            newPrev = tx.type === 'expense'
+                                ? (rawPrev == null || String(rawPrev).trim() === '' ? false : truthyAssign(rawPrev))
+                                : undefined;
+                        } else {
+                            newPrev = undefined;
+                        }
+                        const oldPrev = tx.assignToPreviousMonth === true;
 
                         const oldDate = tx.transactionDate || null;
                         const dateUnchanged = newDate === oldDate;
                         const assignUnchanged = newAssign === undefined || newAssign === oldAssign;
+                        const prevUnchanged = newPrev === undefined || newPrev === oldPrev;
 
-                        if (dateUnchanged && assignUnchanged) { summary.nochange++; continue; }
+                        if (dateUnchanged && assignUnchanged && prevUnchanged) { summary.nochange++; continue; }
 
                         let action;
                         if (!dateUnchanged && oldDate && newDate) action = 'overwrite';
                         else if (!dateUnchanged && newDate) action = 'add';
                         else if (!dateUnchanged) action = 'clear';
-                        else action = 'flag-only'; // only assignToCurrentMonth changed
+                        else action = 'flag-only';
 
-                        plan.push({ id, oldDate, newDate, action, desc: tx.desc, amt: tx.amt, type: tx.type, month: tx.month, oldAssign, newAssign, assignChanged: !assignUnchanged });
+                        plan.push({ id, oldDate, newDate, action, desc: tx.desc, amt: tx.amt, type: tx.type, month: tx.month, oldAssign, newAssign, assignChanged: !assignUnchanged, oldPrev, newPrev, prevChanged: !prevUnchanged });
                         if (action === 'overwrite') summary.overwrite++;
                         else summary.update++;
                     }
@@ -3082,12 +3116,14 @@
             const updates = plan.filter(p => p.action === 'add' || p.action === 'clear' || p.action === 'flag-only');
             if (updates.length > 0) {
                 html += `<details open><summary class="font-semibold py-2 cursor-pointer" style="color: hsl(142, 60%, 50%);">✅ עדכונים (${updates.length})</summary>`;
-                html += '<table class="w-full text-sm" style="border-collapse:collapse;"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">סכום</th><th class="text-right p-2">חודש</th><th class="text-right p-2">תאריך ישן</th><th class="text-right p-2">תאריך חדש</th><th class="text-right p-2">שייך לקבלה?</th></tr></thead><tbody>';
+                html += '<table class="w-full text-sm" style="border-collapse:collapse;"><thead><tr style="background:hsla(0,0%,100%,0.05);"><th class="text-right p-2">תיאור</th><th class="text-right p-2">סכום</th><th class="text-right p-2">חודש</th><th class="text-right p-2">תאריך ישן</th><th class="text-right p-2">תאריך חדש</th><th class="text-right p-2">דגלים</th></tr></thead><tbody>';
                 for (const p of updates.slice(0, 200)) {
-                    const flagCell = p.assignChanged ? `<span style="color:${p.newAssign?'hsl(142,60%,50%)':'hsl(0,70%,60%)'}">${p.oldAssign?'✓':'✗'} → ${p.newAssign?'✓':'✗'}</span>` : '';
+                    let flagsCell = '';
+                    if (p.assignChanged) flagsCell += `<span title="שייך לקבלה" style="color:${p.newAssign?'hsl(142,60%,50%)':'hsl(0,70%,60%)'}">קבלה: ${p.oldAssign?'✓':'✗'}→${p.newAssign?'✓':'✗'}</span> `;
+                    if (p.prevChanged) flagsCell += `<span title="בדיעבד" style="color:${p.newPrev?'hsl(142,60%,50%)':'hsl(0,70%,60%)'}">בדיעבד: ${p.oldPrev?'✓':'✗'}→${p.newPrev?'✓':'✗'}</span>`;
                     const dateOld = p.action === 'flag-only' ? '—' : (p.oldDate || '—');
                     const dateNew = p.action === 'flag-only' ? '—' : (p.newDate || '— (clear)');
-                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(p.desc)}</td><td class="p-2">${p.amt}</td><td class="p-2">${p.month || ''}</td><td class="p-2 text-gray-500">${dateOld}</td><td class="p-2" style="color: hsl(142, 60%, 50%);">${dateNew}</td><td class="p-2">${flagCell}</td></tr>`;
+                    html += `<tr style="border-bottom:1px solid hsla(0,0%,100%,0.05);"><td class="p-2">${escapeHtml(p.desc)}</td><td class="p-2">${p.amt}</td><td class="p-2">${p.month || ''}</td><td class="p-2 text-gray-500">${dateOld}</td><td class="p-2" style="color: hsl(142, 60%, 50%);">${dateNew}</td><td class="p-2">${flagsCell}</td></tr>`;
                 }
                 if (updates.length > 200) html += `<tr><td colspan="6" class="p-2 text-center text-gray-500">...ועוד ${updates.length - 200}</td></tr>`;
                 html += '</tbody></table></details>';
@@ -3148,10 +3184,15 @@
                 } else if (p.action !== 'flag-only') {
                     tx.transactionDate = p.newDate;
                 }
-                // assignToCurrentMonth update
+                // assignToCurrentMonth update (income only)
                 if (p.assignChanged) {
                     if (p.newAssign === true) tx.assignToCurrentMonth = true;
                     else delete tx.assignToCurrentMonth;
+                }
+                // assignToPreviousMonth update (expense only)
+                if (p.prevChanged) {
+                    if (p.newPrev === true) tx.assignToPreviousMonth = true;
+                    else delete tx.assignToPreviousMonth;
                 }
                 written++;
             }
@@ -3519,6 +3560,7 @@
                 'בעל הכנסה': earnerLabel(t.earner),
                 'פטור ממעשר': t.titheExempt ? 'כן' : '',
                 'שייך לחודש הקבלה': (t.type === 'income' && t.assignToCurrentMonth) ? 'כן' : '',
+                'הוצאה בדיעבד': (t.type === 'expense' && t.assignToPreviousMonth) ? 'כן' : '',
                 'חודש צבירה (מחושב)': computeAssignedMonth(t) || '',
                 'נוצר במערכת': t.time || '',
                 'תאריך חסר?': t.transactionDate ? '' : '⚠️ חסר'
@@ -3528,7 +3570,7 @@
             // Set column widths for readability
             ws['!cols'] = [
                 {wch: 16}, {wch: 10}, {wch: 16}, {wch: 16}, {wch: 32},
-                {wch: 10}, {wch: 14}, {wch: 12}, {wch: 12}, {wch: 16}, {wch: 16}, {wch: 22}, {wch: 12}
+                {wch: 10}, {wch: 14}, {wch: 12}, {wch: 12}, {wch: 16}, {wch: 16}, {wch: 16}, {wch: 22}, {wch: 12}
             ];
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'עסקאות');
@@ -4783,10 +4825,12 @@
             const exemptField = document.getElementById('edit-exempt-field');
             const earnerField = document.getElementById('edit-earner-field');
             const assignCurrentField = document.getElementById('edit-assign-current-field');
+            const assignPrevField = document.getElementById('edit-assign-prev-field');
             if (trans.type === 'income') {
                 exemptField.style.display = '';
                 earnerField.style.display = '';
                 if (assignCurrentField) assignCurrentField.style.display = '';
+                if (assignPrevField) assignPrevField.style.display = 'none';
                 document.getElementById('edit-exempt').checked = trans.titheExempt || false;
                 document.getElementById('edit-earner').value = trans.earner || '';
                 const acEl = document.getElementById('edit-assign-current');
@@ -4795,6 +4839,9 @@
                 exemptField.style.display = 'none';
                 earnerField.style.display = 'none';
                 if (assignCurrentField) assignCurrentField.style.display = 'none';
+                if (assignPrevField) assignPrevField.style.display = '';
+                const apEl = document.getElementById('edit-assign-prev');
+                if (apEl) apEl.checked = trans.assignToPreviousMonth === true;
             }
 
             const dateEl = document.getElementById('edit-transaction-date');
@@ -4834,6 +4881,13 @@
                     trans.assignToCurrentMonth = true;
                 } else {
                     delete trans.assignToCurrentMonth;
+                }
+            } else if (trans.type === 'expense') {
+                const apEl = document.getElementById('edit-assign-prev');
+                if (apEl && apEl.checked) {
+                    trans.assignToPreviousMonth = true;
+                } else {
+                    delete trans.assignToPreviousMonth;
                 }
             }
 
@@ -5039,15 +5093,19 @@
             const month = getAddMonth();
             const dateEl = document.getElementById('exp-date');
             const transactionDate = dateEl && dateEl.value ? dateEl.value : null;
+            const apEl = document.getElementById('exp-assign-prev');
+            const assignToPrev = apEl && apEl.checked;
 
             if(!desc || !amt || amt<=0) return notify('מלא את כל השדות');
             const tx = {id:Date.now(),type:'expense',desc,amt,cat,month,time:new Date().toISOString()};
             if (transactionDate) tx.transactionDate = transactionDate;
+            if (assignToPrev) tx.assignToPreviousMonth = true;
             data.transactions.push(tx);
             notify('נוסף');
             saveToLocalStorage();
             document.getElementById('exp-desc').value = '';
             document.getElementById('exp-amt').value = '';
+            if (apEl) apEl.checked = false;
             if (dateEl) dateEl.value = todayISO();
             loadMonthTransactions();
         }
