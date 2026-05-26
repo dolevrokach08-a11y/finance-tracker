@@ -1108,6 +1108,80 @@
                 </div>
             </div>
 
+            <!-- Import Preview Modal (dry-run for regular imports) -->
+            <div id="importPreviewModal" class="edit-modal-overlay" style="display: none;">
+                <div class="edit-modal" style="max-width: 95vw; width: 1200px; max-height: 90vh; display: flex; flex-direction: column;">
+                    <div class="edit-modal-header">
+                        <h3 id="import-preview-title">תצוגה מקדימה לייבוא</h3>
+                        <button onclick="cancelImportPreview()" class="edit-modal-close">&times;</button>
+                    </div>
+                    <div class="edit-modal-body" style="overflow-y: auto;">
+                        <p class="text-sm mb-3" style="color: var(--text-muted);">
+                            עבור על השורות, תקן מה שצריך (תיאור / סכום / קטגוריה / תאריך), והסר סימון משורות שאינך רוצה לייבא.
+                            רק שורות מסומנות יוכנסו למערכת.
+                        </p>
+
+                        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+                            <div class="p-3 rounded-lg" style="background: hsla(0,0%,100%,0.05);">
+                                <div class="text-xs text-gray-500">סה"כ בקובץ</div>
+                                <div id="ipv-stat-total" class="text-xl font-bold">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(142, 60%, 50%, 0.1);">
+                                <div class="text-xs text-gray-500">מסומנים לייבוא</div>
+                                <div id="ipv-stat-included" class="text-xl font-bold" style="color: hsl(142, 60%, 50%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(45, 90%, 55%, 0.1);">
+                                <div class="text-xs text-gray-500">כפילויות</div>
+                                <div id="ipv-stat-dupes" class="text-xl font-bold" style="color: hsl(45, 90%, 55%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(210, 80%, 55%, 0.1);">
+                                <div class="text-xs text-gray-500">הכנסות</div>
+                                <div id="ipv-stat-income" class="text-xl font-bold" style="color: hsl(210, 80%, 55%);">0</div>
+                            </div>
+                            <div class="p-3 rounded-lg" style="background: hsla(0, 70%, 60%, 0.1);">
+                                <div class="text-xs text-gray-500">הוצאות</div>
+                                <div id="ipv-stat-expense" class="text-xl font-bold" style="color: hsl(0, 70%, 60%);">0</div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 mb-3 items-center">
+                            <input type="text" id="ipv-search" placeholder="חיפוש בתיאור..." class="flex-1 p-2 border rounded-lg text-sm" style="min-width: 200px;" oninput="renderImportPreviewTable()">
+                            <select id="ipv-filter" class="p-2 border rounded-lg text-sm" onchange="renderImportPreviewTable()">
+                                <option value="all">כל השורות</option>
+                                <option value="newonly">חדשים בלבד</option>
+                                <option value="dupes">כפילויות בלבד</option>
+                                <option value="included">מסומנים בלבד</option>
+                                <option value="excluded">לא מסומנים בלבד</option>
+                            </select>
+                            <button onclick="ipvBulkAction('selectAll')" class="btn bg-gray-600 text-white py-1 px-3 rounded text-sm">סמן הכל</button>
+                            <button onclick="ipvBulkAction('deselectAll')" class="btn bg-gray-600 text-white py-1 px-3 rounded text-sm">נקה הכל</button>
+                            <button onclick="ipvBulkAction('skipDupes')" class="btn bg-yellow-600 text-white py-1 px-3 rounded text-sm">דלג על כפילויות</button>
+                        </div>
+
+                        <div style="overflow-x: auto; max-height: 60vh; overflow-y: auto; border: 1px solid hsla(0,0%,100%,0.1); border-radius: 8px;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                <thead style="position: sticky; top: 0; background: var(--bg-elevated, #1a1a1a); z-index: 1;">
+                                    <tr>
+                                        <th style="padding: 8px; text-align: center; width: 36px;">✓</th>
+                                        <th style="padding: 8px; text-align: center; width: 50px;">סוג</th>
+                                        <th style="padding: 8px; text-align: right;">תיאור</th>
+                                        <th style="padding: 8px; text-align: right; width: 100px;">סכום</th>
+                                        <th style="padding: 8px; text-align: right; width: 150px;">קטגוריה</th>
+                                        <th style="padding: 8px; text-align: right; width: 140px;">תאריך עסקה</th>
+                                        <th style="padding: 8px; text-align: right; width: 90px;">סטטוס</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="ipv-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="edit-modal-footer">
+                        <button onclick="cancelImportPreview()" class="edit-btn edit-btn-cancel">ביטול ייבוא</button>
+                        <button onclick="confirmImportPreview()" class="edit-btn edit-btn-save" id="ipv-confirm-btn">אישור והכנס לעסקאות</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Quick Category Assignment Modal -->
             <div id="catModal" class="cat-modal-overlay" style="display: none;">
                 <div class="cat-modal">
@@ -3584,6 +3658,165 @@
             notify(`✅ יוצאו ${txs.length} עסקאות (${withDate} עם תאריך, ${withoutDate} ללא)`);
         }
 
+        // ========== Import Preview Modal (dry-run for regular imports) ==========
+        // Candidate shape: { type, desc, amt, cat, transactionDate?, earner?, titheExempt?, _included, _isDuplicate, _dupReason? }
+        let importPreviewState = null; // { candidates, selectedMonth, onConfirmed, fileLabel }
+
+        function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed }) {
+            // Mark duplicates against existing transactions in same month
+            const existingInMonth = data.transactions.filter(t => t.month === selectedMonth);
+            for (const c of candidates) {
+                c._included = true;
+                c._isDuplicate = existingInMonth.some(t =>
+                    t.type === c.type &&
+                    t.desc === c.desc &&
+                    Math.abs((t.amt || 0) - (c.amt || 0)) < 0.01
+                );
+                if (c._isDuplicate) c._included = false; // default: don't re-import dupes
+            }
+            importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed };
+            const titleEl = document.getElementById('import-preview-title');
+            if (titleEl) titleEl.textContent = `תצוגה מקדימה: ${fileLabel || ''} → ${getMonthName(selectedMonth)}`;
+            document.getElementById('importPreviewModal').style.display = 'flex';
+            renderImportPreviewTable();
+        }
+
+        function cancelImportPreview() {
+            importPreviewState = null;
+            document.getElementById('importPreviewModal').style.display = 'none';
+            const tbody = document.getElementById('ipv-tbody');
+            if (tbody) tbody.innerHTML = '';
+        }
+
+        function getFilteredImportPreviewCandidates() {
+            if (!importPreviewState) return [];
+            const search = (document.getElementById('ipv-search')?.value || '').trim().toLowerCase();
+            const filter = document.getElementById('ipv-filter')?.value || 'all';
+            return importPreviewState.candidates.map((c, i) => ({ c, i })).filter(({ c }) => {
+                if (search && !(c.desc || '').toLowerCase().includes(search)) return false;
+                if (filter === 'newonly' && c._isDuplicate) return false;
+                if (filter === 'dupes' && !c._isDuplicate) return false;
+                if (filter === 'included' && !c._included) return false;
+                if (filter === 'excluded' && c._included) return false;
+                return true;
+            });
+        }
+
+        function renderImportPreviewTable() {
+            if (!importPreviewState) return;
+            const { candidates } = importPreviewState;
+            // Update stat counts (always over all candidates, not just filtered)
+            const total = candidates.length;
+            const included = candidates.filter(c => c._included).length;
+            const dupes = candidates.filter(c => c._isDuplicate).length;
+            const income = candidates.filter(c => c.type === 'income').length;
+            const expense = candidates.filter(c => c.type === 'expense').length;
+            document.getElementById('ipv-stat-total').textContent = total;
+            document.getElementById('ipv-stat-included').textContent = included;
+            document.getElementById('ipv-stat-dupes').textContent = dupes;
+            document.getElementById('ipv-stat-income').textContent = income;
+            document.getElementById('ipv-stat-expense').textContent = expense;
+            document.getElementById('ipv-confirm-btn').textContent = `אישור והכנס ${included} עסקאות`;
+
+            const filtered = getFilteredImportPreviewCandidates();
+            const tbody = document.getElementById('ipv-tbody');
+            const expenseCats = data.expenseCategories || [];
+            const incomeCats = data.incomeCategories || [];
+
+            const rows = filtered.map(({ c, i }) => {
+                const cats = c.type === 'income' ? incomeCats : expenseCats;
+                const catOpts = cats.map(cat => `<option value="${escapeHtml(cat)}" ${cat === c.cat ? 'selected' : ''}>${escapeHtml(cat)}</option>`).join('');
+                const dupBadge = c._isDuplicate
+                    ? `<span title="${escapeHtml(c._dupReason || 'תיאור+סכום זהים לעסקה קיימת')}" style="background: hsla(45,90%,55%,0.2); color: hsl(45,90%,55%); padding: 2px 6px; border-radius: 4px; font-size: 11px;">כפילות</span>`
+                    : `<span style="background: hsla(142,60%,50%,0.15); color: hsl(142,60%,50%); padding: 2px 6px; border-radius: 4px; font-size: 11px;">חדש</span>`;
+                const typeIcon = c.type === 'income' ? '💚' : '🔴';
+                const rowOpacity = c._included ? '1' : '0.5';
+                return `<tr data-i="${i}" style="opacity: ${rowOpacity}; border-bottom: 1px solid hsla(0,0%,100%,0.06);">
+                    <td style="text-align: center; padding: 6px;"><input type="checkbox" data-i="${i}" data-f="_included" ${c._included ? 'checked' : ''} onchange="ipvFieldChange(event)"></td>
+                    <td style="text-align: center;">${typeIcon}</td>
+                    <td style="padding: 4px;"><input type="text" data-i="${i}" data-f="desc" value="${escapeHtml(c.desc || '')}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
+                    <td style="padding: 4px;"><input type="number" step="0.01" data-i="${i}" data-f="amt" value="${c.amt}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
+                    <td style="padding: 4px;"><select data-i="${i}" data-f="cat" onchange="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;">${catOpts}</select></td>
+                    <td style="padding: 4px;"><input type="date" data-i="${i}" data-f="transactionDate" value="${c.transactionDate || ''}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
+                    <td style="padding: 4px;">${dupBadge}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = rows.length
+                ? rows.join('')
+                : '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-muted);">אין שורות שתואמות לפילטר</td></tr>';
+        }
+
+        function ipvFieldChange(event) {
+            if (!importPreviewState) return;
+            const el = event.target;
+            const i = parseInt(el.getAttribute('data-i'));
+            const f = el.getAttribute('data-f');
+            const c = importPreviewState.candidates[i];
+            if (!c) return;
+            if (f === '_included') {
+                c._included = el.checked;
+                // Update row opacity without re-rendering whole table
+                const tr = el.closest('tr');
+                if (tr) tr.style.opacity = c._included ? '1' : '0.5';
+                // Update included count only
+                const included = importPreviewState.candidates.filter(x => x._included).length;
+                document.getElementById('ipv-stat-included').textContent = included;
+                document.getElementById('ipv-confirm-btn').textContent = `אישור והכנס ${included} עסקאות`;
+            } else if (f === 'amt') {
+                c.amt = parseFloat(el.value) || 0;
+            } else if (f === 'transactionDate') {
+                c.transactionDate = el.value || null;
+            } else {
+                c[f] = el.value;
+            }
+        }
+
+        function ipvBulkAction(action) {
+            if (!importPreviewState) return;
+            const filtered = getFilteredImportPreviewCandidates();
+            if (action === 'selectAll') {
+                filtered.forEach(({ c }) => { c._included = true; });
+            } else if (action === 'deselectAll') {
+                filtered.forEach(({ c }) => { c._included = false; });
+            } else if (action === 'skipDupes') {
+                importPreviewState.candidates.forEach(c => { if (c._isDuplicate) c._included = false; });
+            }
+            renderImportPreviewTable();
+        }
+
+        function confirmImportPreview() {
+            if (!importPreviewState) return;
+            const { candidates, selectedMonth, onConfirmed } = importPreviewState;
+            const selected = candidates.filter(c => c._included);
+            if (selected.length === 0) {
+                if (!confirm('לא סומנו עסקאות לייבוא. לסגור בלי לייבא?')) return;
+                cancelImportPreview();
+                return;
+            }
+            // Build clean transaction objects (strip preview-only fields)
+            const baseId = Date.now();
+            const txs = selected.map((c, idx) => {
+                const tx = {
+                    id: baseId + idx,
+                    type: c.type,
+                    desc: (c.desc || '').trim(),
+                    amt: c.amt,
+                    cat: c.cat,
+                    month: selectedMonth,
+                    time: new Date().toISOString()
+                };
+                if (c.transactionDate) tx.transactionDate = c.transactionDate;
+                if (c.earner) tx.earner = c.earner;
+                if (c.titheExempt) tx.titheExempt = true;
+                return tx;
+            });
+
+            // Hand off to importer's callback (which decides post-import dialogs etc.)
+            const finalized = { txs, selectedMonth, skippedCount: candidates.length - selected.length };
+            cancelImportPreview();
+            if (typeof onConfirmed === 'function') onConfirmed(finalized);
+        }
+
         // ========== Import Functionality (Credit Card + Bank) ==========
         function handleImportFile(event) {
             const importType = document.getElementById('import-type').value;
@@ -3658,70 +3891,35 @@
                         'תחבורה': 'תחבורה',
                         'בידור': 'בילויים'
                     };
-                    
-                    let imported = 0;
-                    let skipped = 0;
-                    
-                    const existingTransactions = data.transactions.filter(t => t.month === selectedMonth && t.type === 'expense');
-                    
+
+                    const candidates = [];
                     for (let i = 4; i < jsonData.length; i++) {
                         const row = jsonData[i];
                         if (!row || !row[nameIdx] || row[amountIdx] == null) continue;
-                        
+
                         const name = String(row[nameIdx]).trim();
                         const amount = parseFloat(row[amountIdx]);
                         const creditCategory = row[categoryIdx] ? String(row[categoryIdx]) : 'אחר';
                         const mappedCategory = categoryMap[creditCategory] || 'אחר';
-                        
-                        if (name && !isNaN(amount) && amount > 0) {
-                            const isDuplicate = existingTransactions.some(t => 
-                                t.desc === name && Math.abs(t.amt - amount) < 0.01
-                            );
-                            
-                            if (isDuplicate) {
-                                skipped++;
-                                console.log('Skipped duplicate:', name, amount);
-                            } else {
-                                const transactionDate = dateIdx >= 0 ? parseExcelDate(row[dateIdx]) : null;
-                                const tx = {
-                                    id: Date.now() + imported * 10,
-                                    type: 'expense',
-                                    desc: name,
-                                    amt: amount,
-                                    cat: mappedCategory,
-                                    month: selectedMonth,
-                                    time: new Date().toISOString()
-                                };
-                                if (transactionDate) tx.transactionDate = transactionDate;
-                                data.transactions.push(tx);
-                                imported++;
-                            }
-                        }
+
+                        if (!name || isNaN(amount) || amount <= 0) continue;
+
+                        const transactionDate = dateIdx >= 0 ? parseExcelDate(row[dateIdx]) : null;
+                        candidates.push({ type: 'expense', desc: name, amt: amount, cat: mappedCategory, transactionDate });
                     }
-                    
-                    console.log('Imported transactions:', imported);
-                    console.log('Skipped duplicates:', skipped);
-                    
-                    if (imported > 0 || skipped > 0) {
-                        if (imported > 0) {
-                            saveToLocalStorage();
-                            loadMonthTransactions();
-                            updateOverview();
-                        }
-                        
-                        let message = '';
-                        if (imported > 0 && skipped > 0) {
-                            message = `✅ יובאו ${imported} חיובים חדשים, ${skipped} כפילויות דולגו`;
-                        } else if (imported > 0) {
-                            message = `✅ יובאו ${imported} חיובים לחודש ${getMonthName(selectedMonth)}`;
-                        } else {
-                            message = `ℹ️ כל ${skipped} החיובים כבר קיימים במערכת`;
-                        }
-                        notify(message);
-                    } else {
+
+                    if (candidates.length === 0) {
                         notify('❌ לא נמצאו חיובים לייבוא בקובץ');
+                        return;
                     }
-                    
+
+                    showImportPreview({
+                        candidates,
+                        selectedMonth,
+                        fileLabel: file.name,
+                        onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => applyPreviewedImport(txs, m, skippedCount)
+                    });
+
                 } catch(error) {
                     console.error('Import error details:', error);
                     notify(`❌ שגיאה בקריאת הקובץ: ${error.message}`);
@@ -3795,109 +3993,42 @@
                         return;
                     }
                     
-                    let importedIncome = 0;
-                    let importedExpense = 0;
-                    let skipped = 0;
-                    
-                    const existingTransactions = data.transactions.filter(t => t.month === selectedMonth);
-                    
+                    const candidates = [];
                     for (let i = headerIndex + 1; i < jsonData.length; i++) {
                         const row = jsonData[i];
                         if (!row || !row[descIdx]) continue;
-                        
+
                         const desc = String(row[descIdx]).trim();
                         const debitAmount = row[debitIdx] ? parseFloat(row[debitIdx]) : 0;
                         const creditAmount = row[creditIdx] ? parseFloat(row[creditIdx]) : 0;
-                        
+
                         if (!desc || (debitAmount === 0 && creditAmount === 0)) continue;
-                        
+
                         const transactionDate = dateIdx >= 0 ? parseExcelDate(row[dateIdx]) : null;
 
                         if (debitAmount > 0) {
-                            const isDuplicate = existingTransactions.some(t =>
-                                t.type === 'expense' && t.desc === desc && Math.abs(t.amt - debitAmount) < 0.01
-                            );
-
-                            if (!isDuplicate) {
-                                const category = findCategoryByRules(desc, 'expense');
-                                const tx = {
-                                    id: Date.now() + importedExpense * 10,
-                                    type: 'expense',
-                                    desc: desc,
-                                    amt: debitAmount,
-                                    cat: category,
-                                    month: selectedMonth,
-                                    time: new Date().toISOString()
-                                };
-                                if (transactionDate) tx.transactionDate = transactionDate;
-                                data.transactions.push(tx);
-                                importedExpense++;
-                            } else {
-                                skipped++;
-                            }
+                            const category = findCategoryByRules(desc, 'expense');
+                            candidates.push({ type: 'expense', desc, amt: debitAmount, cat: category, transactionDate });
                         }
-
                         if (creditAmount > 0) {
-                            const isDuplicate = existingTransactions.some(t =>
-                                t.type === 'income' && t.desc === desc && Math.abs(t.amt - creditAmount) < 0.01
-                            );
+                            const category = findCategoryByRules(desc, 'income');
+                            const earner = findEarnerByRules(desc);
+                            candidates.push({ type: 'income', desc, amt: creditAmount, cat: category, earner, transactionDate });
+                        }
+                    }
 
-                            if (!isDuplicate) {
-                                const category = findCategoryByRules(desc, 'income');
-                                const earner = findEarnerByRules(desc);
-                                const tx = {
-                                    id: Date.now() + importedIncome * 10 + 5,
-                                    type: 'income',
-                                    desc: desc,
-                                    amt: creditAmount,
-                                    cat: category,
-                                    earner: earner,
-                                    month: selectedMonth,
-                                    time: new Date().toISOString()
-                                };
-                                if (transactionDate) tx.transactionDate = transactionDate;
-                                data.transactions.push(tx);
-                                importedIncome++;
-                            } else {
-                                skipped++;
-                            }
-                        }
-                    }
-                    
-                    const totalImported = importedIncome + importedExpense;
-                    console.log('Imported:', {income: importedIncome, expense: importedExpense, skipped});
-                    
-                    if (totalImported > 0) {
-                        saveToLocalStorage();
-                        populateYearMonthSelectors();
-                        loadMonthTransactions();
-                        updateOverview();
-                        updateTithe();
-                        
-                        if (importedIncome > 0) {
-                            setTimeout(() => {
-                                if (confirm(`יובאו ${importedIncome} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\n(מתנות, החזרים, הלוואות וכו')\n\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
-                                    showTitheExemptDialog(selectedMonth);
-                                }
-                                // Show earner assignment dialog for untagged income
-                                setTimeout(() => {
-                                    const untagged = data.transactions.filter(t => t.month === selectedMonth && t.type === 'income' && !t.earner);
-                                    if (untagged.length > 0) {
-                                        showEarnerDialog(selectedMonth);
-                                    } else {
-                                        notify(`✅ יובאו ${totalImported} תנועות (${importedIncome} הכנסות, ${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
-                                    }
-                                }, 300);
-                            }, 500);
-                        } else {
-                            notify(`✅ יובאו ${totalImported} תנועות (${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
-                        }
-                    } else if (skipped > 0) {
-                        notify(`ℹ️ כל ${skipped} התנועות כבר קיימות במערכת`);
-                    } else {
+                    if (candidates.length === 0) {
                         notify('❌ לא נמצאו תנועות לייבוא בקובץ');
+                        return;
                     }
-                    
+
+                    showImportPreview({
+                        candidates,
+                        selectedMonth,
+                        fileLabel: file.name,
+                        onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => applyPreviewedImport(txs, m, skippedCount)
+                    });
+
                 } catch(error) {
                     console.error('Import error:', error);
                     notify(`❌ שגיאה בקריאת הקובץ: ${error.message}`);
@@ -4146,16 +4277,14 @@
             };
         }
 
-        function importWithMapping(jsonData, headerIndex, mapping, selectedMonth) {
+        function importWithMapping(jsonData, headerIndex, mapping, selectedMonth, fileLabel) {
             const categoryMap = {
                 'מזון וצריכה': 'מזון', 'עיצוב הבית': 'קניות', 'עירייה וממשלה': 'חשבונות',
                 'דלק, חשמל וגז': 'תחבורה', 'רפואה ובתי מרקחת': 'בריאות', 'שונות': 'אחר',
                 'ביגוד והנעלה': 'קניות', 'חינוך': 'חינוך', 'תחבורה': 'תחבורה', 'בידור': 'בילויים'
             };
 
-            let importedIncome = 0, importedExpense = 0, skipped = 0;
-            const existingTransactions = data.transactions.filter(t => t.month === selectedMonth);
-
+            const candidates = [];
             for (let i = headerIndex + 1; i < jsonData.length; i++) {
                 const row = jsonData[i];
                 if (!row) continue;
@@ -4181,64 +4310,64 @@
                         creditAmt = parseFloat(raw) || 0;
                     }
                 }
-
                 if (debitAmt === 0 && creditAmt === 0) continue;
 
                 const fileCat = mapping.categoryIdx >= 0 ? String(row[mapping.categoryIdx] || '') : '';
                 const transactionDate = mapping.dateIdx >= 0 ? parseExcelDate(row[mapping.dateIdx]) : null;
 
                 if (debitAmt > 0) {
-                    const isDup = existingTransactions.some(t => t.type === 'expense' && t.desc === desc && Math.abs(t.amt - debitAmt) < 0.01);
-                    if (isDup) { skipped++; }
-                    else {
-                        const cat = fileCat ? (categoryMap[fileCat] || findCategoryByRules(desc, 'expense')) : findCategoryByRules(desc, 'expense');
-                        const tx = { id: Date.now() + importedExpense * 10, type: 'expense', desc, amt: debitAmt, cat, month: selectedMonth, time: new Date().toISOString() };
-                        if (transactionDate) tx.transactionDate = transactionDate;
-                        data.transactions.push(tx);
-                        importedExpense++;
-                    }
+                    const cat = fileCat ? (categoryMap[fileCat] || findCategoryByRules(desc, 'expense')) : findCategoryByRules(desc, 'expense');
+                    candidates.push({ type: 'expense', desc, amt: debitAmt, cat, transactionDate });
                 }
-
                 if (creditAmt > 0) {
-                    const isDup = existingTransactions.some(t => t.type === 'income' && t.desc === desc && Math.abs(t.amt - creditAmt) < 0.01);
-                    if (isDup) { skipped++; }
-                    else {
-                        const cat = findCategoryByRules(desc, 'income');
-                        const earner = findEarnerByRules(desc);
-                        const tx = { id: Date.now() + importedIncome * 10 + 5, type: 'income', desc, amt: creditAmt, cat, earner, month: selectedMonth, time: new Date().toISOString() };
-                        if (transactionDate) tx.transactionDate = transactionDate;
-                        data.transactions.push(tx);
-                        importedIncome++;
-                    }
+                    const cat = findCategoryByRules(desc, 'income');
+                    const earner = findEarnerByRules(desc);
+                    candidates.push({ type: 'income', desc, amt: creditAmt, cat, earner, transactionDate });
                 }
             }
 
-            const totalImported = importedIncome + importedExpense;
-            if (totalImported > 0) {
-                saveToLocalStorage();
-                populateYearMonthSelectors();
-                loadMonthTransactions();
-                updateOverview();
-                updateTithe();
+            if (candidates.length === 0) {
+                notify('❌ לא נמצאו תנועות לייבוא בקובץ');
+                return;
             }
 
-            if (totalImported > 0 && importedIncome > 0) {
+            showImportPreview({
+                candidates,
+                selectedMonth,
+                fileLabel: fileLabel || 'ייבוא חכם',
+                onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => applyPreviewedImport(txs, m, skippedCount)
+            });
+        }
+
+        // Shared post-confirm pipeline used by all importers: append, save, refresh UI,
+        // and chain the existing tithe/earner dialogs for any new income rows.
+        function applyPreviewedImport(txs, selectedMonth, skippedCount) {
+            if (!txs || txs.length === 0) {
+                if (skippedCount > 0) notify(`ℹ️ ${skippedCount} תנועות דולגו, לא נוספו עסקאות חדשות`);
+                return;
+            }
+            const incomeCount = txs.filter(t => t.type === 'income').length;
+            const expenseCount = txs.filter(t => t.type === 'expense').length;
+            for (const tx of txs) data.transactions.push(tx);
+            saveToLocalStorage();
+            populateYearMonthSelectors();
+            loadMonthTransactions();
+            updateOverview();
+            updateTithe();
+
+            if (incomeCount > 0) {
                 setTimeout(() => {
-                    if (confirm(`יובאו ${importedIncome} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
+                    if (confirm(`נוספו ${incomeCount} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
                         showTitheExemptDialog(selectedMonth);
                     }
                     setTimeout(() => {
                         const untagged = data.transactions.filter(t => t.month === selectedMonth && t.type === 'income' && !t.earner);
                         if (untagged.length > 0) showEarnerDialog(selectedMonth);
-                        else notify(`✅ יובאו ${totalImported} תנועות (${importedIncome} הכנסות, ${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
+                        else notify(`✅ נוספו ${txs.length} תנועות (${incomeCount} הכנסות, ${expenseCount} הוצאות)${skippedCount > 0 ? `, ${skippedCount} דולגו` : ''}`);
                     }, 300);
                 }, 500);
-            } else if (totalImported > 0) {
-                notify(`✅ יובאו ${totalImported} תנועות (${importedExpense} הוצאות)${skipped > 0 ? `, ${skipped} כפילויות דולגו` : ''}`);
-            } else if (skipped > 0) {
-                notify(`ℹ️ כל ${skipped} התנועות כבר קיימות במערכת`);
             } else {
-                notify('❌ לא נמצאו תנועות לייבוא בקובץ');
+                notify(`✅ נוספו ${txs.length} תנועות (${expenseCount} הוצאות)${skippedCount > 0 ? `, ${skippedCount} דולגו` : ''}`);
             }
         }
 
@@ -4280,11 +4409,11 @@
 
                     if (hasMinimumMapping(mapping)) {
                         console.log('Smart import - auto-detected mapping:', mapping);
-                        importWithMapping(jsonData, header.index, mapping, selectedMonth);
+                        importWithMapping(jsonData, header.index, mapping, selectedMonth, file.name);
                     } else {
                         console.log('Smart import - falling back to manual mapping');
                         showColumnMappingDialog(jsonData, header.row, header.index, selectedMonth, (manualMapping) => {
-                            importWithMapping(jsonData, header.index, manualMapping, selectedMonth);
+                            importWithMapping(jsonData, header.index, manualMapping, selectedMonth, file.name);
                         });
                     }
 
@@ -8385,6 +8514,11 @@
         window.delDonation = delDonation;
         window.handleImportFile = handleImportFile;
         window.exportAllTransactions = exportAllTransactions;
+        window.cancelImportPreview = cancelImportPreview;
+        window.confirmImportPreview = confirmImportPreview;
+        window.ipvFieldChange = ipvFieldChange;
+        window.ipvBulkAction = ipvBulkAction;
+        window.renderImportPreviewTable = renderImportPreviewTable;
         window.handleMigrateFileSelect = handleMigrateFileSelect;
         window.applyEnrichment = applyEnrichment;
         window.handleBulkUpdateFileSelect = handleBulkUpdateFileSelect;
