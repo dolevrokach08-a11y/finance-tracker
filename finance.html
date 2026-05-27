@@ -2790,6 +2790,12 @@
             return m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
         }
 
+        function monthPlusOne(monthStr) {
+            if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return monthStr;
+            const [y, m] = monthStr.split('-').map(Number);
+            return m === 12 ? `${y+1}-01` : `${y}-${String(m+1).padStart(2,'0')}`;
+        }
+
         function monthFromDate(dateStr) {
             if (!dateStr || !/^\d{4}-\d{2}-\d{2}/.test(dateStr)) return null;
             return dateStr.slice(0, 7);
@@ -2932,9 +2938,15 @@
             };
 
             (data.fixedIncomes || []).forEach(f => {
-                if (!getMonthsInRange(f.start, f.end).includes(month)) return;
+                // Income templates follow the same shift rule as transactions:
+                //   no flag → declared cash month maps to (cash-1) accrual.
+                //   So a template appearing in accrual month X means cash month X+1 in range.
+                //   with flag → stays in declared month (cash = accrual).
+                const flagged = f.assignToCurrentMonth === true;
+                const cashMonthToCheck = flagged ? month : monthPlusOne(month);
+                if (!getMonthsInRange(f.start, f.end).includes(cashMonthToCheck)) return;
                 if (hasMatchingTx(f.description, monthIncomeTxs)) return;
-                incomes.push({ source: 'template', template: f });
+                incomes.push({ source: 'template', template: f, effectiveCashMonth: cashMonthToCheck });
             });
             (data.fixedExpenses || []).forEach(f => {
                 if (!getMonthsInRange(f.start, f.end).includes(month)) return;
@@ -7853,8 +7865,14 @@
                 ));
             };
 
+            // In accrual mode, templates also follow shift rules so they line up with how
+            // transactions land. Income default = shift -1 (template covering June contributes
+            // to May accrual); income with flag = stays in own month. Expenses currently never
+            // shift via template flag (no template-level prev-month flag yet).
             data.fixedIncomes.forEach(f=>{
-                if(!getMonthsInRange(f.start,f.end).includes(month)) return;
+                const flagged = f.assignToCurrentMonth === true;
+                const cashMonthToCheck = (basis === 'accrual' && !flagged) ? monthPlusOne(month) : month;
+                if(!getMonthsInRange(f.start,f.end).includes(cashMonthToCheck)) return;
                 if(hasMatchingTx(f.description, monthIncomeTxs)) return;
                 inc += f.amount;
                 incTaxable += f.amount;
