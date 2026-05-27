@@ -2796,7 +2796,12 @@
         }
 
         // Resolves whether an income transaction is flagged "current month" (vs. default previous month).
-        // Priority: 1) own flag, 2) matching fixedIncome's flag, 3) default false.
+        // Priority:
+        //   1) own explicit flag wins
+        //   2) matching fixedIncome with assignToCurrentMonth: true — only if tx.month falls
+        //      within the template's start..end range (a template introduced from May onwards
+        //      shouldn't retroactively re-shift older transactions)
+        //   3) default false (= shift previous month)
         function incomeAssignsToCurrentMonth(tx) {
             if (typeof tx.assignToCurrentMonth === 'boolean') return tx.assignToCurrentMonth;
             const fi = (data && data.fixedIncomes) ? data.fixedIncomes : [];
@@ -2805,7 +2810,9 @@
                 f.description && tx.desc &&
                 (tx.desc === f.description ||
                  tx.desc.includes(f.description) ||
-                 f.description.includes(tx.desc))
+                 f.description.includes(tx.desc)) &&
+                f.start && f.end &&
+                tx.month && tx.month >= f.start && tx.month <= f.end
             );
             return !!hit;
         }
