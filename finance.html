@@ -7564,17 +7564,34 @@
 
         function getMonthSummary(month, basis = 'cash') {
             const monthOf = (t) => basis === 'accrual' ? computeAssignedMonth(t) : t.month;
-            let inc = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income').reduce((s,t)=>s+t.amt,0);
-            let incTaxable = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income'&&!t.titheExempt).reduce((s,t)=>s+t.amt,0);
-            let exp = data.transactions.filter(t=>monthOf(t)===month&&t.type==='expense').reduce((s,t)=>s+t.amt,0);
+            const monthIncomeTxs = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income');
+            const monthExpenseTxs = data.transactions.filter(t=>monthOf(t)===month&&t.type==='expense');
+            let inc = monthIncomeTxs.reduce((s,t)=>s+t.amt,0);
+            let incTaxable = monthIncomeTxs.filter(t=>!t.titheExempt).reduce((s,t)=>s+t.amt,0);
+            let exp = monthExpenseTxs.reduce((s,t)=>s+t.amt,0);
+
+            // Templates only contribute when no matching transaction already covers this month —
+            // otherwise they double-count (e.g., bank-imported salary + fixedIncome template).
+            const hasMatchingTx = (templateDesc, txs) => {
+                if (!templateDesc) return false;
+                return txs.some(t => t.desc && (
+                    t.desc === templateDesc ||
+                    t.desc.includes(templateDesc) ||
+                    templateDesc.includes(t.desc)
+                ));
+            };
 
             data.fixedIncomes.forEach(f=>{
-                if(getMonthsInRange(f.start,f.end).includes(month)) {
-                    inc += f.amount;
-                    incTaxable += f.amount;
-                }
+                if(!getMonthsInRange(f.start,f.end).includes(month)) return;
+                if(hasMatchingTx(f.description, monthIncomeTxs)) return;
+                inc += f.amount;
+                incTaxable += f.amount;
             });
-            data.fixedExpenses.forEach(f=>{if(getMonthsInRange(f.start,f.end).includes(month)) exp+=f.amount;});
+            data.fixedExpenses.forEach(f=>{
+                if(!getMonthsInRange(f.start,f.end).includes(month)) return;
+                if(hasMatchingTx(f.description, monthExpenseTxs)) return;
+                exp += f.amount;
+            });
             
             // מעשר מוגבל לרווח בפועל - לא ניכנס למינוס בשביל מעשר
             const grossProfit = inc - exp;  // יתרה לפני מעשר
