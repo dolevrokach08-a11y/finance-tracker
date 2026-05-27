@@ -1875,7 +1875,7 @@
                             </select>
                         </div>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
                         <div>
                             <label class="block text-sm font-medium mb-1">יום חיוב בחודש</label>
                             <input type="number" id="bill-day" min="1" max="31" value="1" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
@@ -1883,6 +1883,10 @@
                         <div>
                             <label class="block text-sm font-medium mb-1">תאריך התחלה</label>
                             <input type="month" id="bill-start" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-1">תאריך סיום <span style="opacity:0.6;font-weight:normal;">(אופציונלי)</span></label>
+                            <input type="month" id="bill-end" class="w-full px-4 py-2 rounded-lg border" style="background: var(--bg-elevated); border-color: var(--border); color: var(--text-primary, inherit);" title="השאר ריק לחיוב ללא תאריך סיום">
                         </div>
                         <div>
                             <label class="block text-sm font-medium mb-1">הערות (אופציונלי)</label>
@@ -8866,26 +8870,42 @@
             const cat = document.getElementById('bill-cat').value;
             const day = +document.getElementById('bill-day').value||1;
             const start = document.getElementById('bill-start').value||new Date().toISOString().slice(0,7);
+            const endRaw = document.getElementById('bill-end').value || '';
             const notes = document.getElementById('bill-notes').value.trim();
             if(!name||!amount) { notify('נא למלא שם וסכום'); return; }
+            if(endRaw && endRaw < start) { notify('❌ תאריך הסיום חייב להיות אחרי תאריך ההתחלה'); return; }
             if(!data.bills) data.bills=[];
             const billId = Date.now();
-            data.bills.push({id:billId, name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true});
+            const bill = {id:billId, name, amount, frequency:freq, category:cat, billingDay:day, startDate:start, notes, active:true};
+            if (endRaw) bill.endDate = endRaw;
+            data.bills.push(bill);
 
             // Sync to fixedExpenses so budget/reports calculations include this bill
             const monthlyAmt = getMonthlyEquivalent(amount, freq);
             const expCat = mapBillCatToExpenseCat(cat);
-            const endDate = new Date(); endDate.setFullYear(endDate.getFullYear()+5);
-            const endMonth = endDate.toISOString().slice(0,7);
+            // Use the user-provided endDate if set; otherwise default to 5 years out.
+            let endMonth = endRaw;
+            if (!endMonth) {
+                const fallback = new Date(); fallback.setFullYear(fallback.getFullYear()+5);
+                endMonth = fallback.toISOString().slice(0,7);
+            }
             data.fixedExpenses.push({id:billId, description:name, amount:monthlyAmt, category:expCat, start:start, end:endMonth, linkedBillId:billId});
 
             document.getElementById('bill-name').value='';
             document.getElementById('bill-amount').value='';
+            document.getElementById('bill-end').value='';
             document.getElementById('bill-notes').value='';
             saveToFirebase();
             renderBills();
             renderFixedItems();
             notify('חיוב נוסף בהצלחה');
+        }
+
+        // Helper: returns true if bill has an endDate in the past (YYYY-MM compared against current month).
+        function isBillExpired(bill) {
+            if (!bill || !bill.endDate) return false;
+            const nowMonth = new Date().toISOString().slice(0,7);
+            return bill.endDate < nowMonth;
         }
 
         // Map bill categories to expense categories for fixedExpenses sync
@@ -8913,6 +8933,45 @@
         function toggleBill(id) {
             const bill = (data.bills||[]).find(b=>b.id===id);
             if(bill) { bill.active = !bill.active; saveToFirebase(); renderBills(); }
+        }
+
+        // Set or clear endDate on an existing bill. Empty input clears it.
+        function setBillEndDate(id) {
+            const bill = (data.bills||[]).find(b=>b.id===id);
+            if(!bill) return;
+            const current = bill.endDate || '';
+            const input = prompt(
+                `קבע תאריך סיום ל-"${bill.name}"\nפורמט: YYYY-MM (לדוגמא: 2026-08)\nהשאר ריק כדי להסיר תאריך סיום`,
+                current
+            );
+            if (input === null) return; // user cancelled
+            const trimmed = input.trim();
+            if (trimmed === '') {
+                delete bill.endDate;
+            } else if (!/^\d{4}-\d{2}$/.test(trimmed)) {
+                notify('❌ פורמט תאריך לא תקין. השתמש ב-YYYY-MM');
+                return;
+            } else if (bill.startDate && trimmed < bill.startDate) {
+                notify('❌ תאריך הסיום חייב להיות אחרי תאריך ההתחלה');
+                return;
+            } else {
+                bill.endDate = trimmed;
+            }
+            // Sync end to the linked fixedExpense too
+            const linked = (data.fixedExpenses||[]).find(f => f.linkedBillId === id || f.id === id);
+            if (linked) {
+                if (bill.endDate) {
+                    linked.end = bill.endDate;
+                } else {
+                    // Restore far-future fallback
+                    const fallback = new Date(); fallback.setFullYear(fallback.getFullYear()+5);
+                    linked.end = fallback.toISOString().slice(0,7);
+                }
+            }
+            saveToFirebase();
+            renderBills();
+            renderFixedItems();
+            notify(bill.endDate ? `✅ תאריך סיום נקבע ל-${bill.endDate}` : '✅ תאריך סיום הוסר');
         }
 
         let billSortMode = 'date';
@@ -8952,7 +9011,7 @@
         }
 
         function renderBills() {
-            const bills = (data.bills||[]).filter(b=>b.active!==false);
+            const bills = (data.bills||[]).filter(b=>b.active!==false && !isBillExpired(b));
             const allBills = data.bills||[];
 
             // Get unlinked fixedExpenses (added before bills feature existed)
@@ -8996,14 +9055,18 @@
                 const daysUntil = Math.ceil((nextDate - new Date())/(1000*60*60*24));
                 const monthlyEq = getMonthlyEquivalent(b.amount, b.frequency);
                 const isInactive = b.active===false;
+                const isExpired = isBillExpired(b);
                 const isLegacy = b._isLegacyFixed;
+                const endBadge = b.endDate
+                    ? ` • <span style="${isExpired ? 'color:var(--loss,#ef4444);font-weight:600;' : 'opacity:0.7;'}">${isExpired ? 'הסתיים ' : 'עד '}${b.endDate}</span>`
+                    : '';
                 return `
-                <div class="glass p-4" style="display:flex;justify-content:space-between;align-items:center;${isInactive?'opacity:0.4;':''}">
+                <div class="glass p-4" style="display:flex;justify-content:space-between;align-items:center;${(isInactive||isExpired)?'opacity:0.4;':''}">
                     <div style="display:flex;align-items:center;gap:12px;">
                         <span style="font-size:1.5rem;">${BILL_CAT_ICONS[b.category]||'📦'}</span>
                         <div>
-                            <div style="font-weight:600;">${b.name}${isLegacy?' <span style="font-size:0.7rem;background:var(--bg-elevated);border:1px solid var(--border);padding:2px 6px;border-radius:4px;opacity:0.7;">מהגדרות</span>':''}</div>
-                            <div style="font-size:0.8rem;opacity:0.6;">${BILL_CAT_LABELS[b.category]||b.category} • ${FREQ_LABELS[b.frequency]||b.frequency} • יום ${b.billingDay||1}${b.notes?' • '+b.notes:''}</div>
+                            <div style="font-weight:600;">${b.name}${isLegacy?' <span style="font-size:0.7rem;background:var(--bg-elevated);border:1px solid var(--border);padding:2px 6px;border-radius:4px;opacity:0.7;">מהגדרות</span>':''}${isExpired?' <span style="font-size:0.7rem;background:hsla(0,70%,60%,0.2);color:hsl(0,70%,60%);padding:2px 6px;border-radius:4px;">פג תוקף</span>':''}</div>
+                            <div style="font-size:0.8rem;opacity:0.6;">${BILL_CAT_LABELS[b.category]||b.category} • ${FREQ_LABELS[b.frequency]||b.frequency} • יום ${b.billingDay||1}${endBadge}${b.notes?' • '+b.notes:''}</div>
                         </div>
                     </div>
                     <div style="display:flex;align-items:center;gap:16px;">
@@ -9012,10 +9075,11 @@
                             ${b.frequency!=='monthly'?`<div style="font-size:0.75rem;opacity:0.5;">₪${Math.round(monthlyEq).toLocaleString()}/חד'</div>`:''}
                         </div>
                         <div style="text-align:center;min-width:60px;">
-                            <div style="font-size:0.8rem;font-weight:600;${daysUntil<=3?'color:var(--loss,#ef4444);':daysUntil<=7?'color:#f5a623;':''}">${isInactive?'מושהה':daysUntil<=0?'היום!':'בעוד '+daysUntil+' ימים'}</div>
+                            <div style="font-size:0.8rem;font-weight:600;${daysUntil<=3?'color:var(--loss,#ef4444);':daysUntil<=7?'color:#f5a623;':''}">${isExpired?'הסתיים':isInactive?'מושהה':daysUntil<=0?'היום!':'בעוד '+daysUntil+' ימים'}</div>
                         </div>
                         <div style="display:flex;gap:6px;">
                             ${isLegacy?`<button onclick="migrateBillFromFixed(${b.id})" style="cursor:pointer;border:none;background:none;font-size:0.8rem;color:var(--accent);text-decoration:underline;" title="העבר לחיובים">העבר</button>`:`
+                            <button onclick="setBillEndDate(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;" title="${b.endDate?'שנה תאריך סיום ('+b.endDate+')':'קבע תאריך סיום'}">📅</button>
                             <button onclick="toggleBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;" title="${isInactive?'הפעל':'השהה'}">${isInactive?'▶️':'⏸️'}</button>
                             <button onclick="removeBill(${b.id})" style="cursor:pointer;border:none;background:none;font-size:1rem;color:var(--loss,#ef4444);" title="מחק">🗑️</button>`}
                         </div>
@@ -9239,6 +9303,7 @@
         window.addBill = addBill;
         window.removeBill = removeBill;
         window.toggleBill = toggleBill;
+        window.setBillEndDate = setBillEndDate;
         window.sortBills = sortBills;
         window.renderBills = renderBills;
         window.changeCalendarMonth = changeCalendarMonth;
