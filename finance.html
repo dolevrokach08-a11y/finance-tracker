@@ -34,6 +34,7 @@
         #tab-fire:not(.hidden) { display: block !important; }
         #tab-debt:not(.hidden) { display: block !important; }
         #tab-migrate:not(.hidden) { display: block !important; }
+        #tab-accrual:not(.hidden) { display: block !important; }
 
         /* Offline Fallback - Basic Tailwind-like CSS */
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -828,6 +829,7 @@
                 <div class="flex flex-wrap gap-2">
                     <button onclick="showTab('overview')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800 tab-active">סקירה</button>
                     <button onclick="showTab('add')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הוסף נתונים</button>
+                    <button onclick="showTab('accrual')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">📐 חודש בצבירה</button>
                     <button onclick="showTab('reports')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">דוחות</button>
                     <button onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
                     <button onclick="showTab('tithe')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
@@ -2259,6 +2261,53 @@
                 </div>
             </div>
 
+            <!-- Accrual Month View Tab -->
+            <div id="tab-accrual" class="tab-content hidden">
+                <div class="glass p-4 mb-4" style="background: hsla(210, 80%, 55%, 0.05); border-right: 3px solid hsl(210, 80%, 55%);">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span style="font-size: 1.5rem;">📐</span>
+                        <h2 class="text-xl font-bold" style="color: hsl(210, 80%, 55%);">חודש בצבירה</h2>
+                    </div>
+                    <p class="text-sm" style="color: var(--text-muted);">
+                        רואה את כל ההכנסות וההוצאות ששייכות לחודש שנבחר <strong>בבסיס צבירה</strong> —
+                        כפי שמופיע בדוחות. כל עסקה מוצגת עם המקור שלה ("תנועה" / "תבנית") והסיבה שהיא משויכת לחודש הזה.
+                    </p>
+                </div>
+
+                <div class="glass p-4 mb-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="text-sm font-medium">חודש לניתוח:</label>
+                        <select id="accrual-year" class="p-2 border rounded-lg text-sm"></select>
+                        <select id="accrual-month-num" class="p-2 border rounded-lg text-sm"></select>
+                        <label class="flex items-center gap-2 text-sm ml-auto" style="cursor:pointer;">
+                            <input type="checkbox" id="accrual-show-moved-out" onchange="renderAccrualMonth()">
+                            <span>הצג גם עסקאות שתויגו לחודש זה אך הועברו לחודש אחר בצבירה</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div id="accrual-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+                    <div class="glass p-4">
+                        <h3 class="text-lg font-semibold mb-3" style="color: hsl(142, 60%, 50%);">💚 הכנסות</h3>
+                        <div id="accrual-income-list"></div>
+                    </div>
+                    <div class="glass p-4">
+                        <h3 class="text-lg font-semibold mb-3" style="color: hsl(0, 70%, 60%);">🔴 הוצאות</h3>
+                        <div id="accrual-expense-list"></div>
+                    </div>
+                </div>
+
+                <div id="accrual-moved-out-section" class="glass p-4 mb-4 hidden">
+                    <h3 class="text-lg font-semibold mb-3" style="color: hsl(45, 90%, 55%);">↔️ עסקאות שתויגו לחודש זה אך הועברו לחודש צבירה אחר</h3>
+                    <p class="text-xs mb-3" style="color: var(--text-muted);">
+                        עסקאות שאתה בחרת לתייג לחודש זה (תאריך קובע / מזומן), אבל לפי כללי הצבירה נכנסות לחודש אחר. מוצגות לידיעה בלבד — לא נספרות בסיכום למעלה.
+                    </p>
+                    <div id="accrual-moved-out-list"></div>
+                </div>
+            </div>
+
             <!-- Migrate Tab (hidden, dev-only) -->
             <div id="tab-migrate" class="tab-content hidden">
                 <div class="glass p-4 mb-4" style="border:2px dashed hsl(30, 80%, 55%); background: hsla(30, 80%, 55%, 0.05);">
@@ -2818,6 +2867,222 @@
             if(tab==='fire') { renderFIRE(); }
             if(tab==='debt') { renderDebtSimulator(); }
             if(tab==='migrate') { initMigrateTab(); }
+            if(tab==='accrual') { initAccrualTab(); }
+        }
+
+        // ========== Accrual Month View ==========
+        function initAccrualTab() {
+            const years = getDataYears();
+            const ySel = document.getElementById('accrual-year');
+            const mSel = document.getElementById('accrual-month-num');
+            const hebrewMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
+            const today = new Date();
+            const curYear = today.getFullYear();
+            const curMonth = String(today.getMonth() + 1).padStart(2, '0');
+
+            // Allow forecasting up to 2 future years
+            const allYears = [...new Set([...years, curYear, curYear + 1, curYear + 2])].sort((a,b)=>b-a);
+
+            if (ySel && !ySel.dataset.init) {
+                ySel.innerHTML = allYears.map(y => `<option value="${y}" ${y===curYear?'selected':''}>${y}</option>`).join('');
+                ySel.dataset.init = '1';
+                ySel.addEventListener('change', renderAccrualMonth);
+            }
+            if (mSel && !mSel.dataset.init) {
+                mSel.innerHTML = hebrewMonths.map((name,i) => {
+                    const m = String(i+1).padStart(2,'0');
+                    return `<option value="${m}" ${m===curMonth?'selected':''}>${name}</option>`;
+                }).join('');
+                mSel.dataset.init = '1';
+                mSel.addEventListener('change', renderAccrualMonth);
+            }
+            renderAccrualMonth();
+        }
+
+        function getSelectedAccrualMonth() {
+            const y = document.getElementById('accrual-year');
+            const m = document.getElementById('accrual-month-num');
+            if (!y || !m) return null;
+            return `${y.value}-${m.value}`;
+        }
+
+        // Build items contributing to a month in accrual basis:
+        // - All transactions where computeAssignedMonth(t) === month
+        // - Templates (fixedIncomes/fixedExpenses) whose range covers month AND no matching tx exists
+        function getAccrualMonthItems(month) {
+            const incomes = [];
+            const expenses = [];
+
+            const monthIncomeTxs = data.transactions.filter(t => t.type === 'income' && computeAssignedMonth(t) === month);
+            const monthExpenseTxs = data.transactions.filter(t => t.type === 'expense' && computeAssignedMonth(t) === month);
+
+            monthIncomeTxs.forEach(t => incomes.push({ source: 'tx', tx: t }));
+            monthExpenseTxs.forEach(t => expenses.push({ source: 'tx', tx: t }));
+
+            const hasMatchingTx = (desc, txs) => {
+                if (!desc) return false;
+                return txs.some(t => t.desc && (t.desc === desc || t.desc.includes(desc) || desc.includes(t.desc)));
+            };
+
+            (data.fixedIncomes || []).forEach(f => {
+                if (!getMonthsInRange(f.start, f.end).includes(month)) return;
+                if (hasMatchingTx(f.description, monthIncomeTxs)) return;
+                incomes.push({ source: 'template', template: f });
+            });
+            (data.fixedExpenses || []).forEach(f => {
+                if (!getMonthsInRange(f.start, f.end).includes(month)) return;
+                if (hasMatchingTx(f.description, monthExpenseTxs)) return;
+                expenses.push({ source: 'template', template: f });
+            });
+
+            return { incomes, expenses };
+        }
+
+        function renderAccrualMonth() {
+            const month = getSelectedAccrualMonth();
+            if (!month) return;
+            const { incomes, expenses } = getAccrualMonthItems(month);
+
+            const sumItems = (items) => items.reduce((s, it) => s + (it.source === 'tx' ? it.tx.amt : it.template.amount), 0);
+            const incTotal = sumItems(incomes);
+            const expTotal = sumItems(expenses);
+            const net = incTotal - expTotal;
+
+            // Tithe estimate (same logic as getMonthSummary but only for this view)
+            const incTaxable = incomes.reduce((s, it) => {
+                const amt = it.source === 'tx' ? it.tx.amt : it.template.amount;
+                const exempt = it.source === 'tx' ? it.tx.titheExempt : false;
+                return s + (exempt ? 0 : amt);
+            }, 0);
+            let tithe = 0;
+            const gross = incTotal - expTotal;
+            if (gross > 0) tithe = Math.min(incTaxable * 0.1, gross);
+
+            // Stats
+            const stats = document.getElementById('accrual-stats');
+            stats.innerHTML = `
+                <div class="glass p-3 text-center">
+                    <div class="text-xs text-gray-500">הכנסות</div>
+                    <div class="text-xl font-bold" style="color: hsl(142, 60%, 50%);">₪${Math.round(incTotal).toLocaleString('he-IL')}</div>
+                    <div class="text-xs" style="color: var(--text-muted);">${incomes.length} פריטים</div>
+                </div>
+                <div class="glass p-3 text-center">
+                    <div class="text-xs text-gray-500">הוצאות</div>
+                    <div class="text-xl font-bold" style="color: hsl(0, 70%, 60%);">₪${Math.round(expTotal).toLocaleString('he-IL')}</div>
+                    <div class="text-xs" style="color: var(--text-muted);">${expenses.length} פריטים</div>
+                </div>
+                <div class="glass p-3 text-center">
+                    <div class="text-xs text-gray-500">נטו</div>
+                    <div class="text-xl font-bold" style="color: ${net >= 0 ? 'hsl(142, 60%, 50%)' : 'hsl(0, 70%, 60%)'};">₪${Math.round(net).toLocaleString('he-IL')}</div>
+                </div>
+                <div class="glass p-3 text-center">
+                    <div class="text-xs text-gray-500">מעשר משוער</div>
+                    <div class="text-xl font-bold" style="color: hsl(45, 90%, 55%);">₪${Math.round(tithe).toLocaleString('he-IL')}</div>
+                </div>
+            `;
+
+            // Sort and render lists
+            const sortItems = (items) => items.slice().sort((a, b) => {
+                const amtA = a.source === 'tx' ? a.tx.amt : a.template.amount;
+                const amtB = b.source === 'tx' ? b.tx.amt : b.template.amount;
+                return amtB - amtA;
+            });
+
+            const renderItemRow = (item, type) => {
+                if (item.source === 'template') {
+                    const f = item.template;
+                    return `<div class="p-3 rounded-lg mb-2" style="background: hsla(0,0%,100%,0.03); border: 1px dashed hsla(0,0%,100%,0.15);">
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="flex-1">
+                                <div class="font-medium">${escapeHtml(f.description || '')}
+                                    <span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(210,80%,55%,0.15);color:hsl(210,80%,55%);">📋 תבנית</span>
+                                </div>
+                                <div class="text-xs" style="color: var(--text-muted);">${escapeHtml(f.category || '')} • טווח ${f.start} → ${f.end}${f.assignToCurrentMonth ? ' • סומן: שייך לחודש הקבלה' : ''}</div>
+                            </div>
+                            <div class="text-left">
+                                <div class="font-bold ${type==='income'?'text-green-600':'text-red-600'}">${type==='income'?'+':'-'}₪${(f.amount||0).toLocaleString('he-IL')}</div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+                // Transaction row
+                const t = item.tx;
+                const reason = explainAssignment(t, month);
+                return `<div class="p-3 rounded-lg mb-2" style="background: hsla(0,0%,100%,0.03);">
+                    <div class="flex justify-between items-start gap-2">
+                        <div class="flex-1">
+                            <div class="font-medium">${escapeHtml(t.desc || '')}
+                                <span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(142,60%,50%,0.15);color:hsl(142,60%,50%);">💳 תנועה</span>
+                                ${t.titheExempt ? '<span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(30,80%,55%,0.15);color:hsl(30,80%,55%);">פטור ממעשר</span>' : ''}
+                            </div>
+                            <div class="text-xs" style="color: var(--text-muted);">${escapeHtml(t.cat || '')} • ${reason}</div>
+                        </div>
+                        <div class="text-left flex flex-col items-end gap-1">
+                            <div class="font-bold ${type==='income'?'text-green-600':'text-red-600'}">${type==='income'?'+':'-'}₪${(t.amt||0).toLocaleString('he-IL')}</div>
+                            <button onclick="startEdit(${t.id})" class="text-xs text-blue-500 hover:text-blue-700">✏️ ערוך</button>
+                        </div>
+                    </div>
+                </div>`;
+            };
+
+            const incList = document.getElementById('accrual-income-list');
+            const expList = document.getElementById('accrual-expense-list');
+            incList.innerHTML = incomes.length
+                ? sortItems(incomes).map(it => renderItemRow(it, 'income')).join('')
+                : '<div class="text-center py-6" style="color: var(--text-muted);">אין הכנסות בחודש זה</div>';
+            expList.innerHTML = expenses.length
+                ? sortItems(expenses).map(it => renderItemRow(it, 'expense')).join('')
+                : '<div class="text-center py-6" style="color: var(--text-muted);">אין הוצאות בחודש זה</div>';
+
+            // Moved-out section (optional)
+            const showMoved = document.getElementById('accrual-show-moved-out')?.checked;
+            const movedSection = document.getElementById('accrual-moved-out-section');
+            if (showMoved) {
+                const movedOut = data.transactions.filter(t =>
+                    t.month === month &&
+                    t.type !== 'manual-tithe' &&
+                    computeAssignedMonth(t) !== month
+                );
+                movedSection.classList.remove('hidden');
+                document.getElementById('accrual-moved-out-list').innerHTML = movedOut.length
+                    ? movedOut.map(t => {
+                        const target = computeAssignedMonth(t);
+                        return `<div class="p-2 mb-2 rounded-lg" style="background: hsla(45,90%,55%,0.05); border-right: 3px solid hsla(45,90%,55%,0.4);">
+                            <div class="flex justify-between items-center text-sm">
+                                <div>${t.type==='income'?'💚':'🔴'} <strong>${escapeHtml(t.desc||'')}</strong> <span style="color: var(--text-muted);">${escapeHtml(t.cat||'')}</span></div>
+                                <div>₪${(t.amt||0).toLocaleString('he-IL')} → <span style="color:hsl(45,90%,55%);font-weight:600;">${target}</span></div>
+                            </div>
+                        </div>`;
+                    }).join('')
+                    : '<div class="text-center py-4" style="color: var(--text-muted);">אין עסקאות שזזו</div>';
+            } else {
+                movedSection.classList.add('hidden');
+            }
+        }
+
+        // Returns a short Hebrew explanation of why a transaction landed in `month` accrual.
+        function explainAssignment(t, month) {
+            if (t.type === 'income') {
+                if (t.month === month) {
+                    // Stayed in same month — either flagged or via fixedIncome inheritance
+                    if (t.assignToCurrentMonth === true) return `תויג ל-${t.month} • מסומן: שייך לחודש הקבלה`;
+                    if (incomeAssignsToCurrentMonth(t)) return `תויג ל-${t.month} • שייך לחודש הקבלה (לפי תבנית תואמת)`;
+                    return `תויג ל-${t.month}`;
+                }
+                // Shifted -1 from t.month to month
+                return `תויג ל-${t.month} • הועבר אחורה חודש (כלל ברירת מחדל להכנסה)`;
+            }
+            if (t.type === 'expense') {
+                if (t.transactionDate) {
+                    const calMonth = monthFromDate(t.transactionDate);
+                    if (t.assignToPreviousMonth) return `תאריך עסקה ${t.transactionDate} • מסומן: בדיעבד → ${month}`;
+                    return `תאריך עסקה ${t.transactionDate} (${calMonth}) • תויג במערכת ל-${t.month}`;
+                }
+                if (t.month <= LEGACY_BOUNDARY) return `תויג ל-${t.month} • לגאסי מצרפי, הועבר אחורה חודש`;
+                if (t.assignToPreviousMonth) return `תויג ל-${t.month} • מסומן: בדיעבד → ${month}`;
+                return `תויג ל-${t.month} • אין תאריך עסקה`;
+            }
+            return `תויג ל-${t.month}`;
         }
 
         // ========== Migrate Tab (DEV: enrich historical transactions with real dates) ==========
@@ -8537,6 +8802,7 @@
         window.exportAllTransactions = exportAllTransactions;
         window.cancelImportPreview = cancelImportPreview;
         window.confirmImportPreview = confirmImportPreview;
+        window.renderAccrualMonth = renderAccrualMonth;
         window.ipvFieldChange = ipvFieldChange;
         window.ipvBulkAction = ipvBulkAction;
         window.renderImportPreviewTable = renderImportPreviewTable;
