@@ -2309,17 +2309,23 @@
                 </div>
             </div>
 
-            <!-- Migrate Tab (hidden, dev-only) -->
+            <!-- Migrate Tab (hidden by default, opens with ?migrate=1) -->
             <div id="tab-migrate" class="tab-content hidden">
                 <div class="glass p-4 mb-4" style="border:2px dashed hsl(30, 80%, 55%); background: hsla(30, 80%, 55%, 0.05);">
                     <div class="flex items-center gap-2 mb-2">
                         <span style="font-size: 1.5rem;">🔧</span>
-                        <h2 class="text-xl font-bold" style="color: hsl(30, 80%, 55%);">כלי העשרת היסטוריה (DEV ONLY)</h2>
+                        <h2 class="text-xl font-bold" style="color: hsl(30, 80%, 55%);">כלי העשרת היסטוריה</h2>
                     </div>
                     <p class="text-sm" style="color: var(--text-muted);">
                         טען קובץ אקסל היסטורי (אשראי או בנק) כדי להוסיף תאריך עסקה אמיתי לעסקאות קיימות במערכת.
-                        הכלי לא מוסיף עסקאות חדשות — רק מעשיר את הקיימות. תמיד dry-run תחילה.
+                        הכלי לא מוסיף עסקאות חדשות — רק מעשיר את הקיימות. תמיד dry-run תחילה + גיבוי JSON אוטומטי לפני כתיבה.
                     </p>
+                </div>
+                <div id="migrate-prod-warning" class="glass p-3 mb-4 hidden" style="border: 2px solid hsl(0, 70%, 60%); background: hsla(0, 70%, 60%, 0.08);">
+                    <div class="text-sm" style="color: hsl(0, 70%, 60%);">
+                        ⚠️ <strong>אתה בפרודקשן.</strong> כל כתיבה כאן תשנה את הנתונים האמיתיים שלך ב-Firebase.
+                        ודא שאין טאב נוסף פתוח של האפליקציה (תזרים מסונכרן) כדי למנוע דריסת נתונים, ושהגיבוי שירד נשמר במקום בטוח.
+                    </div>
                 </div>
 
                 <!-- Step 1: Upload + system month -->
@@ -3162,10 +3168,16 @@
         // ========== Migrate Tab (DEV: enrich historical transactions with real dates) ==========
         // Gated to localhost + ?migrate=1 — will not render in production even if accidentally pushed.
         function isMigrateAllowed() {
+            // Gate is now just the URL param — works in production too. The param itself is
+            // an opt-in barrier against accidental access (you have to type ?migrate=1 to see
+            // the tab at all). The tools inside still require dry-run confirmation + download
+            // a JSON backup before any write.
+            return new URLSearchParams(window.location.search).get('migrate') === '1';
+        }
+
+        function isLocalDevHost() {
             const host = window.location.hostname;
-            const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '' || host === '0.0.0.0';
-            const wantsMigrate = new URLSearchParams(window.location.search).get('migrate') === '1';
-            return isLocal && wantsMigrate;
+            return host === 'localhost' || host === '127.0.0.1' || host === '' || host === '0.0.0.0';
         }
 
         function initMigrateTabVisibility() {
@@ -3176,6 +3188,12 @@
         let migrateAnalysisState = null; // { rows: [...], systemMonth: '...', results: {...} }
 
         function initMigrateTab() {
+            // Show the production-warning banner when running outside localhost
+            const warn = document.getElementById('migrate-prod-warning');
+            if (warn) {
+                if (isLocalDevHost()) warn.classList.add('hidden');
+                else warn.classList.remove('hidden');
+            }
             // Populate year/month selectors for the "imported as" picker (reuse existing source list)
             const years = getDataYears();
             const hebrewMonths = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
