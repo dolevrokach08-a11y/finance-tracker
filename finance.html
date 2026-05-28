@@ -921,6 +921,7 @@
                         <select id="add-month-num" class="p-2 border rounded-lg"></select>
                         <input type="hidden" id="add-month">
                         <span class="text-xs text-gray-500">(רשום לפי החודש שבו הכסף בפועל נכנס/יוצא)</span>
+                        <span class="text-xs px-2 py-1 rounded ml-auto" style="background:hsla(210,80%,55%,0.1);color:hsl(210,80%,55%);" title="קיצור: Ctrl+→ לחודש קודם, Ctrl+← לחודש הבא">⌨ Ctrl + → / ←</span>
                     </div>
                 </div>
                 
@@ -2783,6 +2784,60 @@
         // Aggregate-only legacy data: months <= LEGACY_BOUNDARY (no granular transactionDate).
         // From the next month onwards: data is granular and mostly carries transactionDate.
         const LEGACY_BOUNDARY = '2025-09';
+
+        // ===== Keyboard shortcut: shift the active tab's month picker =====
+        // Map: each tab id → its month selectors + the refresh callback name on window
+        const MONTH_PICKER_TABS = {
+            'add':      { year: 'add-year',      month: 'add-month-num',      refresh: 'loadMonthTransactions' },
+            'overview': { year: 'overview-year', month: 'overview-month-num', refresh: 'updateOverview' },
+            'accrual':  { year: 'accrual-year',  month: 'accrual-month-num',  refresh: 'renderAccrualMonth' },
+            'migrate':  { year: 'migrate-year',  month: 'migrate-month-num',  refresh: null },
+        };
+
+        function getActiveTabId() {
+            for (const t of document.querySelectorAll('.tab-content')) {
+                if (!t.classList.contains('hidden')) return t.id.replace(/^tab-/, '');
+            }
+            return null;
+        }
+
+        function shiftActiveMonthPicker(delta) {
+            const tabId = getActiveTabId();
+            const cfg = MONTH_PICKER_TABS[tabId];
+            if (!cfg) return false;
+            const yEl = document.getElementById(cfg.year);
+            const mEl = document.getElementById(cfg.month);
+            if (!yEl || !mEl || !yEl.value || !mEl.value) return false;
+            let y = parseInt(yEl.value);
+            let m = parseInt(mEl.value) + delta;
+            while (m > 12) { m -= 12; y += 1; }
+            while (m < 1)  { m += 12; y -= 1; }
+            // Ensure the target year exists as an option
+            if (!Array.from(yEl.options).some(o => parseInt(o.value) === y)) {
+                const opt = document.createElement('option');
+                opt.value = y; opt.textContent = y;
+                yEl.appendChild(opt);
+            }
+            yEl.value = String(y);
+            mEl.value = String(m).padStart(2, '0');
+            if (cfg.refresh && typeof window[cfg.refresh] === 'function') {
+                window[cfg.refresh]();
+            }
+            // For tabs whose handlers are bound to the select's `change` event, fire it too.
+            yEl.dispatchEvent(new Event('change'));
+            mEl.dispatchEvent(new Event('change'));
+            return true;
+        }
+
+        document.addEventListener('keydown', (e) => {
+            // Ctrl + arrow (no other modifiers). In RTL, right = previous, left = next.
+            if (!e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+            if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+            const tag = e.target && e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target && e.target.isContentEditable)) return;
+            const delta = e.key === 'ArrowRight' ? -1 : +1;
+            if (shiftActiveMonthPicker(delta)) e.preventDefault();
+        });
 
         function monthMinusOne(monthStr) {
             if (!monthStr || !/^\d{4}-\d{2}$/.test(monthStr)) return monthStr;
