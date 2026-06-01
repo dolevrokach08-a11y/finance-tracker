@@ -83,6 +83,8 @@ a { color: var(--accent); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<!-- Tesseract.js — OCR fallback for payslips whose totals (esp. net) aren't in the PDF text layer (e.g. Michpal). Loaded lazily on first scan. -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
@@ -642,9 +644,12 @@ function parsePayslipPDF(text) {
     if (v) result.deductions[d.key] = { label: d.label, amount: v };
   }
 
+  // NOTE: net is taken ONLY from an explicit net label in the text (above) or
+  // from OCR. We deliberately do NOT derive net = gross − Σ(deductions): on the
+  // scrambled RTL text of payslips like Michpal the deduction regexes grab
+  // unrelated numbers (e.g. a house number from the address), producing a
+  // confident-but-wrong net. A missing net here triggers the OCR fallback.
   if (result.gross && result.net) result.totalDeductions = Math.round((result.gross - result.net) * 100) / 100;
-  if (result.gross && !result.net) { const td = Object.values(result.deductions).reduce((s,d)=>s+d.amount,0); if (td > 0) result.net = Math.round((result.gross-td)*100)/100; }
-  if (result.net && !result.gross) { const td = Object.values(result.deductions).reduce((s,d)=>s+d.amount,0); if (td > 0) result.gross = Math.round((result.net+td)*100)/100; }
 
   return result;
 }
@@ -768,6 +773,80 @@ async function extractPDFText(arrayBuffer) {
   }
   // Return both orderings — try LTR first, if parsing fails caller can try RTL
   return { ltrText, rtlText, hasText: ltrText.replace(/\s/g, '').length > 20 };
+}
+
+// ==================== OCR FALLBACK (Tesseract.js) ====================
+// pdf.js's text layer drops the highlighted summary boxes on some payslips
+// (Michpal's "שכר נטו", "סה"כ ניכויי חובה", and others). Rendering the page to
+// a canvas and OCR'ing it recovers them because OCR reads the pixels, and it
+// preserves visual adjacency so "שכר נטו 5,411" lands together.
+
+let _ocrWorker = null;
+async function getOCRWorker(onStatus) {
+  if (_ocrWorker) return _ocrWorker;
+  if (typeof Tesseract === 'undefined') throw new Error('ספריית OCR לא נטענה');
+  if (onStatus) onStatus('טוען מנוע OCR (פעם ראשונה)...');
+  _ocrWorker = await Tesseract.createWorker('heb+eng');
+  return _ocrWorker;
+}
+
+// Render every PDF page to canvas and OCR it. Returns the concatenated text.
+async function ocrPDF(arrayBuffer, onProgress) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
+  const worker = await getOCRWorker(onProgress ? (s) => onProgress(0, 0, s) : null);
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    if (onProgress) onProgress(i, pdf.numPages);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const { data } = await worker.recognize(canvas);
+    text += data.text + '\n';
+    canvas.width = canvas.height = 0; // free memory
+  }
+  return text;
+}
+
+// OCR a single image file (jpg/png/…). Returns the recognized text.
+async function ocrImage(file, onProgress) {
+  const worker = await getOCRWorker(onProgress ? (s) => onProgress(0, 0, s) : null);
+  const url = URL.createObjectURL(file);
+  try {
+    const { data } = await worker.recognize(url);
+    return data.text;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Pull the net-pay figure out of (OCR'd) text. Net is labelled — never inferred
+// from deductions. Validated against the gross when we have it (net is always
+// a fraction of gross), which also discards OCR noise like a missing decimal.
+function extractNet(text, grossHint) {
+  const N = '([0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+\\.[0-9]{1,2}|[0-9]{3,6})';
+  const labels = [
+    `נטו\\s*לתשלום\\s*[:₪]*\\s*${N}`,
+    `שכר\\s*נטו\\s*[:₪]*\\s*${N}`,
+    `נטו\\s*להעברה\\s*[:₪]*\\s*${N}`,
+    `סכום\\s*לתשלום\\s*[:₪]*\\s*${N}`,
+    `העברה\\s*ל?בנק\\S*\\s*[:₪]*\\s*${N}`,
+    `${N}\\s*נטו\\s*לתשלום`,
+    `${N}\\s*שכר\\s*נטו`,
+  ];
+  const ok = v => v >= 800 && v <= 200000 && (!grossHint || (v <= grossHint * 1.03 && v >= grossHint * 0.30));
+  for (const lab of labels) {
+    const re = new RegExp(lab, 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      const v = parseFloat(m[1].replace(/,/g, ''));
+      if (ok(v)) return v;
+    }
+  }
+  return null;
 }
 
 // ==================== CPI TAX SIMULATOR HELPERS ====================
@@ -1376,8 +1455,27 @@ function App() {
     }
 
     if (isImage) {
-      // Show manual entry form for images since we can't OCR client-side
-      setPendingPayslip({ _manualEntry: true, fileName: file.name });
+      // Image payslip — OCR it directly.
+      try {
+        const ocrText = await ocrImage(file, (i, t, s) => setPayslipStatus(s || 'סורק תמונה (OCR)... ⏳'));
+        console.log('OCR text (image):', ocrText);
+        const parsed = parsePayslipPDF(ocrText);            // month / gross / deductions
+        const ocrNet = extractNet(ocrText, parsed.gross);   // validated net
+        if (ocrNet) { parsed.net = ocrNet; }
+        if (parsed.gross && parsed.net) parsed.totalDeductions = Math.round((parsed.gross - parsed.net) * 100) / 100;
+        parsed.deductions = {}; // per-line breakdown from OCR isn't reliable enough to show
+        if (parsed.net || parsed.gross) {
+          parsed.earner = payslipEarner;
+          parsed.fileName = file.name;
+          parsed._netSource = 'ocr';
+          setPendingPayslip(parsed);
+        } else {
+          setPendingPayslip({ _manualEntry: true, fileName: file.name, _parseHint: true });
+        }
+      } catch (err) {
+        console.warn('Image OCR failed:', err);
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _scanned: true });
+      }
       setPayslipStatus('');
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
@@ -1415,6 +1513,30 @@ function App() {
       if (!parsed.net && !parsed.gross) {
         parsed = parsePayslipPDF(extracted.rtlText);
       }
+
+      // The net figure is frequently missing from the PDF text layer (Michpal &
+      // co. render it in a box pdf.js can't read). When it's absent — or present
+      // but implausible vs the gross — fall back to OCR'ing the rendered page.
+      const netReliable = parsed.net && (!parsed.gross || (parsed.net <= parsed.gross * 1.03 && parsed.net >= parsed.gross * 0.30));
+      if (!netReliable) {
+        try {
+          const ab2 = await file.arrayBuffer(); // pdf.js detaches the first buffer
+          const ocrText = await ocrPDF(ab2, (i, t, s) => setPayslipStatus(s || `סורק תמונה (OCR)... עמוד ${i}/${t}`));
+          console.log('OCR text:', ocrText);
+          const ocrParsed = parsePayslipPDF(ocrText);
+          if (!parsed.gross && ocrParsed.gross) parsed.gross = ocrParsed.gross;
+          if (!parsed.month && ocrParsed.month) { parsed.month = ocrParsed.month; parsed.year = ocrParsed.year; }
+          const ocrNet = extractNet(ocrText, parsed.gross);
+          if (ocrNet) {
+            parsed.net = ocrNet;
+            parsed._netSource = 'ocr';
+            parsed.deductions = {}; // text-layer per-line breakdown is unreliable on these
+          }
+        } catch (ocrErr) {
+          console.warn('OCR fallback failed:', ocrErr);
+        }
+      }
+      if (parsed.gross && parsed.net) parsed.totalDeductions = Math.round((parsed.gross - parsed.net) * 100) / 100;
 
       if (!parsed.net && !parsed.gross) {
         // Couldn't auto-parse — offer manual entry
@@ -1861,10 +1983,30 @@ function App() {
                         />
                         {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
                       </div>
-                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.gross ? `₪${pendingPayslip.gross.toLocaleString()}` : '?'}</strong></div>
-                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו: </span><strong style={{ color: "#5ab85a" }}>{pendingPayslip.net ? `₪${pendingPayslip.net.toLocaleString()}` : '?'}</strong></div>
-                      <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ניכויים: </span><strong style={{ color: "#e07070" }}>{pendingPayslip.totalDeductions ? `₪${pendingPayslip.totalDeductions.toLocaleString()}` : '?'}</strong></div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
+                        <input type="number" placeholder="?" value={pendingPayslip.gross || ''}
+                          onChange={e => setPendingPayslip(p => ({ ...p, gross: e.target.value ? parseFloat(e.target.value) : null, totalDeductions: null }))}
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#5ab85a", fontWeight: 700, borderRadius: 4, padding: "3px 6px", fontSize: 11, fontFamily: "inherit", width: "100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>
+                          נטו (₪){pendingPayslip._netSource === 'ocr' && <span title="נקרא בסריקת OCR — מומלץ לאמת" style={{ color: "#c0a0d8", marginRight: 3 }}>🔍</span>}
+                        </label>
+                        <input type="number" placeholder="?" value={pendingPayslip.net || ''}
+                          onChange={e => setPendingPayslip(p => ({ ...p, net: e.target.value ? parseFloat(e.target.value) : null, _netSource: 'manual', totalDeductions: null }))}
+                          style={{ background: "rgba(0,0,0,0.3)", border: `1px solid ${pendingPayslip._netSource === 'ocr' ? "rgba(192,160,216,0.5)" : "rgba(255,255,255,0.15)"}`, color: "#5ab85a", fontWeight: 700, borderRadius: 4, padding: "3px 6px", fontSize: 11, fontFamily: "inherit", width: "100%" }}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>ניכויים: </span>
+                        <strong style={{ color: "#e07070" }}>{(pendingPayslip.gross && pendingPayslip.net) ? `₪${(Math.round((pendingPayslip.gross - pendingPayslip.net) * 100) / 100).toLocaleString()}` : '?'}</strong>
+                      </div>
                     </div>
+                    {pendingPayslip._netSource === 'ocr' && (
+                      <div style={{ fontSize: 10, color: "#c0a0d8", marginTop: 4 }}>🔍 הנטו נקרא בסריקת OCR (לא היה זמין בשכבת הטקסט) — כדאי לאמת מול התלוש.</div>
+                    )}
                     {Object.keys(pendingPayslip.deductions || {}).length > 0 && (
                       <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 4 }}>
                         {Object.values(pendingPayslip.deductions).map(d => `${d.label}: ₪${d.amount.toLocaleString()}`).join(' | ')}
