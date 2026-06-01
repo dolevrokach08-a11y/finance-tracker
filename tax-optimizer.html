@@ -381,10 +381,45 @@ a { color: var(--accent); }
 <script type="text/babel">
 const { useState, useMemo, useEffect, useCallback } = React;
 
-const CREDIT_POINT_VALUE_2026 = 2904;
 const CG_TAX_RATE = 0.25;
 const SETTLEMENT_RATE = 0.12;
 const SETTLEMENT_CEILING = 213240;
+
+// ===== Per-year tax parameters (מדרגות מס + שווי נקודת זיכוי לפי שנה) =====
+// Brackets = annual ceilings (₪) with marginal rates. The final ₪→50% step
+// encodes the 3% "מס יסף" surtax on income above the top threshold (47%+3%).
+// 2024–2027 are frozen at 2024 levels (חוק ההתייעלות הכלכלית — הקפאת עדכוני
+// מס 2025–2027). Credit-point value = monthly value × 12.
+// Sources: רשות המסים / לשכת רו"ח / Globes / PwC. Update when the freeze ends.
+const TAX_RATES = [0.10, 0.14, 0.20, 0.31, 0.35, 0.47, 0.50];
+const mkBrackets = (ceilings) =>
+  ceilings.map((limit, i) => ({ limit, rate: TAX_RATES[i] })).concat([{ limit: Infinity, rate: TAX_RATES[6] }]);
+const FROZEN_BRACKETS = [84120, 120720, 193800, 269280, 560280, 721560]; // 2024–2027
+const TAX_PARAMS = {
+  2022: { creditPoint: 2676, brackets: mkBrackets([77400, 110880, 178080, 247440, 514920, 660000]) }, // נק' זיכוי 223₪/חודש
+  2023: { creditPoint: 2820, brackets: mkBrackets([81480, 116760, 187440, 260520, 542160, 698280]) }, // 235₪/חודש
+  2024: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },                                  // 242₪/חודש
+  2025: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+  2026: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+  2027: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+};
+const TAX_YEARS = Object.keys(TAX_PARAMS).map(Number).sort((a, b) => a - b);
+const LATEST_TAX_YEAR = TAX_YEARS[TAX_YEARS.length - 1];
+const CURRENT_YEAR = new Date().getFullYear();
+// True once the calendar year passes the last year we have data for — a reminder
+// to add the new brackets to TAX_PARAMS (no official feed exists to auto-fetch them).
+const TAX_PARAMS_STALE = CURRENT_YEAR > LATEST_TAX_YEAR;
+const clampTaxYear = (y) => Math.min(Math.max(y, TAX_YEARS[0]), TAX_YEARS[TAX_YEARS.length - 1]);
+// Resolve params for a (possibly out-of-range or empty) year. Falls back to the
+// nearest defined year (or the current year when none given) and flags `approx`.
+function getTaxParams(year) {
+  const y = parseInt(year, 10);
+  if (TAX_PARAMS[y]) return { ...TAX_PARAMS[y], year: y, approx: false };
+  const fallback = clampTaxYear(Number.isFinite(y) && y > 0 ? y : CURRENT_YEAR);
+  return { ...TAX_PARAMS[fallback], year: fallback, approx: Number.isFinite(y) && y > 0 && y !== fallback };
+}
+// Default bracket set (current year) — used by the waterfall when no prop given.
+const TAX_BRACKETS = getTaxParams(CURRENT_YEAR).brackets;
 
 function fatherChildPoints(age) {
   if (age < 0) return 0;
@@ -406,19 +441,9 @@ function motherChildPoints(age) {
   return 0;
 }
 
-const TAX_BRACKETS = [
-  { limit: 84120, rate: 0.10 },
-  { limit: 120720, rate: 0.14 },
-  { limit: 193800, rate: 0.20 },
-  { limit: 269280, rate: 0.31 },
-  { limit: 560280, rate: 0.35 },
-  { limit: 698280, rate: 0.47 },
-  { limit: Infinity, rate: 0.50 },
-];
-
-function calcTax(annual) {
+function calcTax(annual, brackets = TAX_BRACKETS) {
   let tax = 0, prev = 0;
-  for (const b of TAX_BRACKETS) {
+  for (const b of brackets) {
     if (annual <= prev) break;
     const t = Math.min(annual, b.limit) - prev;
     if (t > 0) tax += t * b.rate;
@@ -1211,8 +1236,7 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
 
 // ====================================================================
 
-function TaxBracketWaterfall({ fatherAnnual, motherAnnual }) {
-  const brackets = TAX_BRACKETS;
+function TaxBracketWaterfall({ fatherAnnual, motherAnnual, brackets = TAX_BRACKETS }) {
   const colors = ['#22c55e','#84cc16','#eab308','#f97316','#ef4444','#dc2626','#991b1b'];
   const labels = ['10%','14%','20%','31%','35%','47%','50%'];
   const fmNum = v => v.toLocaleString('he-IL');
@@ -1693,6 +1717,9 @@ function App() {
   const removeChild = (id) => setChildren(prev => prev.filter(c => c.id !== id));
   const updateChildAge = (id, age) => setChildren(prev => prev.map(c => c.id === id ? { ...c, age } : c));
 
+  // Tax law follows the selected income year (defaults to the current year).
+  const taxParams = useMemo(() => getTaxParams(selectedYear), [selectedYear]);
+
   const r = useMemo(() => {
     const ages = children.map(c => c.age);
     const nK = ages.length, nT = ages.filter(a => a >= 0 && a < 3).length;
@@ -1705,13 +1732,13 @@ function App() {
       // הפרדה לפי החוק:
       // • נק' תושב/אישה (בסיס) — מקזזות כל הכנסה חייבת, כולל מס רווחי הון (סע' 34, 36א)
       // • נק' ילדים (סע' 40) + זיכוי יישוב מזכה (סע' 11) — מקזזות רק מס על הכנסה מיגיעה אישית
-      const baseCr = Math.round(baseP * CREDIT_POINT_VALUE_2026);     // CG-eligible
-      const childCr = Math.round(childP * CREDIT_POINT_VALUE_2026);   // work-only
+      const baseCr = Math.round(baseP * taxParams.creditPoint);      // CG-eligible
+      const childCr = Math.round(childP * taxParams.creditPoint);    // work-only
       const sCredit = stl ? Math.round(Math.min(annual, SETTLEMENT_CEILING) * SETTLEMENT_RATE) : 0; // work-only
       const workOnlyCr = childCr + sCredit;
       const pVal = baseCr + childCr;        // נשמר לתאימות תצוגה
       const totalCr = pVal + sCredit;       // נשמר לתאימות תצוגה
-      const tax = calcTax(annual);
+      const tax = calcTax(annual, taxParams.brackets);
       // קיזוז אופטימלי: קודם מנצלים את זיכויי יגיעה-אישית-בלבד מול מס העבודה
       // (אין להם שימוש אחר), ואז זיכויי הבסיס מכסים את היתרה. הנותר זמין לרווחי הון.
       const workTaxAfterWorkOnly = Math.max(0, tax - workOnlyCr);
@@ -1733,7 +1760,7 @@ function App() {
     const hOpt = jnt ? fOpt + mOpt : fOpt;
 
     return { f, m, fShare, mShare, fCGTax, mCGTax, fSaved, mSaved, fOpt, mOpt, hUnused, hGrant, hOpt, nK, nT, ages };
-  }, [fM, mM, children, stl, jnt, cg]);
+  }, [fM, mM, children, stl, jnt, cg, taxParams]);
 
   const fm = n => n.toLocaleString("he-IL");
 
@@ -1746,6 +1773,13 @@ function App() {
         </h1>
         <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
       </div>
+
+      {/* Tax-params staleness reminder — no official feed exists, so brackets are added manually */}
+      {TAX_PARAMS_STALE && (
+        <div style={{ margin: "12px 14px", padding: "12px 16px", background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.3)", borderRadius: 12, fontSize: 12, color: "#e07070", lineHeight: 1.5 }}>
+          <span style={{ fontSize: 16 }}>⚠️</span> מדרגות המס בטבלה מעודכנות עד שנת {LATEST_TAX_YEAR}. חישובים לשנת {CURRENT_YEAR} משתמשים בנתוני {LATEST_TAX_YEAR} — כדאי לעדכן את <code>TAX_PARAMS</code> מול רשות המסים.
+        </div>
+      )}
 
       {/* Data Integration Banner */}
       {taxData.loaded && taxData.availableYears.length > 0 && (
@@ -2154,11 +2188,17 @@ function App() {
         </div>
 
         {/* TAX BRACKET WATERFALL */}
-        <TaxBracketWaterfall fatherAnnual={fM * 12} motherAnnual={mM * 12} />
+        <TaxBracketWaterfall fatherAnnual={fM * 12} motherAnnual={mM * 12} brackets={taxParams.brackets} />
 
         {/* CREDIT POINTS */}
         <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 6px" }}>📊 נקודות זיכוי</h2>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, margin: "0 0 6px" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: 0 }}>📊 נקודות זיכוי</h2>
+            <span title={`מדרגות מס ושווי נק' זיכוי (${taxParams.creditPoint.toLocaleString()} ₪) של שנת ${taxParams.year}`}
+              style={{ fontSize: 11, fontWeight: 600, background: "rgba(122,184,224,0.12)", border: "1px solid rgba(122,184,224,0.3)", color: "#7ab8e0", padding: "3px 10px", borderRadius: 6 }}>
+              🗓️ דיני מס {taxParams.year}{taxParams.approx ? " (הקרובה ביותר)" : ""}
+            </span>
+          </div>
           <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", marginBottom: 12, lineHeight: 1.5 }}>
             לפי הפקודה (סע' 11, 40) — נקודות ילדים וזיכוי יישוב מזכה מקזזים <strong>רק מס על הכנסה מיגיעה אישית</strong>. רק נק' תושב/אישה מקזזות גם רווחי הון.
           </div>
