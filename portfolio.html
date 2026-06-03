@@ -5342,7 +5342,47 @@ function calculateTWRv3(startDate = null) {
         async function autoUpdateExchangeRates() {
             // ניסיון עדכון אוטומטי עם מספר APIs (אופציונלי - לא כשלון אם נכשל)
             console.log('🔄 Trying to auto-update exchange rates...');
-            
+
+            // ניסיון 0 (מקור ראשי): Yahoo Finance spot FX דרך ה-Cloudflare Worker.
+            // זה אותו מקור חי שהבר העליון (ticker.js) משתמש בו — שער spot תוך-יומי,
+            // בניגוד ל-Frankfurter/ECB שמתעדכן פעם ביום וקופא בסופ"ש. ככה הכפתור
+            // והבר תמיד עקביים. אם Yahoo נופל — נופלים ל-Frankfurter למטה.
+            try {
+                const WORKER_URL = 'https://finance-proxy.dolevrokach08.workers.dev/?url=';
+                const fetchYahooFx = async (symbol) => {
+                    const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+                    const resp = await fetch(WORKER_URL + encodeURIComponent(yahooUrl));
+                    if (!resp.ok) return null;
+                    const data = await resp.json();
+                    const price = data?.chart?.result?.[0]?.meta?.regularMarketPrice;
+                    return (price && price > 0) ? price : null;
+                };
+
+                const [usd, eur] = await Promise.all([
+                    fetchYahooFx('USDILS=X'),
+                    fetchYahooFx('EURILS=X')
+                ]);
+
+                // USDILS=X / EURILS=X מחזירים ישירות שקלים ל-1 יחידה — אין צורך בגזירה עקיפה.
+                if (usd) {
+                    portfolio.rates.USD = usd;
+                    console.log(`💵 USD to ILS (Yahoo spot): ${usd}`);
+                    if (eur) {
+                        portfolio.rates.EUR = eur;
+                        console.log(`💶 EUR to ILS (Yahoo spot): ${eur}`);
+                    }
+                    document.getElementById('rate-usd').value = portfolio.rates.USD.toFixed(4);
+                    document.getElementById('rate-eur').value = portfolio.rates.EUR.toFixed(4);
+                    saveData();
+                    console.log('✅ Exchange rates updated via Yahoo Finance (live spot)');
+                    console.log(`   Final rates: $1 = ₪${portfolio.rates.USD.toFixed(4)}, €1 = ₪${portfolio.rates.EUR.toFixed(4)}`);
+                    return true;
+                }
+                console.log('⚠️ Yahoo spot FX returned no usable price — falling back to Frankfurter');
+            } catch (error) {
+                console.log('⚠️ Yahoo spot FX failed:', error.message);
+            }
+
             // ניסיון 1: Frankfurter API
             try {
                 const response = await fetch('https://api.frankfurter.app/latest?from=USD&to=ILS,EUR');
