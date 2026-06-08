@@ -812,7 +812,7 @@
     </div>
 
     <script type="module">
-        import { auth, signOut, onAuthStateChanged } from './firebase-config.js';
+        import { auth, signOut, onAuthStateChanged, db, doc, getDoc } from './firebase-config.js';
         import { isDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
         import { SyncBus } from './shared/sync-bus.js';
 
@@ -1185,6 +1185,55 @@
             try { return JSON.parse(raw); } catch { return null; }
         }
 
+        // Pull the freshest data straight from Firebase on load, then re-render.
+        // The home page otherwise reads only localStorage, so it showed stale
+        // numbers until a sub-page (portfolio/finance/mortgage) was opened and
+        // refreshed the cache. Each dataset keeps a *_sync_meta record
+        // ({hasUnsyncedChanges, localLastModified, cloudLastModified}); we mirror
+        // the sub-pages' guards: never overwrite local edits that haven't reached
+        // the cloud yet, and skip the write when the local cache is already current.
+        async function syncFromFirebase(user) {
+            if (!user || !db) return;
+            const datasets = [
+                { coll: 'portfolio', localKey: 'portfolio',          metaKey: 'portfolio_sync_meta' },
+                { coll: 'finance',   localKey: 'financeTrackerData', metaKey: 'financeTrackerData_meta' },
+                { coll: 'mortgage',  localKey: 'mortgageData',       metaKey: 'mortgage_sync_meta' },
+            ];
+            let changed = false;
+            await Promise.all(datasets.map(async (ds) => {
+                try {
+                    const snap = await getDoc(doc(db, 'users', user.uid, ds.coll, 'data'));
+                    if (!snap.exists()) return;
+                    const cloud = snap.data();
+                    const cloudMod = cloud.lastModified || null; // ISO string
+                    const meta = safeParse(localStorage.getItem(ds.metaKey));
+
+                    // Don't clobber local changes that haven't synced to the cloud.
+                    if (meta && meta.hasUnsyncedChanges) return;
+                    // Local cache already at least as new as the cloud → nothing to do.
+                    if (cloudMod && meta && meta.localLastModified && cloudMod <= meta.localLastModified) return;
+                    // No reliable timestamp → fall back to content comparison.
+                    if (!cloudMod && localStorage.getItem(ds.localKey) === JSON.stringify(cloud)) return;
+
+                    localStorage.setItem(ds.localKey, JSON.stringify(cloud));
+                    if (cloudMod) {
+                        localStorage.setItem(ds.metaKey, JSON.stringify({
+                            localLastModified: cloudMod,
+                            cloudLastModified: cloudMod,
+                            hasUnsyncedChanges: false
+                        }));
+                    }
+                    changed = true;
+                } catch (e) {
+                    console.warn('[index] Firebase sync failed for', ds.coll, e);
+                }
+            }));
+            if (changed) {
+                console.log('[index] refreshed from Firebase — re-rendering dashboard');
+                loadDashboard();
+            }
+        }
+
         // Phase 4F: Auto-sync — reload dashboard when any other page saves data
         SyncBus.subscribe((manifest) => {
             console.log('[index] SyncBus update from', manifest.source, '— refreshing dashboard');
@@ -1206,7 +1255,8 @@
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     console.log('User is signed in:', user.email);
-                    showUI(user);
+                    showUI(user);                 // instant render from local cache
+                    syncFromFirebase(user);       // then refresh from cloud + re-render
                 } else {
                     console.log('User is not signed in, redirecting to login...');
                     window.location.href = 'login.html';
