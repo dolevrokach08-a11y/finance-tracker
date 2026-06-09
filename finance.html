@@ -1171,6 +1171,7 @@
                                         <th style="padding: 8px; text-align: right; width: 100px;">סכום</th>
                                         <th style="padding: 8px; text-align: right; width: 150px;">קטגוריה</th>
                                         <th style="padding: 8px; text-align: right; width: 140px;">תאריך עסקה</th>
+                                        <th style="padding: 8px; text-align: center; width: 130px;" title="הכנסה: שייך לחודש הקבלה • הוצאה: בדיעבד לחודש קודם">שיוך צבירה</th>
                                         <th style="padding: 8px; text-align: right; width: 90px;">סטטוס</th>
                                     </tr>
                                 </thead>
@@ -4099,12 +4100,17 @@
                     <td style="padding: 4px;"><input type="number" step="0.01" data-i="${i}" data-f="amt" value="${c.amt}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
                     <td style="padding: 4px;"><select data-i="${i}" data-f="cat" onchange="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;">${catOpts}</select></td>
                     <td style="padding: 4px;"><input type="date" data-i="${i}" data-f="transactionDate" value="${c.transactionDate || ''}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
+                    <td style="padding: 4px; text-align: center;">${
+                        c.type === 'income'
+                        ? `<label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:11px;" title="ההכנסה שייכת לחודש שבו התקבלה (ברירת מחדל: חודש קודם)"><input type="checkbox" data-i="${i}" data-f="assignToCurrentMonth" ${c.assignToCurrentMonth ? 'checked' : ''} onchange="ipvFieldChange(event)"><span>חודש הקבלה</span></label>`
+                        : `<label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:11px;" title="ההוצאה בדיעבד — שייכת לחודש הקודם (פעוטון, חשמל וכו')"><input type="checkbox" data-i="${i}" data-f="assignToPreviousMonth" ${c.assignToPreviousMonth ? 'checked' : ''} onchange="ipvFieldChange(event)"><span>בדיעבד</span></label>`
+                    }</td>
                     <td style="padding: 4px;">${dupBadge}</td>
                 </tr>`;
             });
             tbody.innerHTML = rows.length
                 ? rows.join('')
-                : '<tr><td colspan="7" style="padding: 20px; text-align: center; color: var(--text-muted);">אין שורות שתואמות לפילטר</td></tr>';
+                : '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-muted);">אין שורות שתואמות לפילטר</td></tr>';
         }
 
         function ipvFieldChange(event) {
@@ -4127,6 +4133,8 @@
                 c.amt = parseFloat(el.value) || 0;
             } else if (f === 'transactionDate') {
                 c.transactionDate = el.value || null;
+            } else if (f === 'assignToCurrentMonth' || f === 'assignToPreviousMonth') {
+                c[f] = el.checked;
             } else {
                 c[f] = el.value;
             }
@@ -4169,6 +4177,8 @@
                 if (c.transactionDate) tx.transactionDate = c.transactionDate;
                 if (c.earner) tx.earner = c.earner;
                 if (c.titheExempt) tx.titheExempt = true;
+                if (c.type === 'income' && c.assignToCurrentMonth) tx.assignToCurrentMonth = true;
+                if (c.type === 'expense' && c.assignToPreviousMonth) tx.assignToPreviousMonth = true;
                 return tx;
             });
 
