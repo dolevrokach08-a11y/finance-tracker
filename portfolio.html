@@ -14483,22 +14483,64 @@ ${msg}`, 'warning');
                     if (firebaseData && Object.keys(firebaseData).length > 0) {
                         console.log('📊 Using index history from Firebase');
 
+                        // Coverage guard: Firebase history must reach back to the start of
+                        // the measured window. getPriceForDate maps out-of-range dates to
+                        // the closest available price, so a too-short history silently
+                        // flattens the early periods to 0% instead of failing loudly.
+                        const firstSnapTime = Math.min(...portfolio.snapshots.map(s => new Date(s.date).getTime()));
+                        const twrStartTime = startDate ? new Date(startDate).getTime() : firstSnapTime;
+                        const COVERAGE_TOLERANCE_MS = 7 * 24 * 60 * 60 * 1000;
+                        const historyCovers = (fbEntry, sinceTime) => {
+                            const dates = fbEntry?.history ? Object.keys(fbEntry.history).sort() : [];
+                            return dates.length > 0 && new Date(dates[0]).getTime() <= sinceTime + COVERAGE_TOLERANCE_MS;
+                        };
+
                         for (const idx of indexConfig) {
                             const fbKey = idx.firebaseKey || idx.key;
-                            if (firebaseData[fbKey]) {
-                                const result = calculateIndexTWRFromHistory(firebaseData[fbKey], portfolio.snapshots, startDate);
+                            const fbEntry = firebaseData[fbKey];
+                            const isILS = idx.key === 'TA125';
+
+                            // TWR window starts at the selected milestone; MWR always
+                            // simulates from the very first deposit.
+                            const coversTWR = historyCovers(fbEntry, twrStartTime);
+                            const coversMWR = historyCovers(fbEntry, firstSnapTime);
+
+                            if (fbEntry && coversTWR) {
+                                const result = calculateIndexTWRFromHistory(fbEntry, portfolio.snapshots, startDate);
                                 if (result !== null) {
                                     indexResults[idx.key] = result;
                                     useTWR = true;
                                     console.log(`✅ ${idx.key} TWR (Firebase): ${result.toFixed(2)}%`);
                                 }
+                            } else {
+                                console.log(`⚠️ ${idx.key}: Firebase history too short for TWR window, falling back to worker`);
+                                try {
+                                    const result = await fetchWithRetry(() => calculateIndexTWR(idx.symbol || idx.key, startDate), 2, 2000);
+                                    if (result !== null) {
+                                        indexResults[idx.key] = result;
+                                        useTWR = true;
+                                        console.log(`✅ ${idx.key} TWR (worker fallback): ${result.toFixed(2)}%`);
+                                    }
+                                } catch (e) {
+                                    console.log(`❌ ${idx.key} TWR worker fallback failed:`, e.message);
+                                }
+                            }
 
-                                // MWR — only TA125 is treated as ILS-denominated; others (ACWI/SPY/QQQ) are USD.
-                                const isILS = idx.key === 'TA125';
-                                const mwr = calculateIndexMWRFromHistory(firebaseData[fbKey], portfolio.snapshots, isILS);
+                            if (fbEntry && coversMWR) {
+                                const mwr = calculateIndexMWRFromHistory(fbEntry, portfolio.snapshots, isILS);
                                 if (mwr !== null && isFinite(mwr)) {
                                     indexMWRResults[idx.key] = mwr;
                                     console.log(`💰 ${idx.key} MWR (Firebase): ${mwr.toFixed(2)}%/yr`);
+                                }
+                            } else {
+                                try {
+                                    const mwr = await calculateIndexMWR(idx.symbol || idx.key, isILS);
+                                    if (mwr !== null && isFinite(mwr)) {
+                                        indexMWRResults[idx.key] = mwr;
+                                        console.log(`💰 ${idx.key} MWR (worker fallback): ${mwr.toFixed(2)}%/yr`);
+                                    }
+                                } catch (e) {
+                                    console.log(`❌ ${idx.key} MWR worker fallback failed:`, e.message);
                                 }
                             }
                         }

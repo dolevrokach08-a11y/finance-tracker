@@ -116,8 +116,10 @@ async function fetchPriceWithRetry(symbol, retries = 2) {
   return null;
 }
 
-// שליפת היסטוריית מחירים של אינדקס
-async function fetchIndexHistory(symbol, days = 365) {
+// שליפת היסטוריית מחירים של אינדקס.
+// 5 שנים — חייב לכסות את ה-snapshot הראשון בתיק, אחרת חישובי ה-TWR/MWR
+// באתר ימפו בשקט תאריכים ישנים למחיר הזמין הראשון והתקופה תתאפס.
+async function fetchIndexHistory(symbol, days = 1825) {
   try {
     const endDate = new Date();
     const startDate = new Date();
