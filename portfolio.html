@@ -14460,10 +14460,14 @@ ${msg}`, 'warning');
             let useTWR = false;
 
             // הגדרת אינדקסים (עם fallback ממוצע היסטורי למקרה שהשאיבה נכשלת)
+            // ACWI/S&P/NASDAQ הוחלפו לקרנות UCITS איריות צוברות (LSE, USD) — מחיר
+            // צוברת = תשואה כוללת אחרי מס במקור ו-TER, ההשוואה ההוגנת לקרנות
+            // הצוברות שבתיק. SPY/QQQ/ACWI האמריקאיות מחלקות דיבידנד, ולכן גרף
+            // ה-close שלהן הנמיך את הבנצ'מרק ב~1.5-2% לשנה.
             const indexConfig = [
-                { key: 'ACWI', label: 'MSCI ACWI', color: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6', fallback: 10 },
-                { key: 'SPY', label: 'S&P 500', color: 'rgba(102, 126, 234, 0.8)', border: '#667eea', fallback: 12 },
-                { key: 'QQQ', label: 'NASDAQ', color: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b', fallback: 15 },
+                { key: 'ACWI', label: 'MSCI ACWI (צוברת)', color: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6', symbol: 'ISAC.L', firebaseKey: 'ISAC.L', fallback: 10 },
+                { key: 'SPY', label: 'S&P 500 (צוברת)', color: 'rgba(102, 126, 234, 0.8)', border: '#667eea', symbol: 'CSPX.L', firebaseKey: 'CSPX.L', fallback: 12 },
+                { key: 'QQQ', label: 'NASDAQ 100 (צוברת)', color: 'rgba(245, 158, 11, 0.8)', border: '#f59e0b', symbol: 'CNDX.L', firebaseKey: 'CNDX.L', fallback: 15 },
                 { key: 'TA125', label: 'ת"א 125', color: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6', symbol: '%5ETA125.TA', firebaseKey: '^TA125.TA', fallback: 8 }
             ];
 

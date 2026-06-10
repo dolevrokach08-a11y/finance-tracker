@@ -20,9 +20,11 @@ jobs:
           node-version: '20'
       
       - name: Install dependencies
+        # yahoo-finance2 removed — Yahoo 429s GitHub runner IPs, so the script
+        # now fetches chart data through the Cloudflare Worker with plain fetch.
         run: |
           cd scripts
-          npm install firebase-admin yahoo-finance2
+          npm install firebase-admin
       
       - name: Fetch and save prices
         env:

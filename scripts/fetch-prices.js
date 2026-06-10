@@ -4,7 +4,16 @@
  */
 
 import admin from 'firebase-admin';
-import yahooFinance from 'yahoo-finance2';
+
+// Yahoo requests are proxied through the Cloudflare Worker: Yahoo rate-limits
+// GitHub runner IPs (429), and yahoo-finance2 v2.14+/v3 broke the API anyway.
+const YAHOO_PROXY = 'https://finance-proxy.dolevrokach08.workers.dev/?url=';
+
+async function fetchYahooJson(yahooUrl) {
+  const response = await fetch(YAHOO_PROXY + encodeURIComponent(yahooUrl));
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  return await response.json();
+}
 
 // Initialize Firebase Admin
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
@@ -20,15 +29,18 @@ function getTodayDate() {
   return now.toISOString().split('T')[0];
 }
 
-// שליפת מחיר מ-Yahoo Finance
+// שליפת מחיר מ-Yahoo Finance (דרך ה-Worker; chart meta במקום quote — לא דורש crumb)
 async function fetchYahooPrice(symbol) {
   try {
-    const quote = await yahooFinance.quote(symbol);
-    if (quote && quote.regularMarketPrice) {
+    const data = await fetchYahooJson(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1d`
+    );
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (meta && meta.regularMarketPrice) {
       return {
-        price: quote.regularMarketPrice,
-        currency: quote.currency || 'USD',
-        name: quote.shortName || quote.longName || symbol
+        price: meta.regularMarketPrice,
+        currency: meta.currency || 'USD',
+        name: meta.shortName || meta.longName || symbol
       };
     }
   } catch (error) {
@@ -111,22 +123,26 @@ async function fetchIndexHistory(symbol, days = 365) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
     
-    const result = await yahooFinance.chart(symbol, {
-      period1: startDate,
-      period2: endDate,
-      interval: '1d'
-    });
-    
-    if (result && result.quotes && result.quotes.length > 0) {
+    const period1 = Math.floor(startDate.getTime() / 1000);
+    const period2 = Math.floor(endDate.getTime() / 1000);
+    const data = await fetchYahooJson(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`
+    );
+
+    const result = data?.chart?.result?.[0];
+    const timestamps = result?.timestamp;
+    const closes = result?.indicators?.quote?.[0]?.close;
+
+    if (timestamps && closes && timestamps.length > 0) {
       // המרה למבנה פשוט: { date: price }
       const history = {};
-      for (const quote of result.quotes) {
-        if (quote.close && quote.date) {
-          const dateStr = quote.date.toISOString().split('T')[0];
-          history[dateStr] = quote.close;
+      for (let i = 0; i < timestamps.length; i++) {
+        if (closes[i] != null) {
+          const dateStr = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
+          history[dateStr] = closes[i];
         }
       }
-      return history;
+      if (Object.keys(history).length > 0) return history;
     }
   } catch (error) {
     console.log(`⚠️ Failed to fetch history for ${symbol}: ${error.message}`);
@@ -143,13 +159,14 @@ async function main() {
   const prices = {};
   
   try {
-    // קריאת כל המשתמשים
-    const usersSnapshot = await db.collection('users').get();
-    
+    // קריאת כל המשתמשים. listDocuments ולא get() — מסמכי users הם "נתיבי
+    // פנטום" (קיימת רק תת-collection), ו-get() מחזיר עבורם רשימה ריקה.
+    const userRefs = await db.collection('users').listDocuments();
+
     const allSymbols = new Set();
-    
-    for (const userDoc of usersSnapshot.docs) {
-      const portfolioRef = db.collection('users').doc(userDoc.id).collection('portfolio').doc('data');
+
+    for (const userRef of userRefs) {
+      const portfolioRef = userRef.collection('portfolio').doc('data');
       const portfolioSnap = await portfolioRef.get();
       
       if (portfolioSnap.exists) {
@@ -228,10 +245,12 @@ async function main() {
     // === שליפת היסטוריית אינדקסים ===
     console.log('\n📈 Fetching index history...');
     
+    // Irish UCITS accumulating ETFs (LSE, USD) — price includes reinvested
+    // dividends, unlike the distributing US versions (SPY/QQQ/ACWI).
     const indices = [
-      { symbol: 'ACWI', name: 'MSCI ACWI' },
-      { symbol: 'SPY', name: 'S&P 500' },
-      { symbol: 'QQQ', name: 'NASDAQ' },
+      { symbol: 'ISAC.L', name: 'MSCI ACWI (Acc)' },
+      { symbol: 'CSPX.L', name: 'S&P 500 (Acc)' },
+      { symbol: 'CNDX.L', name: 'NASDAQ 100 (Acc)' },
       { symbol: '^TA125.TA', name: 'ת"א 125' }
     ];
     
