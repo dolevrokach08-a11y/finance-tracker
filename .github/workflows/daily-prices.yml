@@ -20,12 +20,11 @@ jobs:
           node-version: '20'
       
       - name: Install dependencies
-        # yahoo-finance2 pinned to 2.13 — the last version where the default
-        # export is a singleton with quote()/chart(). 2.14+ and v3 changed the
-        # API to a class and silently broke all fetches (action stayed green).
+        # yahoo-finance2 removed — Yahoo 429s GitHub runner IPs, so the script
+        # now fetches chart data through the Cloudflare Worker with plain fetch.
         run: |
           cd scripts
-          npm install firebase-admin yahoo-finance2@2.13
+          npm install firebase-admin
       
       - name: Fetch and save prices
         env:
