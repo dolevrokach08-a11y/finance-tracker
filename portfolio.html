@@ -21,11 +21,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Chart.js - Fixed CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js - pinned (unpinned = silent breakage on next major release) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
 
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Lucide Icons - pinned -->
+    <script src="https://unpkg.com/lucide@1.17.0"></script>
 
     <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
@@ -3614,6 +3614,12 @@
             }
         } catch(e) { console.warn('Demo module not loaded:', e); }
 
+        // YYYY-MM-DD in local time. toISOString() is UTC, so between midnight
+        // and 02:00/03:00 Israel time it returns yesterday's date.
+        function localToday() {
+            return new Date().toLocaleDateString('en-CA');
+        }
+
         // Initialize the shared sync widget. The forceSync callback is bound
         // later via window.SyncWidget.config.onForceSync once saveData is
         // available (it lives in a different script block).
@@ -4588,7 +4594,7 @@ function handleDepositWithSnapshot(amount, date, note) {
     console.log('🔵 handleDepositWithSnapshot called:', { amount, date, note });
     
     const depositDate = new Date(date + 'T12:00:00').toISOString();
-    const today = new Date().toISOString().split('T')[0];
+    const today = localToday();
     const isToday = date === today;
     
     console.log('🔵 Deposit date:', depositDate, '| Is today:', isToday);
@@ -4661,7 +4667,7 @@ function handleWithdrawalWithSnapshot(amount, date, note) {
     console.log('🔵 handleWithdrawalWithSnapshot called:', { amount, date, note });
     
     const withdrawalDate = new Date(date + 'T12:00:00').toISOString();
-    const today = new Date().toISOString().split('T')[0];
+    const today = localToday();
     const isToday = date === today;
     
     console.log('🔵 Withdrawal date:', withdrawalDate, '| Is today:', isToday);
@@ -7784,7 +7790,7 @@ function calculateTWRv3(startDate = null) {
             
             // קריאת תאריך קנייה (אם ריק - תאריך היום)
             const purchaseDateInput = document.getElementById('new-purchase-date');
-            let purchaseDate = purchaseDateInput?.value || new Date().toISOString().split('T')[0];
+            let purchaseDate = purchaseDateInput?.value || localToday();
             
             // המרה ל-ISO format מלא
             purchaseDate = new Date(purchaseDate + 'T12:00:00.000Z').toISOString();
@@ -8157,7 +8163,7 @@ function calculateTWRv3(startDate = null) {
             if (altTicker) altTicker.value = '';
             if (units) units.value = '';
             if (cost) cost.value = '';
-            if (date) date.value = new Date().toISOString().split('T')[0];
+            if (date) date.value = localToday();
         }
         
         function saveBond() {
@@ -8564,7 +8570,7 @@ ${msg}`, 'warning');
             document.getElementById('add-bond-price').value = bond.currentPrice;
             document.getElementById('add-bond-quantity').value = '';
             document.getElementById('add-bond-commission').value = '0';
-            document.getElementById('add-bond-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('add-bond-date').value = localToday();
             
             document.getElementById('add-bond-units-modal').style.display = 'flex';
         }
@@ -8688,7 +8694,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-bond-current').textContent = `${bond.units} יחידות`;
             document.getElementById('sell-bond-price').value = bond.currentPrice;
             document.getElementById('sell-bond-quantity').value = '';
-            document.getElementById('sell-bond-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('sell-bond-date').value = localToday();
             document.getElementById('sell-bond-commission').value = 0;
             document.getElementById('sell-bond-tax').value = 0;
             document.getElementById('sell-bond-tax-currency').value = 'ILS';
@@ -9142,7 +9148,7 @@ ${msg}`, 'warning');
             document.getElementById('add-shares-commission').value = '0';
             
             // Set date to today
-            const today = new Date().toISOString().split('T')[0];
+            const today = localToday();
             document.getElementById('add-shares-date').value = today;
             
             // Show modal
@@ -9320,7 +9326,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-shares-tax-currency').value = 'ILS';
 
             // Set date to today
-            const today = new Date().toISOString().split('T')[0];
+            const today = localToday();
             document.getElementById('sell-shares-date').value = today;
             
             // Show modal
@@ -9507,7 +9513,7 @@ ${msg}`, 'warning');
             document.getElementById('deposit-amount').value = '';
             document.getElementById('deposit-note').value = '';
             // Set default date to today
-            const today = new Date().toISOString().split('T')[0];
+            const today = localToday();
             document.getElementById('deposit-date').value = today;
         }
         
@@ -9544,7 +9550,7 @@ ${msg}`, 'warning');
             document.getElementById('withdrawal-amount').value = '';
             document.getElementById('withdrawal-note').value = '';
             // Set default date to today
-            const today = new Date().toISOString().split('T')[0];
+            const today = localToday();
             document.getElementById('withdrawal-date').value = today;
         }
         
@@ -11838,7 +11844,7 @@ ${msg}`, 'warning');
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `portfolio-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `portfolio-${localToday()}.json`;
             a.click();
             URL.revokeObjectURL(url);
             notify('✅ נתונים יוצאו');
