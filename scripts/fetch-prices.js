@@ -159,13 +159,14 @@ async function main() {
   const prices = {};
   
   try {
-    // קריאת כל המשתמשים
-    const usersSnapshot = await db.collection('users').get();
-    
+    // קריאת כל המשתמשים. listDocuments ולא get() — מסמכי users הם "נתיבי
+    // פנטום" (קיימת רק תת-collection), ו-get() מחזיר עבורם רשימה ריקה.
+    const userRefs = await db.collection('users').listDocuments();
+
     const allSymbols = new Set();
-    
-    for (const userDoc of usersSnapshot.docs) {
-      const portfolioRef = db.collection('users').doc(userDoc.id).collection('portfolio').doc('data');
+
+    for (const userRef of userRefs) {
+      const portfolioRef = userRef.collection('portfolio').doc('data');
       const portfolioSnap = await portfolioRef.get();
       
       if (portfolioSnap.exists) {
