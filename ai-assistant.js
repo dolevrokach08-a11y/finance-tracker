@@ -12,11 +12,14 @@
 class FinancialAIAssistant {
     constructor(options = {}) {
         this.apiKey = options.apiKey || localStorage.getItem('ai_api_key') || null;
-        // Default to claude-sonnet-4-5 (stable alias). If the user previously
-        // saved an invalid name like 'claude-sonnet-4-6' we silently upgrade.
+        // Default to claude-sonnet-4-6 (stable alias). Stored legacy names from
+        // the previous generation are mapped to their current equivalents.
+        const legacyMap = {
+            'claude-sonnet-4-5': 'claude-sonnet-4-6',
+            'claude-opus-4-5': 'claude-opus-4-8'
+        };
         const stored = localStorage.getItem('ai_model');
-        const invalidLegacy = stored === 'claude-sonnet-4-6';
-        this.model = options.model || (invalidLegacy ? null : stored) || 'claude-sonnet-4-5';
+        this.model = options.model || legacyMap[stored] || stored || 'claude-sonnet-4-6';
         this.getFinanceData = options.getFinanceData || (() => ({}));
         this.getPortfolioData = options.getPortfolioData || (() => ({}));
         this.isOpen = false;
@@ -431,9 +434,9 @@ class FinancialAIAssistant {
                 <input type="password" id="aiApiKeyInput" placeholder="sk-ant-api03-..." value="${maskedKey}" autocomplete="off">
                 <label for="aiModelSelect">מודל</label>
                 <select id="aiModelSelect">
-                    <option value="claude-sonnet-4-5" ${this.model === 'claude-sonnet-4-5' ? 'selected' : ''}>Claude Sonnet 4.5 (מהיר, מומלץ)</option>
+                    <option value="claude-sonnet-4-6" ${this.model === 'claude-sonnet-4-6' ? 'selected' : ''}>Claude Sonnet 4.6 (מהיר, מומלץ)</option>
                     <option value="claude-haiku-4-5" ${this.model === 'claude-haiku-4-5' ? 'selected' : ''}>Claude Haiku 4.5 (מהיר מאוד, זול)</option>
-                    <option value="claude-opus-4-5" ${this.model === 'claude-opus-4-5' ? 'selected' : ''}>Claude Opus 4.5 (חכם ביותר, יקר)</option>
+                    <option value="claude-opus-4-8" ${this.model === 'claude-opus-4-8' ? 'selected' : ''}>Claude Opus 4.8 (חכם ביותר, יקר)</option>
                 </select>
                 <button class="ai-settings-save" id="aiSettingsSave">שמור הגדרות</button>
                 <button class="ai-settings-clear" id="aiSettingsClear">מחק API Key</button>
@@ -1353,12 +1356,12 @@ ${dataSection}
         this.apiKey = null;
         localStorage.removeItem('ai_api_key');
         localStorage.removeItem('ai_model');
-        this.model = 'claude-sonnet-4-5';
+        this.model = 'claude-sonnet-4-6';
 
         const keyInput = this.panel.querySelector('#aiApiKeyInput');
         const modelSelect = this.panel.querySelector('#aiModelSelect');
         if (keyInput) keyInput.value = '';
-        if (modelSelect) modelSelect.value = 'claude-sonnet-4-5';
+        if (modelSelect) modelSelect.value = 'claude-sonnet-4-6';
 
         this._updateStatus();
         this.settingsOpen = false;
@@ -1380,9 +1383,9 @@ ${dataSection}
 
     _modelDisplayName() {
         const names = {
-            'claude-sonnet-4-5': 'Claude Sonnet 4.5',
+            'claude-sonnet-4-6': 'Claude Sonnet 4.6',
             'claude-haiku-4-5':  'Claude Haiku 4.5',
-            'claude-opus-4-5':   'Claude Opus 4.5'
+            'claude-opus-4-8':   'Claude Opus 4.8'
         };
         return names[this.model] || this.model;
     }
