@@ -12,15 +12,39 @@ const ALLOWED_DOMAINS = [
   'finance.yahoo.com'
 ];
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age': '86400'
-};
+// Browser origins allowed to use this proxy (prevents quota abuse by other sites).
+// Non-browser requests (no Origin header) are allowed — CORS doesn't apply to them.
+function isAllowedOrigin(origin) {
+  if (origin === 'https://dolevrokach08-a11y.github.io') return true;
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === 'localhost' || hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+function corsHeaders(origin) {
+  return {
+    'Access-Control-Allow-Origin': origin || '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+    'Vary': 'Origin'
+  };
+}
 
 export default {
   async fetch(request, env) {
+    const origin = request.headers.get('Origin');
+    if (origin && !isAllowedOrigin(origin)) {
+      return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    const CORS_HEADERS = corsHeaders(origin);
+
     // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
