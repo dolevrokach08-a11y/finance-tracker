@@ -228,10 +228,12 @@ async function main() {
     // === שליפת היסטוריית אינדקסים ===
     console.log('\n📈 Fetching index history...');
     
+    // Irish UCITS accumulating ETFs (LSE, USD) — price includes reinvested
+    // dividends, unlike the distributing US versions (SPY/QQQ/ACWI).
     const indices = [
-      { symbol: 'ACWI', name: 'MSCI ACWI' },
-      { symbol: 'SPY', name: 'S&P 500' },
-      { symbol: 'QQQ', name: 'NASDAQ' },
+      { symbol: 'ISAC.L', name: 'MSCI ACWI (Acc)' },
+      { symbol: 'CSPX.L', name: 'S&P 500 (Acc)' },
+      { symbol: 'CNDX.L', name: 'NASDAQ 100 (Acc)' },
       { symbol: '^TA125.TA', name: 'ת"א 125' }
     ];
     
