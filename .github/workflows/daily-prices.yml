@@ -20,9 +20,11 @@ jobs:
           node-version: '20'
       
       - name: Install dependencies
+        # yahoo-finance2 pinned to v2 — v3 changed the API (chart/quote are no
+        # longer functions on the default export) and silently broke all fetches.
         run: |
           cd scripts
-          npm install firebase-admin yahoo-finance2
+          npm install firebase-admin yahoo-finance2@2
       
       - name: Fetch and save prices
         env:
