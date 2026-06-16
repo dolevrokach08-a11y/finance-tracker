@@ -949,6 +949,14 @@
                         </label>
                     </div>
 
+                    <div class="mt-3">
+                        <button id="pending-import-btn" onclick="loadPendingFromWorker()" class="btn bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm cursor-pointer" style="position:relative;">
+                            ⬇️ משוך עסקאות חדשות (מקס + לאומי)
+                            <span id="pending-import-badge" style="display:none; position:absolute; top:-8px; left:-8px; background:#ef4444; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px;"></span>
+                        </button>
+                        <p class="text-xs text-gray-500 mt-1">נמשך אוטומטית כל לילה (3:00). לחיצה שולפת מיד את הממתינות לאישור.</p>
+                    </div>
+
                     <div class="mt-4 pt-4" style="border-top: 1px solid hsla(0,0%,100%,0.08);">
                         <h4 class="text-sm font-semibold mb-2">ייצוא נתונים</h4>
                         <p class="text-xs text-gray-500 mb-2">הורד את כל העסקאות במערכת כקובץ אקסל — לאודיט, גיבוי, או הכנה למיגרציה לבסיס צבירה</p>
@@ -4741,6 +4749,100 @@
                 notify(`✅ נוספו ${txs.length} תנועות (${expenseCount} הוצאות)${skippedCount > 0 ? `, ${skippedCount} דולגו` : ''}`);
             }
         }
+
+        // ========== Auto-import from the scraper Worker (pending transactions) ==========
+        const PENDING_API = 'https://finance-proxy.dolevrokach08.workers.dev/api/transactions';
+
+        function mapMaxCategoryToApp(maxCat) {
+            const c = (maxCat || '').trim();
+            if (!c) return 'אחר';
+            const has = (...words) => words.some(w => c.includes(w));
+            if (has('חשמל', 'גז', 'מים', 'ארנונה', 'חשבון', 'תקשורת', 'ביטוח', 'בנק')) return 'חשבונות';
+            if (has('דלק', 'תחבורה', 'רכב', 'חניה', 'מונית', 'רכבת', 'אוטובוס')) return 'תחבורה';
+            if (has('מזון', 'סופר', 'מרקט', 'מכולת')) return 'מזון';
+            if (has('מסעד', 'קפה', 'בילוי', 'פנאי', 'בידור')) return 'בילויים';
+            if (has('בריאות', 'תרופ', 'רפוא', 'קופת חולים', 'רופא')) return 'בריאות';
+            if (has('חינוך', 'לימוד', 'ספר')) return 'חינוך';
+            if (has('דיור', 'דירה', 'ריהוט')) return 'דיור';
+            if (has('אופנה', 'ביגוד', 'קני', 'אלקטרוני')) return 'קניות';
+            return 'אחר';
+        }
+
+        function pendingToCandidate(p) {
+            const charged = Number(p.charged_amount) || 0;
+            const type = charged < 0 ? 'expense' : 'income';
+            const date = (p.transaction_date || '').slice(0, 10);
+            return {
+                type,
+                desc: p.description || '',
+                amt: Math.abs(charged),
+                cat: type === 'income' ? 'משכורת' : mapMaxCategoryToApp(p.max_category),
+                transactionDate: date || undefined,
+                _pendingId: p.id,
+                _source: p.source,
+            };
+        }
+
+        async function loadPendingFromWorker() {
+            const btn = document.getElementById('pending-import-btn');
+            const origLabel = btn ? btn.innerHTML : '';
+            try {
+                if (btn) { btn.disabled = true; btn.textContent = 'טוען...'; }
+                const res = await fetch(`${PENDING_API}/pending`);
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const body = await res.json();
+                const pending = body.transactions || [];
+                if (pending.length === 0) { notify('אין עסקאות חדשות ממתינות'); return; }
+
+                const candidates = pending.map(pendingToCandidate);
+                showImportPreview({
+                    candidates,
+                    selectedMonth: getMonthKey(),
+                    fileLabel: `אוטומטי (מקס + לאומי) — ${pending.length} עסקאות`,
+                    onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => {
+                        applyPreviewedImport(txs, m, skippedCount);
+                        syncPendingDecisions(candidates);
+                    }
+                });
+            } catch (err) {
+                console.error('loadPendingFromWorker failed', err);
+                notify('❌ שגיאה בשליפת עסקאות מהשרת');
+            } finally {
+                if (btn) { btn.disabled = false; btn.innerHTML = origLabel; refreshPendingBadge(); }
+            }
+        }
+
+        // After confirm: tell the Worker which pending rows were approved/rejected so
+        // they don't reappear. Best-effort — failures are non-fatal.
+        async function syncPendingDecisions(candidates) {
+            const post = (path, payload) => fetch(`${PENDING_API}/${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }).catch(e => console.warn('sync', path, 'failed', e));
+
+            for (const c of candidates) {
+                if (!c._pendingId) continue;
+                if (c._included) await post('approve', { id: c._pendingId, final_category: c.cat });
+                else await post('reject', { id: c._pendingId });
+            }
+            refreshPendingBadge();
+        }
+
+        async function refreshPendingBadge() {
+            const badge = document.getElementById('pending-import-badge');
+            if (!badge) return;
+            try {
+                const res = await fetch(`${PENDING_API}/pending`);
+                if (!res.ok) return;
+                const body = await res.json();
+                const n = body.count || 0;
+                if (n > 0) { badge.textContent = n; badge.style.display = 'inline-block'; }
+                else badge.style.display = 'none';
+            } catch (e) { /* offline / blocked — leave badge hidden */ }
+        }
+
+        setTimeout(refreshPendingBadge, 1200);
 
         function handleSmartImport(event) {
             const file = event.target.files[0];
@@ -8874,6 +8976,7 @@
         window.showReportSubTab = showReportSubTab;
         window.addIncome = addIncome;
         window.addExpense = addExpense;
+        window.loadPendingFromWorker = loadPendingFromWorker;
         window.addManualTithe = addManualTithe;
         window.addDonation = addDonation;
         window.exportData = exportData;
