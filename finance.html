@@ -4783,6 +4783,85 @@
             };
         }
 
+        function normalizeMerchant(s) {
+            return (s || '').trim().replace(/\s+/g, ' ').replace(/\d{3,}/g, '').trim();
+        }
+
+        // Build merchant -> most-frequent category from the user's own history.
+        function buildMerchantCategoryHistory() {
+            const counts = {};
+            for (const t of (data.transactions || [])) {
+                if (t.type !== 'expense' || !t.desc || !t.cat) continue;
+                const key = normalizeMerchant(t.desc);
+                if (!key) continue;
+                counts[key] = counts[key] || {};
+                counts[key][t.cat] = (counts[key][t.cat] || 0) + 1;
+            }
+            const out = {};
+            for (const [key, c] of Object.entries(counts)) {
+                out[key] = Object.entries(c).sort((a, b) => b[1] - a[1])[0][0];
+            }
+            return out;
+        }
+
+        // Ask Claude (cheap model) to classify unknown merchants into the user's
+        // expense categories, given examples from their own history as context.
+        async function suggestCategoriesWithClaude(merchants, expenseCategories, historySamples) {
+            const apiKey = localStorage.getItem('ai_api_key');
+            if (!apiKey || merchants.length === 0) return {};
+            const system = 'אתה מסווג עסקאות אשראי לקטגוריות הוצאה. החזר JSON בלבד, ללא טקסט נוסף.';
+            const prompt = `קטגוריות אפשריות (בחר רק מתוכן): ${JSON.stringify(expenseCategories)}
+דוגמאות מההיסטוריה של המשתמש (בית עסק → קטגוריה): ${JSON.stringify(historySamples)}
+סווג כל אחד מבתי העסק הבאים לאחת הקטגוריות בלבד.
+החזר אובייקט JSON {"<בית עסק>":"<קטגוריה>"} עבור: ${JSON.stringify(merchants)}`;
+            try {
+                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true'
+                    },
+                    body: JSON.stringify({
+                        model: 'claude-haiku-4-5',
+                        max_tokens: 1024,
+                        system,
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+                if (!res.ok) throw new Error('API ' + res.status);
+                const body = await res.json();
+                const text = (body.content && body.content[0] && body.content[0].text) || '{}';
+                const match = text.match(/\{[\s\S]*\}/);
+                return match ? JSON.parse(match[0]) : {};
+            } catch (e) {
+                console.warn('suggestCategoriesWithClaude failed', e);
+                return {};
+            }
+        }
+
+        // History first (free), Claude only for unknown merchants.
+        async function enrichCandidatesWithSmartCategories(candidates) {
+            const history = buildMerchantCategoryHistory();
+            const expenseCats = data.expenseCategories || [];
+            const unknown = [];
+            for (const c of candidates) {
+                if (c.type !== 'expense') continue;
+                const key = normalizeMerchant(c.desc);
+                if (history[key]) { c.cat = history[key]; c._conf = 'היסטוריה'; }
+                else unknown.push(c);
+            }
+            if (unknown.length === 0) return;
+            const samples = Object.entries(history).slice(0, 40).map(([m, cat]) => ({ m, cat }));
+            const uniqueMerchants = [...new Set(unknown.map(c => c.desc))];
+            const suggestions = await suggestCategoriesWithClaude(uniqueMerchants, expenseCats, samples);
+            for (const c of unknown) {
+                const s = suggestions[c.desc];
+                if (s && expenseCats.includes(s)) { c.cat = s; c._conf = 'AI'; }
+            }
+        }
+
         async function loadPendingFromWorker() {
             const btn = document.getElementById('pending-import-btn');
             const origLabel = btn ? btn.innerHTML : '';
@@ -4795,6 +4874,8 @@
                 if (pending.length === 0) { notify('אין עסקאות חדשות ממתינות'); return; }
 
                 const candidates = pending.map(pendingToCandidate);
+                if (btn) btn.textContent = 'מסווג קטגוריות...';
+                await enrichCandidatesWithSmartCategories(candidates);
                 showImportPreview({
                     candidates,
                     selectedMonth: getMonthKey(),
