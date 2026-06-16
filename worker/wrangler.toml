@@ -6,6 +6,19 @@ compatibility_date = "2024-01-01"
 # Deploy: npx wrangler deploy
 # Test locally: npx wrangler dev
 
+# ── D1: storage for Max transaction ingestion ────────────────────────────
+# 1. Create the DB:   npx wrangler d1 create finance-transactions
+# 2. Paste the printed database_id below.
+# 3. Apply schema:    npx wrangler d1 execute finance-transactions --file=./schema.sql --remote
+[[d1_databases]]
+binding = "DB"
+database_name = "finance-transactions"
+database_id = "7fb7ed1c-d602-4558-9687-8194914fa99a"
+
+# INGESTION_TOKEN is a secret, NOT a var. Set it (don't commit it):
+#   npx wrangler secret put INGESTION_TOKEN
+# The scraper job sends it as: Authorization: Bearer <token>
+
 # Optional: restrict to your domain only
 # [vars]
 # ALLOWED_ORIGIN = "https://your-username.github.io"
