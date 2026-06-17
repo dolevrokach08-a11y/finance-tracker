@@ -2527,6 +2527,8 @@
                             authChecked = true;
                             init();
                         }
+                        // Pending badge needs the signed-in user's token; refresh now that we have it.
+                        try { refreshPendingBadge(); } catch (e) { /* defined later in module scope */ }
                     } else {
                         console.log('No user, redirecting to login...');
                         window.location.href = 'login.html';
@@ -4753,6 +4755,19 @@
         // ========== Auto-import from the scraper Worker (pending transactions) ==========
         const PENDING_API = 'https://finance-proxy.dolevrokach08.workers.dev/api/transactions';
 
+        // The Worker scopes pending rows per user, so every call must carry the
+        // signed-in user's Firebase ID token. Returns null when not signed in.
+        async function pendingAuthHeaders(extra = {}) {
+            if (!currentUser || typeof currentUser.getIdToken !== 'function') return null;
+            try {
+                const token = await currentUser.getIdToken();
+                return { ...extra, Authorization: `Bearer ${token}` };
+            } catch (e) {
+                console.warn('getIdToken failed', e);
+                return null;
+            }
+        }
+
         function mapMaxCategoryToApp(maxCat) {
             const c = (maxCat || '').trim();
             if (!c) return 'אחר';
@@ -4867,7 +4882,9 @@
             const origLabel = btn ? btn.innerHTML : '';
             try {
                 if (btn) { btn.disabled = true; btn.textContent = 'טוען...'; }
-                const res = await fetch(`${PENDING_API}/pending`);
+                const headers = await pendingAuthHeaders();
+                if (!headers) { notify('לא מחובר - לא ניתן למשוך עסקאות'); return; }
+                const res = await fetch(`${PENDING_API}/pending`, { headers });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const body = await res.json();
                 const pending = body.transactions || [];
@@ -4896,9 +4913,11 @@
         // After confirm: tell the Worker which pending rows were approved/rejected so
         // they don't reappear. Best-effort — failures are non-fatal.
         async function syncPendingDecisions(candidates) {
+            const authHeaders = await pendingAuthHeaders({ 'Content-Type': 'application/json' });
+            if (!authHeaders) { console.warn('syncPendingDecisions: not signed in, skipping'); return; }
             const post = (path, payload) => fetch(`${PENDING_API}/${path}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders,
                 body: JSON.stringify(payload),
             }).catch(e => console.warn('sync', path, 'failed', e));
 
@@ -4914,7 +4933,9 @@
             const badge = document.getElementById('pending-import-badge');
             if (!badge) return;
             try {
-                const res = await fetch(`${PENDING_API}/pending`);
+                const headers = await pendingAuthHeaders();
+                if (!headers) return; // not signed in yet — leave badge hidden
+                const res = await fetch(`${PENDING_API}/pending`, { headers });
                 if (!res.ok) return;
                 const body = await res.json();
                 const n = body.count || 0;

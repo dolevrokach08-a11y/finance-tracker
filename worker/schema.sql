@@ -6,14 +6,16 @@
 
 CREATE TABLE IF NOT EXISTS pending_transactions (
   id                 TEXT PRIMARY KEY,            -- UUID, generated on ingest
+  user_id            TEXT NOT NULL,               -- Firebase uid this txn belongs to (multi-tenant scoping)
   source             TEXT NOT NULL DEFAULT 'max-scraper',
   card_account       TEXT NOT NULL,               -- which Max card (e.g. '2426')
 
   -- Dedup. `max_identifier` is unreliable on its own (some txns have none,
   -- and the scraper suffixes _N on reused ids), so the real idempotency key
-  -- is a composite hash. INSERT OR IGNORE on dedup_key makes re-scrapes safe.
+  -- is a composite hash. Scoped per user: INSERT OR IGNORE on (user_id, dedup_key)
+  -- makes re-scrapes safe without letting one user's rows block another's.
   max_identifier     TEXT,                        -- scraper identifier, when present
-  dedup_key          TEXT NOT NULL UNIQUE,        -- card|date|charged_amount|description (normalized)
+  dedup_key          TEXT NOT NULL,               -- card|date|charged_amount|description (normalized)
 
   -- Amounts: original vs charged (FX handled by Max).
   transaction_date   TEXT NOT NULL,               -- ISO 8601, txn date
@@ -33,8 +35,11 @@ CREATE TABLE IF NOT EXISTS pending_transactions (
   status            TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected | imported
   created_at        TEXT NOT NULL,
   approved_at       TEXT,
-  final_category    TEXT                           -- what the user chose in the end
+  final_category    TEXT,                          -- what the user chose in the end
+
+  UNIQUE(user_id, dedup_key)                       -- dedup is per-user, not global
 );
 
 CREATE INDEX IF NOT EXISTS idx_pending_status   ON pending_transactions(status);
+CREATE INDEX IF NOT EXISTS idx_pending_user     ON pending_transactions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_pending_dedupkey ON pending_transactions(dedup_key);
