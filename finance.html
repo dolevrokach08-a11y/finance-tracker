@@ -4878,7 +4878,7 @@
                 await enrichCandidatesWithSmartCategories(candidates);
                 showImportPreview({
                     candidates,
-                    selectedMonth: getMonthKey(),
+                    selectedMonth: getImportMonth(),
                     fileLabel: `אוטומטי (מקס + לאומי) — ${pending.length} עסקאות`,
                     onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => {
                         applyPreviewedImport(txs, m, skippedCount);
