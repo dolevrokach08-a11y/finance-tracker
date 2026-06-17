@@ -12,8 +12,9 @@
 --
 -- Apply:
 --   npx wrangler d1 execute finance-transactions --file=./migrations/001-add-user-id.sql --remote
-
-BEGIN TRANSACTION;
+--
+-- NOTE: no explicit BEGIN/COMMIT — D1 rejects raw SQL transaction statements
+-- (use a single batched file; D1 wraps it in an implicit transaction itself).
 
 ALTER TABLE pending_transactions RENAME TO pending_transactions_old;
 
@@ -58,5 +59,3 @@ DROP TABLE pending_transactions_old;
 CREATE INDEX IF NOT EXISTS idx_pending_status   ON pending_transactions(status);
 CREATE INDEX IF NOT EXISTS idx_pending_user     ON pending_transactions(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_pending_dedupkey ON pending_transactions(dedup_key);
-
-COMMIT;
