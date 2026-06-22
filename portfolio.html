@@ -3688,22 +3688,6 @@
         // portfolio יטען מ-localStorage על ידי loadData()
         let portfolio = {};  // יחליף loadData
 
-
-        // ============================================
-        // [DISABLED] FORCE SAVE - DO NOT OVERWRITE USER DATA
-        // ============================================
-        // הסקריפט הזה הושבת כדי לא לדרוס נתונים של המשתמש
-        /*
-        console.log('💾 כופה שמירת נתונים חדשים ל-localStorage...');
-        localStorage.setItem('portfolio', JSON.stringify(portfolio));
-        console.log('✅ נתונים חדשים נשמרו בכוח!');
-        console.log('   - IBI מכירות תוקנו (חולקו ב-100)');
-        console.log('   - משכנתא תוקנה (חולקה ב-100)');
-        console.log('   - משיכות: ' + portfolio.withdrawals.length);
-        console.log('   - מכירות: ' + portfolio.sales.length);
-        */
-
-
         let charts = {};
 
         // ===========================================
@@ -5354,7 +5338,7 @@ function calculateTWRv3(startDate = null) {
             // בניגוד ל-Frankfurter/ECB שמתעדכן פעם ביום וקופא בסופ"ש. ככה הכפתור
             // והבר תמיד עקביים. אם Yahoo נופל — נופלים ל-Frankfurter למטה.
             try {
-                const WORKER_URL = 'https://finance-proxy.dolevrokach08.workers.dev/?url=';
+                const WORKER_URL = CF_WORKER_URL; // reuse the single module-scope proxy URL
                 const fetchYahooFx = async (symbol) => {
                     const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
                     const resp = await fetch(WORKER_URL + encodeURIComponent(yahooUrl));
@@ -6840,10 +6824,6 @@ function calculateTWRv3(startDate = null) {
                 notify('❌ הזן סכום תקין', 'error');
                 return;
             }
-            
-            console.log('📂 Portfolio object:', portfolio);
-            console.log('👥 Portfolio groups:', portfolio.groups);
-            console.log('📊 Portfolio holdings:', portfolio.holdings);
             
             // Check if getTotalValueILS exists
             console.log('💰 getTotalValueILS function exists:', typeof getTotalValueILS);
@@ -15027,8 +15007,7 @@ ${msg}`, 'warning');
             console.log('   ✅ Proper bond pricing (% of face value)');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('🚀 Initializing portfolio with bonds actions...');
-            console.log('📦 Portfolio data structure:', portfolio);
-            
+
             // קריאה ל-init כדי לטעון נתונים
             init();
         }
