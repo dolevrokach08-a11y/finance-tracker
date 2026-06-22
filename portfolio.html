@@ -4262,7 +4262,7 @@ function openSnapshotDataModal(triggerType, cashFlowILS, date, note, onComplete)
         } else {
             console.log('ℹ️ No saved prices for this date, user will enter manually');
         }
-    });
+    }).catch(e => console.warn('⚠️ fetchDailyPricesFromFirebase failed:', e?.message || e));
     } catch (error) {
         console.error('🔴 Error in openSnapshotDataModal:', error);
         notify('❌ שגיאה בפתיחת חלון הנתונים', 'error');
@@ -4457,7 +4457,7 @@ function confirmSnapshotData() {
         if (count > 0) {
             console.log(`🗑️ Cleaned up ${count} old price records`);
         }
-    });
+    }).catch(e => console.warn('⚠️ deleteOldDailyPrices failed:', e?.message || e));
     
     window._snapshotModalData = null;
     notify('✅ Snapshot נוצר בהצלחה', 'success');
@@ -7505,22 +7505,23 @@ function calculateTWRv3(startDate = null) {
 
             if (window.SyncWidget) window.SyncWidget.markSyncing();
 
+            // Persist locally FIRST (synchronous) so a reload/crash before the
+            // Firestore round-trip completes can't lose the change. The cloud
+            // write below is the only async step; localStorage already holds it.
+            try {
+                localStorage.setItem('portfolio', JSON.stringify(dataToSave));
+            } catch (e) {
+                console.error('❌ localStorage write failed:', e);
+            }
+
             try {
                 const userDocRef = doc(db, 'users', currentUser.uid, 'portfolio', 'data');
                 await setDoc(userDocRef, dataToSave);
                 console.log('✅ Data saved to Firebase');
-
-                // Also save to localStorage as backup
-                localStorage.setItem('portfolio', JSON.stringify(dataToSave));
                 if (window.SyncWidget) window.SyncWidget.markSynced(newLastModified);
             } catch (error) {
                 console.error('❌ Error saving data:', error);
-                // Fallback to localStorage and flag as unsynced
-                try {
-                    localStorage.setItem('portfolio', JSON.stringify(dataToSave));
-                } catch (e) {
-                    console.error('❌ localStorage fallback failed:', e);
-                }
+                // localStorage already holds the change above; just flag unsynced.
                 if (window.SyncWidget) window.SyncWidget.markError();
                 notify('⚠️ שגיאה בשמירה בענן, נשמר מקומית', 'error');
             }
@@ -15077,7 +15078,7 @@ ${msg}`, 'warning');
                 } else {
                     console.log('ℹ️ Using manual rates');
                 }
-            });
+            }).catch(e => console.warn('⚠️ autoUpdateExchangeRates failed:', e?.message || e));
             
             notify('💼 מערכת מוכנה עם גרפים מתקדמים!', 'success');
 

@@ -1,5 +1,8 @@
 // Service Worker for Finance Tracker PWA
-const CACHE_NAME = 'finance-tracker-v5';
+// Bump CACHE_NAME on every deploy that ships changed HTML/JS — the activate
+// handler purges the old cache, guaranteeing the new shell replaces any stale
+// cached firebase-config.js / *.html (the "change doesn't show up live" gotcha).
+const CACHE_NAME = 'finance-tracker-v6';
 const urlsToCache = [
   '/finance-tracker/',
   '/finance-tracker/index.html',
