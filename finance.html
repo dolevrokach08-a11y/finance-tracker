@@ -17,7 +17,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-    
+
+    <!-- Shared master tokens — single source of truth. Loaded BEFORE the inline :root
+         below so finance's intentional overrides (e.g. smaller --radius-lg/xl) still win,
+         while inheriting the full token set (named colors, shadow scale, transitions,
+         easing, icon sizes) that shared-theme.css utilities rely on. -->
+    <link rel="stylesheet" href="shared/theme.css">
+
     <style>
         /* CRITICAL - Load before everything */
         .hidden { display: none !important; }
