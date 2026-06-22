@@ -5066,7 +5066,7 @@
             document.getElementById('earner-items-list').innerHTML = incomes.map((inc, i) => `
                 <div class="p-3 rounded-lg flex justify-between items-center" style="background: var(--bg-elevated); border: 1px solid var(--border);">
                     <div class="flex-1">
-                        <div class="font-medium text-sm">${inc.desc}</div>
+                        <div class="font-medium text-sm">${escapeHtml(inc.desc||'')}</div>
                         <div class="text-xs text-gray-500">₪${inc.amt.toLocaleString()}</div>
                     </div>
                     <div class="flex gap-1">
@@ -5715,10 +5715,10 @@
 
         function renderCategories() {
             document.getElementById('inc-cats').innerHTML = data.incomeCategories.map((c,i)=>
-                `<div class="flex justify-between p-2 bg-green-50 rounded"><span>${c}</span><button onclick="delCat('income',${i})" class="text-red-500 hover:text-red-700 px-2">מחק</button></div>`
+                `<div class="flex justify-between p-2 bg-green-50 rounded"><span>${escapeHtml(c)}</span><button onclick="delCat('income',${i})" class="text-red-500 hover:text-red-700 px-2">מחק</button></div>`
             ).join('');
             document.getElementById('exp-cats').innerHTML = data.expenseCategories.map((c,i)=>
-                `<div class="flex justify-between p-2 bg-red-50 rounded"><span>${c}</span><button onclick="delCat('expense',${i})" class="text-red-500 hover:text-red-700 px-2">מחק</button></div>`
+                `<div class="flex justify-between p-2 bg-red-50 rounded"><span>${escapeHtml(c)}</span><button onclick="delCat('expense',${i})" class="text-red-500 hover:text-red-700 px-2">מחק</button></div>`
             ).join('');
         }
 
@@ -5874,13 +5874,13 @@
                 return `<div class="item-${t.type} p-3 rounded-lg flex justify-between items-center">
                     <div class="flex-1">
                         <div class="font-medium">
-                            ${t.desc||t.description}
+                            ${escapeHtml(t.desc||t.description||'')}
                             ${t.fixed?' <span class="text-xs bg-gray-200 px-2 py-1 rounded">קבוע</span>':''}
                             ${isExempt?' <span class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">פטור ממעשר</span>':''}
                             ${earnerLabel?' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">'+earnerLabel+'</span>':''}
                         </div>
                         <div class="text-sm text-gray-600 flex items-center gap-2">
-                            <span>${t.cat||t.category}</span>
+                            <span>${escapeHtml(t.cat||t.category||'')}</span>
                             ${dateBadge}
                         </div>
                     </div>
@@ -6328,7 +6328,7 @@
             document.getElementById('recent-list').innerHTML = all.length ?
                 all.map(t=>
                     `<div class="item-${t.type} p-3 rounded-lg flex justify-between items-center">
-                        <div><div class="font-medium">${t.desc}${t.fixed?' <span class="text-xs bg-gray-200 px-2 py-1 rounded">קבוע</span>':''}${t.titheExempt?' <span class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">פטור ממעשר</span>':''}</div><div class="text-sm text-gray-600">${t.cat}</div></div>
+                        <div><div class="font-medium">${escapeHtml(t.desc||'')}${t.fixed?' <span class="text-xs bg-gray-200 px-2 py-1 rounded">קבוע</span>':''}${t.titheExempt?' <span class="text-xs bg-orange-200 text-orange-800 px-2 py-1 rounded">פטור ממעשר</span>':''}</div><div class="text-sm text-gray-600">${escapeHtml(t.cat||'')}</div></div>
                         <div class="font-bold ${t.type==='income'?'text-green-600':'text-red-600'}">${t.type==='income'?'+':'-'}₪${t.amt.toLocaleString()}</div>
                     </div>`
                 ).join('') : '<div class="text-gray-500 text-center py-8">אין רשומות</div>';
@@ -8677,7 +8677,7 @@
                     ${g.items.map(item => `
                         <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 0.85rem;">
                             <span style="color: var(--text-primary);">
-                                ${item.desc}
+                                ${escapeHtml(item.desc||'')}
                                 ${item.fixed ? '<span style="font-size:0.7rem; background:var(--border); padding:2px 6px; border-radius:4px; margin-right:6px;">קבוע</span>' : ''}
                             </span>
                             <span style="font-weight: 500; color: ${type === 'expense' ? '#ef4444' : '#10b981'}; font-family: \'JetBrains Mono\', monospace; font-size: 0.8rem;">₪${item.amt.toLocaleString()}</span>
