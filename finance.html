@@ -939,10 +939,12 @@
                         </select>
                     </div>
                     
-                    <div class="flex gap-3 items-center">
-                        <select id="import-year" onchange="syncImportMonth()" class="p-2 border rounded-lg text-sm"></select>
-                        <select id="import-month-num" onchange="syncImportMonth()" class="p-2 border rounded-lg text-sm"></select>
+                    <div class="flex gap-3 items-center flex-wrap">
+                        <label class="text-sm font-medium">חודש החיוב:</label>
+                        <select id="import-year" class="p-2 border rounded-lg text-sm"></select>
+                        <select id="import-month-num" class="p-2 border rounded-lg text-sm"></select>
                         <input type="hidden" id="import-month">
+                        <span class="text-xs text-gray-500">(כברירת מחדל זהה ל\"חודש:\" שלמעלה — שנה אם החיוב שייך לחודש אחר)</span>
                         <label class="btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
                             📄 בחר קובץ אקסל
                             <input type="file" accept=".xlsx,.xls" onchange="handleImportFile(event)" class="hidden">
@@ -2752,8 +2754,14 @@
 
             const ay = document.getElementById('add-year');
             const am = document.getElementById('add-month-num');
-            if (ay) { ay.removeEventListener('change', loadMonthTransactions); ay.addEventListener('change', loadMonthTransactions); }
-            if (am) { am.removeEventListener('change', loadMonthTransactions); am.addEventListener('change', loadMonthTransactions); }
+            if (ay) { ay.removeEventListener('change', loadMonthTransactions); ay.addEventListener('change', loadMonthTransactions);
+                      ay.removeEventListener('change', syncImportMonthToAdd); ay.addEventListener('change', syncImportMonthToAdd); }
+            if (am) { am.removeEventListener('change', loadMonthTransactions); am.addEventListener('change', loadMonthTransactions);
+                      am.removeEventListener('change', syncImportMonthToAdd); am.addEventListener('change', syncImportMonthToAdd); }
+
+            // The credit-card import month mirrors the main "חודש:" picker by default.
+            // (Ctrl+arrow nav dispatches 'change', so it's covered by the listeners above.)
+            syncImportMonthToAdd();
         }
 
         function getOverviewMonth() {
@@ -2772,6 +2780,20 @@
             const y = document.getElementById('import-year');
             const m = document.getElementById('import-month-num');
             return (y && m) ? `${y.value}-${m.value}` : getMonthKey();
+        }
+
+        // Keep the credit-card import month picker in step with the main "חודש:"
+        // picker by default, so an import lands in the month the user is looking at.
+        // It stays overridable: the user can still set the import picker afterwards
+        // to file a specific charge in a different month (changing the main picker
+        // re-syncs it).
+        function syncImportMonthToAdd() {
+            const ay = document.getElementById('add-year');
+            const am = document.getElementById('add-month-num');
+            const iy = document.getElementById('import-year');
+            const im = document.getElementById('import-month-num');
+            if (ay && iy && ay.value) iy.value = ay.value;
+            if (am && im && am.value) im.value = am.value;
         }
 
         function getMonths() {
