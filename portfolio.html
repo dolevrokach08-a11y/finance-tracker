@@ -3953,7 +3953,7 @@ async function fillCurrentPrices() {
     
     try {
         // Refresh rates
-        await loadRates();
+        await autoUpdateExchangeRates();
         document.getElementById('snapshot-rate-usd').value = portfolio.rates?.USD?.toFixed(4) || '3.7';
         document.getElementById('snapshot-rate-eur').value = portfolio.rates?.EUR?.toFixed(4) || '4.0';
         
@@ -4481,7 +4481,7 @@ async function handleAutomaticSnapshot(triggerType, cashFlowILS, date, note, onC
     
     try {
         // 1. Refresh exchange rates
-        await loadRates();
+        await autoUpdateExchangeRates();
         console.log('✓ Exchange rates refreshed');
         
         // 2. Refresh stock prices
@@ -12590,11 +12590,19 @@ ${msg}`, 'warning');
             const totalInvested = values.filter(v => v < 0).reduce((sum, v) => sum + Math.abs(v), 0);
             const totalReceived = values.filter(v => v > 0).reduce((sum, v) => sum + v, 0);
             const profit = totalReceived - totalInvested;
-            
+
             const firstDate = dates[0];
             const lastDate = dates[dates.length - 1];
             const periodDays = (lastDate - firstDate) / (1000 * 60 * 60 * 24);
-            
+
+            // Guard against NaN/Infinity: no money invested or a zero-length period
+            // makes the return mathematically undefined. Bail out so the UI shows
+            // "—" instead of "NaN%".
+            if (totalInvested <= 0 || periodDays <= 0) {
+                console.warn('⚠️ Fallback returns undefined (totalInvested=' + totalInvested + ', periodDays=' + periodDays.toFixed(1) + ')');
+                return null;
+            }
+
             // Period return
             const periodReturn = profit / totalInvested;
             
@@ -12680,7 +12688,12 @@ ${msg}`, 'warning');
                     
                     // Fallback: Calculate compound annualized return
                     const returns = calculateFallbackReturns(combinedValues, combinedDates);
-                    
+
+                    if (!returns) {
+                        console.log('⚠️ MWR: Fallback returns also undefined → returning null');
+                        return null;
+                    }
+
                     console.log(`📊 Fallback Returns:`);
                     console.log(`   Period: ${returns.periodDays.toFixed(0)} days`);
                     console.log(`   Period Return: ${(returns.periodReturn * 100).toFixed(2)}%`);
@@ -13460,6 +13473,12 @@ ${msg}`, 'warning');
 
             sorted.forEach(snap => {
                 let stockVal = 0, bondVal = 0;
+                // Old snapshots predate exchange_rates locking — we fall back to
+                // current rates (then to a hardcoded last resort). Flag it once per
+                // snapshot so a silently-wrong historical FX conversion is visible.
+                if (!snap.exchange_rates) {
+                    console.warn('⚠️ Snapshot ' + snap.date + ' has no locked exchange_rates → using current rates for FX conversion');
+                }
                 // Snapshot might have holdingsSnapshot with per-holding data
                 if (snap.holdingsSnapshot && Array.isArray(snap.holdingsSnapshot)) {
                     snap.holdingsSnapshot.forEach(h => {
