@@ -6573,22 +6573,27 @@
         
         function analyzeCategorySpending(currentMonth, prevMonth) {
             const currentExp = {}, prevExp = {};
-            
+            const NO_CAT = 'ללא קטגוריה'; // guard: uncategorized txns/fixed expenses must not surface as literal "undefined"
+
             data.transactions.filter(t => t.month === currentMonth && t.type === 'expense').forEach(t => {
-                currentExp[t.cat] = (currentExp[t.cat] || 0) + t.amt;
+                const cat = t.cat || NO_CAT;
+                currentExp[cat] = (currentExp[cat] || 0) + t.amt;
             });
             data.fixedExpenses.forEach(f => {
                 if (getMonthsInRange(f.start, f.end).includes(currentMonth)) {
-                    currentExp[f.category] = (currentExp[f.category] || 0) + f.amount;
+                    const cat = f.category || NO_CAT;
+                    currentExp[cat] = (currentExp[cat] || 0) + f.amount;
                 }
             });
             
             data.transactions.filter(t => t.month === prevMonth && t.type === 'expense').forEach(t => {
-                prevExp[t.cat] = (prevExp[t.cat] || 0) + t.amt;
+                const cat = t.cat || NO_CAT;
+                prevExp[cat] = (prevExp[cat] || 0) + t.amt;
             });
             data.fixedExpenses.forEach(f => {
                 if (getMonthsInRange(f.start, f.end).includes(prevMonth)) {
-                    prevExp[f.category] = (prevExp[f.category] || 0) + f.amount;
+                    const cat = f.category || NO_CAT;
+                    prevExp[cat] = (prevExp[cat] || 0) + f.amount;
                 }
             });
             

@@ -103,6 +103,7 @@ function generateDemoFinanceData() {
             id: 3001,
             desc: 'משכנתא',
             amount: 4800,
+            category: 'דיור',
             start: `${currentYear - 2}-01`,
             end: `${currentYear + 18}-12`
         },
@@ -110,6 +111,7 @@ function generateDemoFinanceData() {
             id: 3002,
             desc: 'ועד בית',
             amount: 320,
+            category: 'דיור',
             start: `${currentYear}-01`,
             end: `${currentYear}-12`
         },
@@ -117,6 +119,7 @@ function generateDemoFinanceData() {
             id: 3003,
             desc: 'ביטוח דירה',
             amount: 180,
+            category: 'דיור',
             start: `${currentYear}-01`,
             end: `${currentYear}-12`
         }
