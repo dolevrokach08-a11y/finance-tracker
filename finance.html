@@ -2586,6 +2586,7 @@
         // Sync protection - track when data was loaded and from where
         let localLoadTime = null;           // When we loaded data locally
         let cloudLastModified = null;       // lastModified from Firebase when we loaded
+        let cloudLoadOk = false;            // true once we've actually reached Firestore and know its state this session
         let isOffline = !navigator.onLine;  // Track offline status
 
         // Sync widget state
@@ -3747,13 +3748,33 @@
 
         
         // ========== Firebase Save/Load Functionality ==========
-        async function saveToFirebase(forceOverwrite = false) {
+        async function saveToFirebase(forceOverwrite = false, allowEmptyOverwrite = false) {
             if (_isDemoMode) {
                 notify('מצב הדגמה - השינויים לא נשמרים');
                 return;
             }
             if (!currentUser) {
                 console.warn('No user logged in, cannot save');
+                return;
+            }
+
+            // SAFETY GUARD: never overwrite an unknown cloud with empty data.
+            // Triggers ONLY when the cloud load never succeeded this session AND the
+            // payload is empty (0 transactions) — i.e. exactly the data-loss scenario
+            // (failed/timed-out load → empty default → save wipes the good cloud doc).
+            // Any non-empty save, any save after a confirmed load, and intentional
+            // resets (allowEmptyOverwrite) pass through untouched.
+            if (!allowEmptyOverwrite && !cloudLoadOk && (!data.transactions || data.transactions.length === 0)) {
+                console.warn('🛑 Save blocked: cloud load did not complete and data is empty — refusing to overwrite cloud.');
+                syncStatus = 'error';
+                updateSyncWidget();
+                const reload = confirm(
+                    '⚠️ הטעינה מהענן לא הושלמה והנתונים ריקים.\n\n' +
+                    'לא שמרתי — כדי לא לדרוס את הגיבוי שבענן בנתונים ריקים.\n\n' +
+                    '• לחץ OK כדי לטעון מחדש מהענן\n' +
+                    '• לחץ Cancel כדי להישאר בלי לשמור'
+                );
+                if (reload) location.reload();
                 return;
             }
 
@@ -3872,6 +3893,9 @@
                     setTimeout(() => reject(new Error('Firebase load timeout')), 10000)
                 );
                 const docSnap = await Promise.race([getDoc(userDocRef), timeoutPromise]);
+                // We successfully reached Firestore and know its state (whether the doc
+                // exists or not). Only now is it safe to let saves overwrite the cloud.
+                cloudLoadOk = true;
 
                 if (docSnap.exists()) {
                     const firebaseData = docSnap.data();
