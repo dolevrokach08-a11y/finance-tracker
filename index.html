@@ -16,6 +16,7 @@
     <!-- Shared theme -->
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared-theme.css">
+    <script src="shared/user-storage.js"></script>
     <script src="ticker.js" defer></script>
 
     <!-- Google Fonts -->
@@ -1249,12 +1250,14 @@
             const banner = document.createElement('div');
             banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 16px; text-align: center;';
             banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
-            mainContainer.insertBefore(banner, mainContainer.querySelector('h1'));
+            // (the h1 is not a direct child of mainContainer — insertBefore(h1) threw; prepend instead)
+            mainContainer.insertBefore(banner, mainContainer.firstChild);
         } else {
             // Check if user is signed in
             onAuthStateChanged(auth, (user) => {
                 if (user) {
                     console.log('User is signed in:', user.email);
+                    if (window.UserStorage) window.UserStorage.syncToUser(user.uid); // isolate localStorage to this uid
                     showUI(user);                 // instant render from local cache
                     syncFromFirebase(user);       // then refresh from cloud + re-render
                 } else {
@@ -1272,6 +1275,9 @@
                     window.location.href = 'login.html';
                     return;
                 }
+                // Archive this user's local data and clear the plain keys BEFORE signOut,
+                // so the next account on this browser cannot inherit them.
+                if (window.UserStorage) window.UserStorage.clearOnLogout();
                 await signOut(auth);
                 console.log('User signed out');
                 window.location.href = 'login.html';

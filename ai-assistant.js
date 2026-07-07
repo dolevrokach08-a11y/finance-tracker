@@ -7,6 +7,18 @@
  * Falls back to local analysis when API key is not configured.
  */
 
+// ==================== SHARED HELPERS ====================
+
+/** Escape HTML so user/model/imported content can never inject markup. */
+function aiEscapeHTML(text) {
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // ==================== AI ASSISTANT COMPONENT ====================
 
 class FinancialAIAssistant {
@@ -406,6 +418,8 @@ class FinancialAIAssistant {
         this.panel.className = 'ai-chat-panel';
         this.panel.setAttribute('role', 'dialog');
         this.panel.setAttribute('aria-label', 'עוזר פיננסי AI');
+        // Re-read the key: user storage may have swapped accounts since construction
+        this.apiKey = localStorage.getItem('ai_api_key') || null;
         const hasKey = !!this.apiKey;
         const statusClass = hasKey ? 'connected' : 'local';
         const statusText = hasKey ? 'Claude API מחובר' : 'מצב מקומי';
@@ -555,6 +569,8 @@ class FinancialAIAssistant {
         this._scrollToBottom();
 
         try {
+            // Re-read the key: user storage may have swapped accounts since construction
+            this.apiKey = localStorage.getItem('ai_api_key') || null;
             let response;
             if (this.apiKey) {
                 response = await this._callClaudeAPI(text);
@@ -583,7 +599,14 @@ class FinancialAIAssistant {
         this._scrollToBottom();
     }
 
+    _escapeHTML(text) {
+        return aiEscapeHTML(text);
+    }
+
     _formatResponse(text) {
+        // Escape HTML FIRST so user/model content can never inject markup (XSS),
+        // then apply our own safe formatting on the escaped text.
+        text = this._escapeHTML(text);
         // Bold text between ** **
         text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
         // Line breaks
@@ -1961,8 +1984,8 @@ class SmartInsightsWidget {
                             ">${healthInsight.score}</div>
                         </div>
                         <div>
-                            <div style="color: hsl(210, 20%, 92%); font-weight: 600; margin-bottom: 4px;">${healthInsight.title}</div>
-                            <div style="color: hsl(215, 12%, 52%); font-size: 0.8rem;">${healthInsight.description}</div>
+                            <div style="color: hsl(210, 20%, 92%); font-weight: 600; margin-bottom: 4px;">${aiEscapeHTML(healthInsight.title)}</div>
+                            <div style="color: hsl(215, 12%, 52%); font-size: 0.8rem;">${aiEscapeHTML(healthInsight.description)}</div>
                         </div>
                     </div>
                     ${healthInsight.breakdown ? `
@@ -1971,7 +1994,7 @@ class SmartInsightsWidget {
                             const pct = Math.round((b.points / b.max) * 100);
                             const barColor = pct >= 80 ? '#22c55e' : pct >= 50 ? '#eab308' : pct >= 30 ? '#f97316' : '#ef4444';
                             return `<div style="display: flex; align-items: center; gap: 8px; font-size: 0.72rem;">
-                                <div style="width: 120px; color: hsl(215, 12%, 58%); text-align: left; flex-shrink: 0;">${b.label}</div>
+                                <div style="width: 120px; color: hsl(215, 12%, 58%); text-align: left; flex-shrink: 0;">${aiEscapeHTML(b.label)}</div>
                                 <div style="flex: 1; height: 6px; background: hsl(220, 14%, 18%); border-radius: 3px; overflow: hidden;">
                                     <div style="height: 100%; width: ${pct}%; background: ${barColor}; border-radius: 3px; transition: width 1s ease;"></div>
                                 </div>
@@ -2007,8 +2030,8 @@ class SmartInsightsWidget {
                         flex-shrink: 0;
                     ">${insight.icon || '*'}</div>
                     <div>
-                        <div style="color: hsl(210, 20%, 90%); font-weight: 500; font-size: 0.85rem;">${insight.title}</div>
-                        <div style="color: hsl(215, 12%, 52%); font-size: 0.75rem; margin-top: 2px;">${insight.description}</div>
+                        <div style="color: hsl(210, 20%, 90%); font-weight: 500; font-size: 0.85rem;">${aiEscapeHTML(insight.title)}</div>
+                        <div style="color: hsl(215, 12%, 52%); font-size: 0.75rem; margin-top: 2px;">${aiEscapeHTML(insight.description)}</div>
                     </div>
                 </div>`).join('')}
             </div>

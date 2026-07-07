@@ -49,6 +49,22 @@ git push
 
 ---
 
+## Firestore Security Rules
+
+החוקים מנוהלים בריפו בקובץ `firestore.rules` (owner-only על `users/{uid}`, קריאה-בלבד ללקוחות על `dailyPrices`/`indexHistory`).
+
+**כל שינוי בקובץ מחייב פריסה מחדש:**
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+או ידנית: Firebase Console → Firestore Database → Rules → הדבק את תוכן הקובץ → Publish.
+
+**חשוב:** ניקוי `dailyPrices` ישנים רץ עכשיו רק ב-GitHub Action היומי (`scripts/fetch-prices.js`, retention של שנתיים) — ללקוחות אין ולא צריכה להיות הרשאת מחיקה על האוספים המשותפים.
+
+---
+
 ## GitHub Actions - שליפת מחירים יומית
 
 כדי שהמחירים יתעדכנו אוטומטית כל יום:

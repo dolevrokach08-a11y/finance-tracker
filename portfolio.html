@@ -29,6 +29,7 @@
 
     <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
+    <script src="shared/user-storage.js"></script>
     <script src="ticker.js" defer></script>
     
     <style>
@@ -3658,6 +3659,7 @@
                 if (user) {
                     currentUser = user;
                     console.log('✅ User authenticated:', user.email);
+                    if (window.UserStorage) window.UserStorage.syncToUser(user.uid); // isolate localStorage to this uid
                     if (!authChecked) {
                         authChecked = true;
                         init();
@@ -4014,35 +4016,9 @@ async function fetchDailyPricesFromFirebase(date) {
     }
 }
 
-/**
- * Delete old daily prices from Firebase (before a given date)
- * @param {string} beforeDate - Delete prices before this date (inclusive)
- */
-async function deleteOldDailyPrices(beforeDate) {
-    try {
-        const beforeDateStr = new Date(beforeDate).toISOString().split('T')[0];
-        console.log(`🗑️ Deleting daily prices up to ${beforeDateStr}...`);
-        
-        const dailyPricesRef = collection(db, 'dailyPrices');
-        const snapshot = await getDocs(dailyPricesRef);
-        
-        let deletedCount = 0;
-        for (const docSnap of snapshot.docs) {
-            const docDate = docSnap.id; // Document ID is the date string
-            if (docDate <= beforeDateStr) {
-                await deleteDoc(doc(db, 'dailyPrices', docDate));
-                console.log(`   🗑️ Deleted ${docDate}`);
-                deletedCount++;
-            }
-        }
-        
-        console.log(`✅ Deleted ${deletedCount} old price records`);
-        return deletedCount;
-    } catch (error) {
-        console.error('❌ Error deleting old daily prices:', error);
-        return 0;
-    }
-}
+// deleteOldDailyPrices was removed: dailyPrices is a SHARED collection and a
+// client-side delete wiped price data for every user. Retention cleanup now
+// runs in the daily GitHub Action (scripts/fetch-prices.js).
 
 /**
  * Fill snapshot modal with prices from dailyPrices
@@ -4435,14 +4411,10 @@ function confirmSnapshotData() {
         data.onComplete(snapshot);
     }
     
-    // Delete old daily prices (up to and including this snapshot date)
-    const snapshotDateStr = new Date(data.date).toISOString().split('T')[0];
-    deleteOldDailyPrices(snapshotDateStr).then(count => {
-        if (count > 0) {
-            console.log(`🗑️ Cleaned up ${count} old price records`);
-        }
-    }).catch(e => console.warn('⚠️ deleteOldDailyPrices failed:', e?.message || e));
-    
+    // NOTE: old-dailyPrices cleanup moved to the daily GitHub Action
+    // (scripts/fetch-prices.js retention sweep) — clients are read-only
+    // on shared collections and must not delete other users' price data.
+
     window._snapshotModalData = null;
     notify('✅ Snapshot נוצר בהצלחה', 'success');
 }
@@ -7615,6 +7587,15 @@ function calculateTWRv3(startDate = null) {
         
         function loadFromLocalStorage() {
             try {
+                // Isolation guard: never load local data that belongs to a different uid.
+                // (Plain keys are owned by UserStorage's active uid; demo mode has no currentUser.uid claim.)
+                if (window.UserStorage && currentUser && currentUser.uid && !_isDemoMode) {
+                    const owner = window.UserStorage.activeUid();
+                    if (owner && owner !== currentUser.uid) {
+                        console.warn('⚠️ Local data belongs to another account — skipping localStorage load');
+                        return false;
+                    }
+                }
                 const saved = localStorage.getItem('portfolio');
                 if (saved) {
                     const loaded = JSON.parse(saved);

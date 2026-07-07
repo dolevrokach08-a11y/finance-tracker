@@ -281,10 +281,31 @@ async function main() {
         indices: indexHistory,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      
+
       console.log(`\n✅ Saved index history for ${Object.keys(indexHistory).length} indices`);
     }
-    
+
+    // === ניקוי dailyPrices ישנים (retention) ===
+    // Moved here from the browser (deleteOldDailyPrices in portfolio.html):
+    // clients are read-only on shared collections now. Keep a generous window
+    // so historical-snapshot backfill still finds prices for past dates.
+    const RETENTION_DAYS = 730; // ~2 years
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - RETENTION_DAYS);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    console.log(`\n🗑️ Cleaning dailyPrices older than ${cutoffStr}...`);
+    const oldDocs = await db.collection('dailyPrices').get();
+    let deletedCount = 0;
+    for (const docSnap of oldDocs.docs) {
+      // Document IDs are YYYY-MM-DD date strings; skip non-date ids (e.g. 'latest')
+      if (/^\d{4}-\d{2}-\d{2}$/.test(docSnap.id) && docSnap.id < cutoffStr) {
+        await docSnap.ref.delete();
+        deletedCount++;
+      }
+    }
+    console.log(`   ✅ Deleted ${deletedCount} old price docs`);
+
   } catch (error) {
     console.error('❌ Error:', error);
     process.exit(1);

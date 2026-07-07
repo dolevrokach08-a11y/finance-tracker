@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// Security rules for finance-tracker.
+//
+// Deploy: firebase deploy --only firestore:rules
+// (or paste into Firebase Console → Firestore → Rules).
+//
+// Model:
+//   users/{uid}/**        — private: readable/writable ONLY by that user.
+//   dailyPrices/{date}    — shared price cache: clients read-only.
+//   indexHistory/{doc}    — shared benchmark history: clients read-only.
+// Writes to the shared collections come exclusively from the daily GitHub
+// Action via the Admin SDK (which bypasses these rules by design).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Per-user data: strictly owner-only ─────────────────────────────
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // The users/{uid} root doc (terms acceptance flags etc.)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── Shared, read-only collections ───────────────────────────────────
+    match /dailyPrices/{priceDoc} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only (daily Action)
+    }
+
+    match /indexHistory/{historyDoc} {
+      allow read: if request.auth != null;
+      allow write: if false; // Admin SDK only (daily Action)
+    }
+
+    // ── Everything else: denied ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

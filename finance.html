@@ -775,6 +775,7 @@
 
     <!-- Shared Lovable-inspired theme additions (page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
+    <script src="shared/user-storage.js"></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -2531,6 +2532,7 @@
                     if (user) {
                         currentUser = user;
                         console.log('User authenticated');
+                        if (window.UserStorage) window.UserStorage.syncToUser(user.uid); // isolate localStorage to this uid
                         if (!authChecked) {
                             authChecked = true;
                             init();
