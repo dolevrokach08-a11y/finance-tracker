@@ -744,6 +744,13 @@
             background: var(--accent-dim);
             border-color: var(--accent);
         }
+
+        /* Tithe tracking is a per-user opt-in (data.settings.titheEnabled);
+           when off, applyFinanceSettings() sets body.tithe-off and every
+           tithe-only element is hidden. */
+        body.tithe-off .tithe-feature {
+            display: none !important;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script>
@@ -839,7 +846,7 @@
                     <button onclick="showTab('accrual')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">📐 חודש בצבירה</button>
                     <button onclick="showTab('reports')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">דוחות</button>
                     <button onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
-                    <button onclick="showTab('tithe')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
+                    <button onclick="showTab('tithe')" class="tab-btn tithe-feature px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
                     <button onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
                     <button onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
                     <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
@@ -890,7 +897,7 @@
                         </div>
                         <div style="font-size: 0.85rem; opacity: 0.9; margin-bottom: 8px;">יתרה זמינה</div>
                         <div id="sum-available" style="font-size: 2.1rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; letter-spacing: -0.5px; line-height: 1.1;">₪0</div>
-                        <div style="font-size: 0.75rem; opacity: 0.8;">(לאחר מעשר)</div>
+                        <div class="tithe-feature" style="font-size: 0.75rem; opacity: 0.8;">(לאחר מעשר)</div>
                     </div>
                 </div>
                 
@@ -982,7 +989,7 @@
                         <input type="text" id="inc-desc" placeholder="תיאור" class="w-full p-3 border rounded-lg mb-3">
                         <input type="number" id="inc-amt" placeholder="סכום" class="w-full p-3 border rounded-lg mb-3">
                         <select id="inc-cat" class="w-full p-3 border rounded-lg mb-3"></select>
-                        <div class="flex items-center gap-2 mb-3">
+                        <div class="flex items-center gap-2 mb-3 tithe-feature">
                             <input type="checkbox" id="inc-exempt" class="w-4 h-4 rounded">
                             <label for="inc-exempt" class="text-sm text-gray-700">פטור ממעשר (מתנה, החזר, הלוואה וכו')</label>
                         </div>
@@ -1081,7 +1088,7 @@
                             <label>קטגוריה</label>
                             <select id="edit-cat" class="edit-input"></select>
                         </div>
-                        <div class="edit-field" id="edit-exempt-field" style="display: none;">
+                        <div class="edit-field tithe-feature" id="edit-exempt-field" style="display: none;">
                             <label class="flex items-center gap-2" style="cursor:pointer;">
                                 <input type="checkbox" id="edit-exempt">
                                 <span>פטור ממעשר</span>
@@ -1236,8 +1243,8 @@
                     <div style="padding: 16px 20px;">
                         <p class="text-sm text-gray-600 mb-3">בחר עבור כל הכנסה למי היא שייכת:</p>
                         <div class="flex gap-2 mb-4">
-                            <button onclick="setAllEarner('father')" class="btn bg-blue-500 text-white py-2 px-4 rounded-lg text-sm">👨 הכל אב</button>
-                            <button onclick="setAllEarner('mother')" class="btn bg-pink-500 text-white py-2 px-4 rounded-lg text-sm">👩 הכל אם</button>
+                            <button id="set-all-father-btn" onclick="setAllEarner('father')" class="btn bg-blue-500 text-white py-2 px-4 rounded-lg text-sm">👨 הכל אב</button>
+                            <button id="set-all-mother-btn" onclick="setAllEarner('mother')" class="btn bg-pink-500 text-white py-2 px-4 rounded-lg text-sm">👩 הכל אם</button>
                         </div>
                         <div id="earner-items-list" class="space-y-2 max-h-80 overflow-y-auto"></div>
                     </div>
@@ -1554,7 +1561,7 @@
             </div>
 
             <!-- Tithe Tab -->
-            <div id="tab-tithe" class="tab-content hidden">
+            <div id="tab-tithe" class="tab-content hidden tithe-feature">
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                     <div style="background: var(--bg-surface); border: 1px solid var(--accent); color: var(--text-primary); padding: 30px; border-radius: 16px; box-shadow: var(--shadow-lg); text-align: center; transition: transform 0.3s;">
                         <h3 class="text-xl font-semibold mb-4" style="opacity: 0.9; text-transform: uppercase; letter-spacing: 0.5px;">יתרת מעשר</h3>
@@ -1584,6 +1591,28 @@
 
             <!-- Settings Tab -->
             <div id="tab-settings" class="tab-content hidden">
+                <!-- Personalization Section -->
+                <div class="glass p-6 mb-6">
+                    <h3 class="text-xl font-semibold mb-4">התאמה אישית</h3>
+                    <div class="flex items-center gap-3 mb-4">
+                        <input type="checkbox" id="setting-tithe-enabled" class="w-4 h-4 rounded">
+                        <label for="setting-tithe-enabled" class="text-sm">מעקב מעשרות (טאב מעשרות, סימון הכנסות פטורות, יתרת מעשר)</label>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="text-sm block mb-1">כינוי מפרנס/ת 1 👨</label>
+                            <input type="text" id="setting-earner-father" placeholder="אב" class="w-full p-3 border rounded-lg">
+                        </div>
+                        <div>
+                            <label class="text-sm block mb-1">כינוי מפרנס/ת 2 👩</label>
+                            <input type="text" id="setting-earner-mother" placeholder="אם" class="w-full p-3 border rounded-lg">
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="saveFinanceSettings()" class="btn btn-primary text-white py-3 px-6 rounded-lg font-medium">שמור הגדרות</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Export/Import Section -->
                 <div class="glass p-6 mb-6">
                     <h3 class="text-xl font-semibold mb-4">גיבוי נתונים</h3>
@@ -2553,6 +2582,9 @@
             clearTimeout(window.__loadingTimeout);
             loadFromLocalStorage();
 
+            ensureFinanceSettings();
+            applyFinanceSettings();
+
             populateYearMonthSelectors();
             const months = getMonths();
             const cur = getMonthKey();
@@ -2587,9 +2619,82 @@
             netWorthLiabilities: [],
             netWorthHistory: [],
             bills: [],
-            debts: []
+            debts: [],
+            settings: null
         };
         let editingFixed = null;
+
+        // ===========================================
+        // Per-user settings (tithe opt-in, earner labels)
+        // ===========================================
+        // Tithe tracking and the אב/אם household model were hard-wired for the
+        // original owner. They are now per-user settings persisted inside the
+        // data object (→ synced to Firestore with everything else).
+        // Migration: a dataset that already contains tithe activity keeps the
+        // feature on; a fresh dataset starts with it off (opt-in via הגדרות).
+
+        function ensureFinanceSettings() {
+            if (data.settings && typeof data.settings === 'object' && data.settings.earnerLabels) {
+                return data.settings;
+            }
+            const hasTitheActivity =
+                (Array.isArray(data.transactions) && data.transactions.some(t =>
+                    t.type === 'manual-tithe' || t.titheExempt === true)) ||
+                (Array.isArray(data.donations) && data.donations.length > 0);
+
+            data.settings = {
+                titheEnabled: hasTitheActivity,
+                earnerLabels: { father: 'אב', mother: 'אם' }
+            };
+            return data.settings;
+        }
+
+        function isTitheEnabled() {
+            return !!(ensureFinanceSettings().titheEnabled);
+        }
+
+        function getEarnerLabel(key) {
+            const labels = ensureFinanceSettings().earnerLabels || {};
+            if (key === 'father') return labels.father || 'אב';
+            if (key === 'mother') return labels.mother || 'אם';
+            return '';
+        }
+
+        /** Apply settings to the static DOM: tithe visibility + earner label texts. */
+        function applyFinanceSettings() {
+            const s = ensureFinanceSettings();
+
+            // Tithe: toggle a body class; CSS hides every .tithe-feature element
+            document.body.classList.toggle('tithe-off', !s.titheEnabled);
+
+            // Earner labels: update every static <option value="father|mother">
+            document.querySelectorAll('option[value="father"]').forEach(o => { o.textContent = `👨 ${getEarnerLabel('father')}`; });
+            document.querySelectorAll('option[value="mother"]').forEach(o => { o.textContent = `👩 ${getEarnerLabel('mother')}`; });
+            const allFatherBtn = document.getElementById('set-all-father-btn');
+            const allMotherBtn = document.getElementById('set-all-mother-btn');
+            if (allFatherBtn) allFatherBtn.textContent = `👨 הכל ${getEarnerLabel('father')}`;
+            if (allMotherBtn) allMotherBtn.textContent = `👩 הכל ${getEarnerLabel('mother')}`;
+
+            // Settings tab controls reflect current values
+            const titheToggle = document.getElementById('setting-tithe-enabled');
+            if (titheToggle) titheToggle.checked = !!s.titheEnabled;
+            const fatherInput = document.getElementById('setting-earner-father');
+            if (fatherInput) fatherInput.value = getEarnerLabel('father');
+            const motherInput = document.getElementById('setting-earner-mother');
+            if (motherInput) motherInput.value = getEarnerLabel('mother');
+        }
+
+        function saveFinanceSettings() {
+            const s = ensureFinanceSettings();
+            s.titheEnabled = !!document.getElementById('setting-tithe-enabled')?.checked;
+            const father = document.getElementById('setting-earner-father')?.value.trim();
+            const mother = document.getElementById('setting-earner-mother')?.value.trim();
+            s.earnerLabels = { father: father || 'אב', mother: mother || 'אם' };
+            applyFinanceSettings();
+            saveToFirebase();
+            notify('✅ ההגדרות נשמרו');
+        }
+        window.saveFinanceSettings = saveFinanceSettings;
         
         // Sync protection - track when data was loaded and from where
         let localLoadTime = null;           // When we loaded data locally
@@ -3097,10 +3202,10 @@
                     <div class="text-xs text-gray-500">נטו</div>
                     <div class="text-xl font-bold" style="color: ${net >= 0 ? 'hsl(142, 60%, 50%)' : 'hsl(0, 70%, 60%)'};">₪${Math.round(net).toLocaleString('he-IL')}</div>
                 </div>
-                <div class="glass p-3 text-center">
+                ${isTitheEnabled() ? `<div class="glass p-3 text-center">
                     <div class="text-xs text-gray-500">מעשר משוער</div>
                     <div class="text-xl font-bold" style="color: hsl(45, 90%, 55%);">₪${Math.round(tithe).toLocaleString('he-IL')}</div>
-                </div>
+                </div>` : ''}
             `;
 
             // Sort and render lists
@@ -3135,7 +3240,7 @@
                         <div class="flex-1">
                             <div class="font-medium">${escapeHtml(t.desc || '')}
                                 <span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(142,60%,50%,0.15);color:hsl(142,60%,50%);">💳 תנועה</span>
-                                ${t.titheExempt ? '<span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(30,80%,55%,0.15);color:hsl(30,80%,55%);">פטור ממעשר</span>' : ''}
+                                ${isTitheEnabled() && t.titheExempt ? '<span class="text-xs px-2 py-0.5 rounded mr-1" style="background:hsla(30,80%,55%,0.15);color:hsl(30,80%,55%);">פטור ממעשר</span>' : ''}
                             </div>
                             <div class="text-xs" style="color: var(--text-muted);">${escapeHtml(t.cat || '')} • ${reason}</div>
                         </div>
@@ -4048,7 +4153,7 @@
                 return (a.time || '').localeCompare(b.time || '');
             });
 
-            const earnerLabel = e => e === 'father' ? 'אב' : e === 'mother' ? 'אם' : '';
+            const earnerLabel = e => (e === 'father' || e === 'mother') ? getEarnerLabel(e) : '';
             const rows = txs.map(t => ({
                 'מזהה': t.id,
                 'סוג': t.type === 'income' ? 'הכנסה' : t.type === 'expense' ? 'הוצאה' : t.type,
@@ -4792,7 +4897,7 @@
 
             if (incomeCount > 0) {
                 setTimeout(() => {
-                    if (confirm(`נוספו ${incomeCount} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
+                    if (isTitheEnabled() && confirm(`נוספו ${incomeCount} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
                         showTitheExemptDialog(selectedMonth);
                     }
                     setTimeout(() => {
@@ -5124,8 +5229,8 @@
                         <div class="text-xs text-gray-500">₪${inc.amt.toLocaleString()}</div>
                     </div>
                     <div class="flex gap-1">
-                        <button onclick="setEarnerItem(${inc.id}, 'father', this)" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👨 אב</button>
-                        <button onclick="setEarnerItem(${inc.id}, 'mother', this)" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👩 אם</button>
+                        <button onclick="setEarnerItem(${inc.id}, 'father', this)" data-earner="father" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👨 ${getEarnerLabel('father')}</button>
+                        <button onclick="setEarnerItem(${inc.id}, 'mother', this)" data-earner="mother" class="earner-btn px-3 py-1 rounded text-xs border" style="border-color: rgba(255,255,255,0.1);">👩 ${getEarnerLabel('mother')}</button>
                     </div>
                 </div>
             `).join('');
@@ -5155,7 +5260,7 @@
 
             // Update all buttons
             document.querySelectorAll('#earner-items-list .earner-btn').forEach(btn => {
-                const isMatch = (earner === 'father' && btn.textContent.includes('אב')) || (earner === 'mother' && btn.textContent.includes('אם'));
+                const isMatch = btn.dataset.earner === earner;
                 btn.style.background = isMatch ? (earner === 'father' ? 'rgba(59,130,246,0.2)' : 'rgba(236,72,153,0.2)') : 'transparent';
                 btn.style.borderColor = isMatch ? (earner === 'father' ? '#3b82f6' : '#ec4899') : 'rgba(255,255,255,0.1)';
                 btn.style.fontWeight = isMatch ? '600' : '400';
@@ -5335,7 +5440,7 @@
                     <div>
                         <span class="font-medium">"${r.keyword}"</span>
                         <span class="text-gray-600"> → ${r.category}</span>
-                        ${r.earner === 'father' ? ' <span class="text-blue-600">👨 אב</span>' : r.earner === 'mother' ? ' <span class="text-pink-600">👩 אם</span>' : ''}
+                        ${r.earner === 'father' ? ` <span class="text-blue-600">👨 ${getEarnerLabel('father')}</span>` : r.earner === 'mother' ? ` <span class="text-pink-600">👩 ${getEarnerLabel('mother')}</span>` : ''}
                     </div>
                     <div class="flex gap-1">
                         <button onclick="editCategoryRule(${r.id})" class="text-blue-500 hover:text-blue-700 px-2">ערוך</button>
@@ -5669,6 +5774,9 @@
         async function init() {
             await loadFromFirebase();
 
+            ensureFinanceSettings();
+            applyFinanceSettings();
+
             populateYearMonthSelectors();
             const months = getMonths();
             const cur = getMonthKey();
@@ -5693,6 +5801,8 @@
         // Demo mode initialization
         if (_isDemoMode) {
             data = window.__demoFinanceData();
+            ensureFinanceSettings();
+            applyFinanceSettings();
 
             // Add demo banner at top of main content
             const mainContent = document.getElementById('mainContent');
@@ -5912,9 +6022,9 @@
             function renderRow(t) {
                 const showRuleBtn = !t.fixed && t.cat === 'אחר';
                 const isIncome = t.type === 'income';
-                const isExempt = t.titheExempt || false;
-                const canToggleExempt = isIncome && !t.fixed;
-                const earnerLabel = t.earner === 'father' ? '👨 אב' : t.earner === 'mother' ? '👩 אם' : '';
+                const isExempt = isTitheEnabled() && (t.titheExempt || false);
+                const canToggleExempt = isTitheEnabled() && isIncome && !t.fixed;
+                const earnerLabel = t.earner === 'father' ? `👨 ${getEarnerLabel('father')}` : t.earner === 'mother' ? `👩 ${getEarnerLabel('mother')}` : '';
 
                 // Date badge — shows transaction's actual date; tinted orange when it falls in the previous calendar month
                 let dateBadge = '';
@@ -6022,7 +6132,7 @@
         function renderFixedItems() {
             document.getElementById('fix-inc-list').innerHTML = data.fixedIncomes.map(f=>{
                 const mc = getMonthsInRange(f.start,f.end).length;
-                const earnerBadge = f.earner === 'father' ? ' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👨 אב</span>' : f.earner === 'mother' ? ' <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👩 אם</span>' : '';
+                const earnerBadge = f.earner === 'father' ? ` <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👨 ${getEarnerLabel('father')}</span>` : f.earner === 'mother' ? ` <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👩 ${getEarnerLabel('mother')}</span>` : '';
                 return `<div class="item-income p-3 rounded-lg">
                     <div class="flex justify-between items-start">
                         <div class="flex-1"><div class="font-medium">${f.description}${earnerBadge}</div>

@@ -3806,24 +3806,29 @@
         // TWR ENHANCEMENT v45 - Multi-Currency Cash Tracking
         // ===========================================
         
-        // הגדרות עמלות
-        const FEE_CONFIG = {
+        // ===========================================
+        // Per-user asset config (fees + currency map)
+        // ===========================================
+        // These used to be hard-coded constants tuned to one specific broker
+        // account — every other user's TWR would silently be computed with the
+        // wrong fees/currencies. They now live in portfolio.assetConfig
+        // (persisted with the portfolio → synced to Firestore by saveData).
+        //
+        // LEGACY_* below are kept ONLY as the migration seed: a portfolio that
+        // already has data but no assetConfig predates this change and was
+        // built under these constants, so it inherits them (keeps the owner's
+        // historical TWR identical). A fresh/empty portfolio gets neutral
+        // defaults (no fees, empty map).
+        const LEGACY_FEE_CONFIG = {
             USD: 5,    // $5 לעסקה דולרית
             EUR: 20,   // €20 לעסקה יורו
-            ILS: 0,    // ללא עמלה לשקלית
-            
-            // מניות עם עמלה דולרית
+            ILS: 0,
             USD_FEE_SYMBOLS: ['USSC.L', 'MARA', 'LUMN', 'NVDA', 'AVGS.L'],
-            
-            // מניות עם עמלה יורו (רק קניות!)
             EUR_FEE_SYMBOLS: ['ZPRX.DE', 'AVWS.DE'],
-            
-            // מניות שהקנייה הראשונה כבר כללה עמלה
             FIRST_PURCHASE_FEE_INCLUDED: ['USSC.L']
         };
 
-        // מפת מטבע לפי סימול
-        const CURRENCY_MAP = {
+        const LEGACY_CURRENCY_MAP = {
             'USSC.L': 'USD', 'AVGS.L': 'USD',
             'AVWS.DE': 'EUR', 'ZPRX.DE': 'EUR',
             'NVDA': 'USD', 'MAGS': 'USD', 'IBIT': 'USD', 'ETHA': 'USD', 'TSLA': 'USD',
@@ -3832,46 +3837,82 @@
             'TEM': 'USD', 'OPEN': 'USD', 'RKT': 'USD', 'LUMN': 'USD'
         };
 
-        // אג"ח אמיתיות (מחיר באחוזים)
-        const REAL_BONDS = new Set(['5139522', '2310449']);
+        /**
+         * Return portfolio.assetConfig, creating it on first use.
+         * Existing dataset without a config → seeded from the legacy constants.
+         * Empty dataset → neutral defaults (fees 0, empty lists/map).
+         */
+        function ensureAssetConfig() {
+            if (portfolio.assetConfig && portfolio.assetConfig.fees) {
+                return portfolio.assetConfig;
+            }
+            const hasExistingData =
+                (Array.isArray(portfolio.holdings) && portfolio.holdings.length > 0) ||
+                (Array.isArray(portfolio.purchases) && portfolio.purchases.length > 0);
+
+            portfolio.assetConfig = hasExistingData ? {
+                fees: {
+                    USD: LEGACY_FEE_CONFIG.USD,
+                    EUR: LEGACY_FEE_CONFIG.EUR,
+                    ILS: LEGACY_FEE_CONFIG.ILS,
+                    usdFeeSymbols: [...LEGACY_FEE_CONFIG.USD_FEE_SYMBOLS],
+                    eurFeeSymbols: [...LEGACY_FEE_CONFIG.EUR_FEE_SYMBOLS],
+                    firstPurchaseFeeIncluded: [...LEGACY_FEE_CONFIG.FIRST_PURCHASE_FEE_INCLUDED]
+                },
+                currencyMap: { ...LEGACY_CURRENCY_MAP }
+            } : {
+                fees: { USD: 0, EUR: 0, ILS: 0, usdFeeSymbols: [], eurFeeSymbols: [], firstPurchaseFeeIncluded: [] },
+                currencyMap: {}
+            };
+            return portfolio.assetConfig;
+        }
 
         /**
-         * קבלת מטבע הנכס לפי סימול
+         * קבלת מטבע הנכס לפי סימול.
+         * Order: user's currencyMap → currency recorded on an existing
+         * holding/bond with the same symbol → suffix heuristics → USD.
+         * (Call sites prefer the record's own `currency` field; this is the
+         * fallback for old records that never stored one.)
          */
         function getAssetCurrency(symbol) {
             if (!symbol) return 'ILS';
-            if (/^\d{7}$/.test(symbol)) return 'ILS';
-            return CURRENCY_MAP[symbol] || 'USD';
+            if (/^\d{7}$/.test(symbol)) return 'ILS'; // Israeli numeric security IDs
+            const cfg = ensureAssetConfig();
+            if (cfg.currencyMap[symbol]) return cfg.currencyMap[symbol];
+            const holding = (portfolio.holdings || []).find(h => h.symbol === symbol && h.currency);
+            if (holding) return holding.currency;
+            const bond = (portfolio.bonds || []).find(b => b.symbol === symbol && b.currency);
+            if (bond) return bond.currency;
+            if (symbol.endsWith('.TA')) return 'ILS';
+            if (/\.(DE|PA|AS|MI)$/.test(symbol)) return 'EUR';
+            return 'USD';
         }
 
-        /**
-         * בדיקה אם הנכס הוא אג"ח אמיתית
-         */
-        function isRealBond(symbol) {
-            return REAL_BONDS.has(symbol);
-        }
+        // NOTE: REAL_BONDS / isRealBond were removed — dead code (never called).
 
         /**
-         * חישוב עמלה לעסקה
+         * חישוב עמלה לעסקה — driven by the per-user assetConfig.
          */
         function calculateFeeForTransaction(symbol, transactionType, purchaseCountForSymbol = 0) {
+            const cfg = ensureAssetConfig();
             const currency = getAssetCurrency(symbol);
-            
+
             if (transactionType === 'sell') {
                 return { fee: 0, feeCurrency: null };
             }
-            
-            if (symbol === 'USSC.L' && purchaseCountForSymbol === 0) {
+
+            // First purchase already had its fee baked into the cost basis
+            if (cfg.fees.firstPurchaseFeeIncluded.includes(symbol) && purchaseCountForSymbol === 0) {
                 return { fee: 0, feeCurrency: null };
             }
-            
-            if (currency === 'USD' && FEE_CONFIG.USD_FEE_SYMBOLS.includes(symbol)) {
-                return { fee: FEE_CONFIG.USD, feeCurrency: 'USD' };
+
+            if (currency === 'USD' && cfg.fees.usdFeeSymbols.includes(symbol)) {
+                return { fee: cfg.fees.USD, feeCurrency: 'USD' };
             }
-            if (currency === 'EUR' && FEE_CONFIG.EUR_FEE_SYMBOLS.includes(symbol)) {
-                return { fee: FEE_CONFIG.EUR, feeCurrency: 'EUR' };
+            if (currency === 'EUR' && cfg.fees.eurFeeSymbols.includes(symbol)) {
+                return { fee: cfg.fees.EUR, feeCurrency: 'EUR' };
             }
-            
+
             return { fee: 0, feeCurrency: null };
         }
 
@@ -7560,7 +7601,11 @@ function calculateTWRv3(startDate = null) {
                         dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
                         holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
                         watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
-                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : []
+                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : [],
+                        // Per-user fees/currency config — MUST survive the rebuild,
+                        // otherwise ensureAssetConfig would re-seed legacy fees for
+                        // any account that already has holdings.
+                        assetConfig: loaded.assetConfig && loaded.assetConfig.fees ? loaded.assetConfig : undefined
                     };
 
                     // Run migration
@@ -7643,7 +7688,10 @@ function calculateTWRv3(startDate = null) {
                         dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
                         holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
                         watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
-                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : []
+                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : [],
+                        // Per-user fees/currency config — MUST survive the rebuild
+                        // (see the Firebase load path note above).
+                        assetConfig: loaded.assetConfig && loaded.assetConfig.fees ? loaded.assetConfig : undefined
                     };
 
                     // Run migration
