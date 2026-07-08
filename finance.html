@@ -783,6 +783,7 @@
     <!-- Shared Lovable-inspired theme additions (page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
     <script src="shared/user-storage.js"></script>
+    <script src="shared/data.js"></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -4083,6 +4084,12 @@
 
         function loadFromLocalStorage() {
             try {
+                // Isolation guard: never load plain-key data owned by another uid
+                // (same rule portfolio.html enforces; shared via FTData).
+                if (!window.FTData.canLoadLocal(currentUser && currentUser.uid, _isDemoMode)) {
+                    console.warn('⚠️ Local data belongs to another account — skipping localStorage load');
+                    return false;
+                }
                 const saved = localStorage.getItem('financeTrackerData');
                 if(saved) {
                     data = JSON.parse(saved);
@@ -4912,7 +4919,7 @@
         }
 
         // ========== Auto-import from the scraper Worker (pending transactions) ==========
-        const PENDING_API = 'https://finance-proxy.dolevrokach08.workers.dev/api/transactions';
+        const PENDING_API = window.FTData.pendingApi();
 
         // The Worker scopes pending rows per user, so every call must carry the
         // signed-in user's Firebase ID token. Returns null when not signed in.
