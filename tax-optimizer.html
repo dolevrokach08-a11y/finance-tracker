@@ -72,6 +72,7 @@ a { color: var(--accent); }
 .year-selector select option { background: hsl(220, 18%, 10%); }
 </style>
 <script src="shared/user-storage.js"></script>
+<script src="shared/data.js"></script>
 <script src="sync-widget.js"></script>
 </head>
 <body>
@@ -881,7 +882,7 @@ function extractNet(text, grossHint) {
 
 const CPI_CACHE_KEY = 'cpi_data_v4';
 const CPI_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
-const CF_WORKER_BASE = 'https://finance-proxy.dolevrokach08.workers.dev';
+const CF_WORKER_BASE = window.FTData.WORKER_BASE;
 
 // שיעורי אינפלציה שנתיים ידועים לישראל (מקור: הלמ"ס / בנק ישראל)
 // ניתן לעדכן את הערכים הבאים מדי שנה
