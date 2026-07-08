@@ -1,0 +1,33 @@
+/* Finance Tracker DS — entry stylesheet.
+   Rendered designs receive this file's @import closure; the tokens travel with it. */
+@import "./tokens/theme.css";
+
+/* Base ground: the app is a dark-first Hebrew (RTL) product. */
+:root { color-scheme: dark light; }
+html { direction: rtl; }
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: "Segoe UI", "Assistant", -apple-system, sans-serif;
+}
+
+/* Numbers and currency are always LTR-isolated inside RTL text. */
+.num {
+  direction: ltr;
+  unicode-bidi: isolate;
+  display: inline-block;
+  font-family: Consolas, "Courier New", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Profit/loss semantic helpers used across the app. */
+.profit { color: var(--profit); }
+.loss { color: var(--loss); }
+
+/* Card surface — the app's basic building block. */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}

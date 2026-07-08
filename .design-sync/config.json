@@ -1,0 +1,7 @@
+{
+  "projectId": "01096980-e659-4658-8f30-1fddd09524a6",
+  "projectName": "Finance Tracker DS",
+  "shape": "tokens-only",
+  "note": "Lite sync: this repo is a vanilla-HTML app with NO component library. Uploaded surface = design tokens (shared/theme.css), styles.css entry, and guidelines (design brief + phase4a spec). No _ds_bundle.js, no components/, no _ds_sync.json (off-script shape, honest omission: every re-sync re-uploads this small surface).",
+  "readmeHeader": ".design-sync/conventions.md"
+}
