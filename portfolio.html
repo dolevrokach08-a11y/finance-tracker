@@ -30,6 +30,7 @@
     <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
     <script src="shared/user-storage.js"></script>
+    <script src="shared/data.js"></script>
     <script src="ticker.js" defer></script>
     
     <style>
@@ -3697,7 +3698,7 @@
         // ===========================================
         // 🔧 הגדר את ה-URL של ה-Cloudflare Worker שלך כאן (ראה worker/worker.js)
         // אחרי deploy: npx wrangler deploy - תקבל URL כמו https://finance-proxy.YOUR_SUBDOMAIN.workers.dev
-        const CF_WORKER_URL = 'https://finance-proxy.dolevrokach08.workers.dev/?url='; // למשל: 'https://finance-proxy.my-account.workers.dev/?url='
+        const CF_WORKER_URL = window.FTData.WORKER_BASE + '/?url='; // base lives in shared/data.js
 
         const CORS_PROXIES = [
             // CF Worker יתווסף אוטומטית כראשון אם מוגדר
@@ -7444,11 +7445,7 @@ function calculateTWRv3(startDate = null) {
                 return;
             }
 
-            const defaultGroups = [
-                { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-            ];
+            const defaultGroups = window.FTData.DEFAULT_GROUPS;
 
             // Validate all holdings have valid groupId
             if (Array.isArray(portfolio.holdings)) {
@@ -7568,45 +7565,9 @@ function calculateTWRv3(startDate = null) {
                         }
                     }
 
-                    const defaultGroups = [
-                        { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                        { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                        { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-                    ];
-
-                    portfolio = {
-                        holdings: Array.isArray(loaded.holdings) ? loaded.holdings.map(h => {
-                            const groupId = parseInt(h.groupId);
-                            const validGroupId = isNaN(groupId) ? 1 : groupId;
-                            return {
-                                ...h,
-                                groupId: validGroupId
-                            };
-                        }) : [],
-                        groups: Array.isArray(loaded.groups) && loaded.groups.length > 0 ? loaded.groups : defaultGroups,
-                        rates: loaded.rates && typeof loaded.rates === 'object' ? loaded.rates : { USD: 3.7, EUR: 4.1 },
-                        bonds: Array.isArray(loaded.bonds) ? loaded.bonds : [],
-                        deposits: Array.isArray(loaded.deposits) ? loaded.deposits : [],
-                        withdrawals: Array.isArray(loaded.withdrawals) ? loaded.withdrawals : [],
-                        purchases: Array.isArray(loaded.purchases) ? loaded.purchases : [],
-                        sales: Array.isArray(loaded.sales) ? loaded.sales : [],
-                        snapshots: Array.isArray(loaded.snapshots) ? loaded.snapshots : [],
-                        cash: loaded.cash && typeof loaded.cash === 'object' ? loaded.cash : { ILS: 0, USD: 0, EUR: 0 },
-                        transactions: Array.isArray(loaded.transactions) ? loaded.transactions : [],
-                        capitalMovements: Array.isArray(loaded.capitalMovements) ? loaded.capitalMovements : [],
-                        bondsCapitalMovements: Array.isArray(loaded.bondsCapitalMovements) ? loaded.bondsCapitalMovements : [],
-                        bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
-                        portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
-                        cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
-                        dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
-                        holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
-                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
-                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : [],
-                        // Per-user fees/currency config — MUST survive the rebuild,
-                        // otherwise ensureAssetConfig would re-seed legacy fees for
-                        // any account that already has holdings.
-                        assetConfig: loaded.assetConfig && loaded.assetConfig.fees ? loaded.assetConfig : undefined
-                    };
+                    // Field spec lives in shared/data.js (single source for both
+                    // load paths; preserves assetConfig — the Phase 2 gotcha).
+                    portfolio = window.FTData.normalizePortfolio(loaded, { source: 'cloud' });
 
                     // Run migration
                     migrateOldData();
@@ -7634,65 +7595,19 @@ function calculateTWRv3(startDate = null) {
             try {
                 // Isolation guard: never load local data that belongs to a different uid.
                 // (Plain keys are owned by UserStorage's active uid; demo mode has no currentUser.uid claim.)
-                if (window.UserStorage && currentUser && currentUser.uid && !_isDemoMode) {
-                    const owner = window.UserStorage.activeUid();
-                    if (owner && owner !== currentUser.uid) {
-                        console.warn('⚠️ Local data belongs to another account — skipping localStorage load');
-                        return false;
-                    }
+                if (!window.FTData.canLoadLocal(currentUser && currentUser.uid, _isDemoMode)) {
+                    console.warn('⚠️ Local data belongs to another account — skipping localStorage load');
+                    return false;
                 }
                 const saved = localStorage.getItem('portfolio');
                 if (saved) {
                     const loaded = JSON.parse(saved);
-                    
-                    const defaultGroups = [
-                        { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                        { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                        { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-                    ];
-                    
-                    portfolio = {
-                        holdings: Array.isArray(loaded.holdings) ? loaded.holdings.map(h => {
-                            const groupId = parseInt(h.groupId);
-                            const validGroupId = isNaN(groupId) ? 1 : groupId;
-                            return {
-                                ...h,
-                                groupId: validGroupId
-                            };
-                        }) : [],
-                        groups: Array.isArray(loaded.groups) && loaded.groups.length > 0 ? loaded.groups : defaultGroups,
-                        rates: loaded.rates && typeof loaded.rates === 'object' ? loaded.rates : portfolio.rates,
-                        bonds: Array.isArray(loaded.bonds) ? loaded.bonds : 
-                               (typeof loaded.bonds === 'number' && loaded.bonds > 0) ? 
-                               [{
-                                   id: Date.now(),
-                                   name: 'קרן אג"ח (מנתונים ישנים)',
-                                   units: 1,
-                                   costBasis: loaded.bonds,
-                                   currentPrice: loaded.bonds,
-                                   lastUpdate: new Date().toISOString()
-                               }] : portfolio.bonds || [],
-                        // New structure
-                        deposits: Array.isArray(loaded.deposits) ? loaded.deposits : [],
-                        withdrawals: Array.isArray(loaded.withdrawals) ? loaded.withdrawals : [],
-                        purchases: Array.isArray(loaded.purchases) ? loaded.purchases : [],
-                        sales: Array.isArray(loaded.sales) ? loaded.sales : [],
-                        snapshots: Array.isArray(loaded.snapshots) ? loaded.snapshots : [],
-                        cash: loaded.cash && typeof loaded.cash === 'object' ? loaded.cash : { ILS: 0, USD: 0 },
-                        // Old structure (for migration)
-                        capitalMovements: Array.isArray(loaded.capitalMovements) ? loaded.capitalMovements : [],
-                        bondsCapitalMovements: Array.isArray(loaded.bondsCapitalMovements) ? loaded.bondsCapitalMovements : [],
-                        bondsSales: Array.isArray(loaded.bondsSales) ? loaded.bondsSales : [],
-                        portfolioSnapshots: Array.isArray(loaded.portfolioSnapshots) ? loaded.portfolioSnapshots : [],
-                        cashFlows: Array.isArray(loaded.cashFlows) ? loaded.cashFlows : [],
-                        dividends: Array.isArray(loaded.dividends) ? loaded.dividends : [],
-                        holdingFees: loaded.holdingFees && typeof loaded.holdingFees === 'object' && !Array.isArray(loaded.holdingFees) ? loaded.holdingFees : {},
-                        watchlist: Array.isArray(loaded.watchlist) ? loaded.watchlist : [],
-                        pensions: Array.isArray(loaded.pensions) ? loaded.pensions : [],
-                        // Per-user fees/currency config — MUST survive the rebuild
-                        // (see the Firebase load path note above).
-                        assetConfig: loaded.assetConfig && loaded.assetConfig.fees ? loaded.assetConfig : undefined
-                    };
+
+                    // Field spec lives in shared/data.js. 'local' keeps this path's
+                    // extras: legacy numeric-bonds migration + prev rates/bonds
+                    // fallbacks. Also fixes the old omission of `transactions`
+                    // (a local-only load used to drop them on the next save).
+                    portfolio = window.FTData.normalizePortfolio(loaded, { source: 'local', prev: portfolio });
 
                     // Run migration
                     migrateOldData();
@@ -11899,11 +11814,7 @@ ${msg}`, 'warning');
             // Reset portfolio to empty state
             portfolio = {
                 holdings: [],
-                groups: [
-                    { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
-                    { id: 2, name: 'Small Cap Value', target: 30, color: '#10b981' },
-                    { id: 3, name: 'אקטיבי/סיכוני', target: 10, color: '#ef4444' }
-                ],
+                groups: window.FTData.DEFAULT_GROUPS.map(g => ({ ...g })),
                 rates: {
                     USD: 3.75,
                     EUR: 4.05
