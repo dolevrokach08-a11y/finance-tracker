@@ -2,7 +2,7 @@
 // Bump CACHE_NAME on every deploy that ships changed HTML/JS — the activate
 // handler purges the old cache, guaranteeing the new shell replaces any stale
 // cached firebase-config.js / *.html (the "change doesn't show up live" gotcha).
-const CACHE_NAME = 'finance-tracker-v11';
+const CACHE_NAME = 'finance-tracker-v12';
 const urlsToCache = [
   '/finance-tracker/',
   '/finance-tracker/index.html',
@@ -14,6 +14,7 @@ const urlsToCache = [
   '/finance-tracker/firebase-config.js',
   '/finance-tracker/sync-widget.js',
   '/finance-tracker/shared/user-storage.js',
+  '/finance-tracker/shared/data.js',
   '/finance-tracker/manifest.json',
   '/finance-tracker/icons/icon-192.png',
   '/finance-tracker/icons/icon-512.png'
