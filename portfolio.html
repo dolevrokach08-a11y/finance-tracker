@@ -984,9 +984,15 @@
             border: 1px solid hsla(38, 92%, 55%, 0.25); border-radius: 8px;
         }
         /* Numbers inside RTL text must be LTR-isolated or +/₪ render on the wrong
-           side ("22.4%+" instead of "+22.4%") — Phase 4a finding #9 */
+           side ("22.4%+" instead of "+22.4%") — Phase 4a finding #9.
+           text-align:right keeps the block visually anchored to the right like the
+           rest of the RTL card (direction:ltr alone flips alignment to the left). */
         .summary-card .value,
-        #twr-pl-line,
+        #twr-pl-line {
+            direction: ltr;
+            unicode-bidi: isolate;
+            text-align: right;
+        }
         #main-mwr-value,
         #main-mwr-annual {
             direction: ltr;
