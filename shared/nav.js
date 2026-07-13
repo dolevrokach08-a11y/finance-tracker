@@ -98,8 +98,15 @@ export function injectNav(currentPage = '', syncSlotId = 'syncWidgetSlot') {
 export function setNavUser(user) {
   const el = document.getElementById('shared-nav-user');
   if (!el || !user) return;
-  const avatar = user.photoURL
-    ? `<img src="${user.photoURL}" alt="">`
-    : '';
-  el.innerHTML = `${avatar}<span>${user.displayName || user.email || ''}</span>`;
+  el.textContent = '';
+  if (user.photoURL) {
+    const img = document.createElement('img');
+    img.src = user.photoURL;
+    img.alt = '';
+    img.addEventListener('error', () => img.remove());
+    el.appendChild(img);
+  }
+  const name = document.createElement('span');
+  name.textContent = user.displayName || user.email || '';
+  el.appendChild(name);
 }
