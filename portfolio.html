@@ -2118,6 +2118,7 @@
                 </div>
             </div>
 
+            <!-- 5 top-level categories (Phase 4b #7); everything else lives in sub-tabs -->
             <div class="sidebar-nav">
                 <button class="nav-item active" onclick="showTab('overview')">
                     <i data-lucide="layout-dashboard"></i>
@@ -2125,39 +2126,19 @@
                 </button>
                 <button class="nav-item" onclick="showTab('portfolio')">
                     <i data-lucide="briefcase"></i>
-                    <span>תיק</span>
+                    <span>התיק שלי</span>
                 </button>
                 <button class="nav-item" onclick="showTab('performance')">
                     <i data-lucide="trending-up"></i>
-                    <span>ביצועים</span>
+                    <span>ניתוח</span>
                 </button>
                 <button class="nav-item" onclick="showTab('planning')">
                     <i data-lucide="calculator"></i>
-                    <span>תכנון</span>
-                </button>
-                <button class="nav-item" onclick="showTab('history')">
-                    <i data-lucide="clock"></i>
-                    <span>היסטוריה</span>
-                </button>
-                <button class="nav-item" onclick="showTab('dividends')">
-                    <i data-lucide="banknote"></i>
-                    <span>דיבידנדים</span>
-                </button>
-                <button class="nav-item" onclick="showTab('fees')">
-                    <i data-lucide="percent"></i>
-                    <span>עמלות</span>
+                    <span>כלים</span>
                 </button>
                 <button class="nav-item" onclick="showTab('settings')">
                     <i data-lucide="settings"></i>
                     <span>הגדרות</span>
-                </button>
-                <button class="nav-item" onclick="showTab('watchlist')">
-                    <i data-lucide="eye"></i>
-                    <span>רשימת מעקב</span>
-                </button>
-                <button class="nav-item" onclick="showTab('backtest')">
-                    <i data-lucide="history"></i>
-                    <span>בדיקה היסטורית</span>
                 </button>
             </div>
 
@@ -7181,38 +7162,47 @@ function calculateTWRv3(startDate = null) {
             setTimeout(() => notif.classList.remove('show'), 3000);
         }
         
-        // Tab configuration - maps main tabs to their sub-tabs
+        // Tab configuration - 5 top-level categories, everything else is a sub-tab
+        // (Phase 4b #7: was 10 top-level tabs)
         const TAB_CONFIG = {
             'overview': { subTabs: null },
-            'portfolio': { 
+            'portfolio': {
                 subTabs: [
                     { id: 'holdings', label: 'מניות', icon: 'briefcase' },
                     { id: 'bonds', label: 'אג"ח', icon: 'file-text' },
                     { id: 'pensions', label: 'פנסיות והשתלמות', icon: 'landmark' },
-                    { id: 'cashflow', label: 'תזרים', icon: 'dollar-sign' }
+                    { id: 'cashflow', label: 'תזרים', icon: 'dollar-sign' },
+                    { id: 'history', label: 'היסטוריה', icon: 'clock' },
+                    { id: 'dividends', label: 'דיבידנדים', icon: 'banknote' }
                 ],
                 default: 'holdings'
             },
             'performance': {
                 subTabs: [
                     { id: 'charts', label: 'גרפים', icon: 'trending-up' },
-                    { id: 'analysis', label: 'ניתוח', icon: 'microscope' }
+                    { id: 'analysis', label: 'ניתוח מתקדם', icon: 'microscope' },
+                    { id: 'fees', label: 'עמלות', icon: 'percent' },
+                    { id: 'backtest', label: 'בדיקה היסטורית', icon: 'history' }
                 ],
                 default: 'charts'
             },
             'planning': {
                 subTabs: [
                     { id: 'calculator', label: 'מחשבון', icon: 'calculator' },
-                    { id: 'groups', label: 'קבוצות', icon: 'folder' }
+                    { id: 'groups', label: 'קבוצות', icon: 'folder' },
+                    { id: 'watchlist', label: 'רשימת מעקב', icon: 'eye' }
                 ],
                 default: 'calculator'
             },
-            'history': { subTabs: null },
-            'dividends': { subTabs: null },
-            'fees': { subTabs: null },
-            'settings': { subTabs: null },
-            'watchlist': { subTabs: null },
-            'backtest': { subTabs: null }
+            'settings': { subTabs: null }
+        };
+
+        // Legacy tab ids that used to be top-level and are now sub-tabs —
+        // any old showTab('history') call keeps working.
+        const LEGACY_SUBTAB_HOME = {
+            history: 'portfolio', dividends: 'portfolio',
+            fees: 'performance', backtest: 'performance',
+            watchlist: 'planning'
         };
         
         // Track current state
@@ -7220,8 +7210,14 @@ function calculateTWRv3(startDate = null) {
         let currentSubTab = null;
         
         function showTab(tabName, event) {
+            // Old top-level id that became a sub-tab → open its category, then the sub-tab
+            if (LEGACY_SUBTAB_HOME[tabName]) {
+                showTab(LEGACY_SUBTAB_HOME[tabName]);
+                showSubTab(tabName);
+                return;
+            }
             const config = TAB_CONFIG[tabName];
-            
+
             // Update sidebar nav items
             document.querySelectorAll('.sidebar .nav-item').forEach(item => {
                 item.classList.remove('active');
@@ -16187,11 +16183,11 @@ ${msg}`, 'warning');
             // 2. Command Palette
             const cmdPalette = new CommandPalette({
                 commands: [
-                    { title: 'סקירה כללית', description: 'סקירת התיק', icon: '📊', keywords: ['overview', 'סקירה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'overview\')"]'); if (btn) btn.click(); } },
-                    { title: 'אחזקות', description: 'צפה באחזקות', icon: '💼', keywords: ['holdings', 'אחזקות', 'מניות'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'holdings\')"]'); if (btn) btn.click(); } },
-                    { title: 'ביצועים', description: 'ביצועי התיק', icon: '📈', keywords: ['performance', 'ביצועים', 'TWR'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'performance\')"]'); if (btn) btn.click(); } },
-                    { title: 'תכנון', description: 'הקצאת יעד ו-rebalancing', icon: '🎯', keywords: ['planning', 'תכנון', 'הקצאה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'planning\')"]'); if (btn) btn.click(); } },
-                    { title: 'היסטוריה', description: 'היסטוריית עסקאות', icon: '📋', keywords: ['history', 'היסטוריה'], action: () => { const btn = document.querySelector('[onclick*="showTab(\'history\')"]'); if (btn) btn.click(); } },
+                    { title: 'סקירה כללית', description: 'סקירת התיק', icon: '📊', keywords: ['overview', 'סקירה'], action: () => showTab('overview') },
+                    { title: 'אחזקות', description: 'צפה באחזקות', icon: '💼', keywords: ['holdings', 'אחזקות', 'מניות'], action: () => { showTab('portfolio'); } },
+                    { title: 'ניתוח וביצועים', description: 'גרפים, ניתוח מתקדם ועמלות', icon: '📈', keywords: ['performance', 'ביצועים', 'ניתוח', 'TWR'], action: () => showTab('performance') },
+                    { title: 'כלים', description: 'מחשבון, קבוצות ורשימת מעקב', icon: '🎯', keywords: ['planning', 'תכנון', 'כלים', 'הקצאה'], action: () => showTab('planning') },
+                    { title: 'היסטוריה', description: 'היסטוריית עסקאות', icon: '📋', keywords: ['history', 'היסטוריה'], action: () => showTab('history') },
                     { title: 'רענן מחירים', description: 'עדכון מחירי נכסים', icon: '🔄', keywords: ['refresh', 'רענן', 'מחירים'], action: () => { if (typeof refreshPrices === 'function') refreshPrices(); } },
                     { title: 'מעקב כספי', description: 'עבור לדף הכספי', icon: '💵', keywords: ['finance', 'כספי'], action: () => { window.location.href = 'finance.html'; } },
                     { title: 'אופטימיזציית מס', description: 'עבור למחשבון המס', icon: '🧮', keywords: ['tax', 'מס'], action: () => { window.location.href = 'tax-optimizer.html'; } },
