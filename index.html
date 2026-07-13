@@ -309,6 +309,77 @@
             display: inline-block;
         }
         .top-kpi .value.muted { color: var(--text-muted); font-size: 1.4rem; }
+        /* Actionable empty-state link shown inside a KPI instead of a bare dash */
+        .kpi-action {
+            direction: rtl;
+            font-family: 'Rubik', 'Segoe UI', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--accent, hsl(142, 60%, 50%));
+            text-decoration: none;
+        }
+        .kpi-action:hover { text-decoration: underline; }
+
+        /* Onboarding hero — first-run empty state */
+        .onboarding-hero {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 34px 26px 26px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+        .ob-icon {
+            width: 52px; height: 52px;
+            margin: 0 auto 14px;
+            border-radius: 14px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; font-weight: 700;
+            color: hsl(142, 60%, 55%);
+            background: hsla(142, 60%, 50%, 0.12);
+            border: 1px solid hsla(142, 60%, 50%, 0.3);
+        }
+        .ob-title { color: var(--text-primary); font-size: 1.45rem; font-weight: 700; margin: 0 0 8px; }
+        .ob-sub { color: var(--text-secondary, var(--text-muted)); font-size: 0.95rem; margin: 0 auto 18px; max-width: 460px; }
+        .ob-actions { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+        .ob-btn {
+            font-family: inherit; font-size: 0.9rem; font-weight: 600;
+            padding: 10px 22px; border-radius: 10px; cursor: pointer;
+            text-decoration: none; display: inline-block;
+            background: transparent; color: var(--text-primary);
+            border: 1px solid var(--border); transition: var(--transition);
+        }
+        .ob-btn:hover { border-color: var(--border-accent); }
+        .ob-btn-primary {
+            background: hsl(142, 60%, 42%);
+            border-color: hsl(142, 60%, 42%);
+            color: hsl(150, 40%, 96%);
+        }
+        .ob-btn-primary:hover { background: hsl(142, 60%, 48%); }
+        .ob-note { color: var(--text-muted); font-size: 0.75rem; margin-top: 10px; }
+        .ob-steps {
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 12px; margin-top: 24px; text-align: start;
+        }
+        .ob-step {
+            display: flex; gap: 10px; align-items: flex-start;
+            background: var(--bg-elevated, hsla(0, 0%, 100%, 0.03));
+            border: 1px solid var(--border); border-radius: 12px; padding: 14px;
+        }
+        .ob-step-num {
+            flex: 0 0 auto;
+            width: 26px; height: 26px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: 700;
+            color: hsl(142, 60%, 55%);
+            background: hsla(142, 60%, 50%, 0.12);
+            border: 1px solid hsla(142, 60%, 50%, 0.3);
+        }
+        .ob-step-title { color: var(--text-primary); font-size: 0.88rem; font-weight: 600; margin-bottom: 3px; }
+        .ob-step-desc { color: var(--text-muted); font-size: 0.78rem; line-height: 1.45; }
+        @media (max-width: 700px) {
+            .ob-steps { grid-template-columns: 1fr; }
+        }
 
         /* Entry grid — 4 large app cards with sparklines */
         .entry-grid {
@@ -610,6 +681,41 @@
             <p class="subtitle">מרכז השליטה הפיננסי שלך במקום אחד</p>
         </div>
 
+        <!-- Onboarding hero — shown only when the account has no data yet -->
+        <div class="onboarding-hero stagger-in" id="onboardingHero" style="display:none;">
+            <div class="ob-icon">₪</div>
+            <h2 class="ob-title">בוא נבנה את התיק שלך</h2>
+            <p class="ob-sub">שלושה צעדים ותראה כאן שווי תיק ותשואה אמיתיים — בלי גרפים מדומים בדרך.</p>
+            <div class="ob-actions">
+                <a href="portfolio.html" class="ob-btn ob-btn-primary">התחל תיק משלי</a>
+                <button type="button" class="ob-btn" id="tryDemoBtn">נסה עם נתוני דוגמה</button>
+            </div>
+            <div class="ob-note">נתוני הדוגמה לקריאה בלבד — יציאה מהם בלחיצה אחת.</div>
+            <div class="ob-steps">
+                <div class="ob-step">
+                    <span class="ob-step-num">1</span>
+                    <div>
+                        <div class="ob-step-title">הוסף מזומן</div>
+                        <div class="ob-step-desc">כמה כסף נזיל יש בחשבון ההשקעות? זו נקודת הפתיחה של החישוב.</div>
+                    </div>
+                </div>
+                <div class="ob-step">
+                    <span class="ob-step-num">2</span>
+                    <div>
+                        <div class="ob-step-title">הוסף החזקות</div>
+                        <div class="ob-step-desc">מניות, קרנות סל וקופות — ידנית או בייבוא קובץ אקסל מהברוקר.</div>
+                    </div>
+                </div>
+                <div class="ob-step">
+                    <span class="ob-step-num">3</span>
+                    <div>
+                        <div class="ob-step-title">שחזר היסטוריה (רשות)</div>
+                        <div class="ob-step-desc">הוסף הפקדות עבר כדי לקבל תשואה משוקללת-זמן מדויקת מהיום הראשון.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Top KPI strip -->
         <div class="top-kpis stagger-in" id="topKpis">
             <div class="top-kpi">
@@ -814,7 +920,7 @@
 
     <script type="module">
         import { auth, signOut, onAuthStateChanged, db, doc, getDoc } from './firebase-config.js';
-        import { isDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
+        import { isDemoMode, enterDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
         import { SyncBus } from './shared/sync-bus.js';
 
         const loadingScreen = document.getElementById('loadingScreen');
@@ -859,6 +965,13 @@
             el.style.color = value > 0 ? 'var(--profit)' : value < 0 ? 'var(--loss)' : 'var(--text-primary)';
         }
 
+        // Empty KPI → actionable link instead of a bare dash (static labels/hrefs only)
+        function setKpiAction(id, label, href) {
+            const node = document.getElementById(id);
+            if (!node) return;
+            node.innerHTML = `<a class="kpi-action" href="${href}">${label}</a>`;
+        }
+
         // --- Sparkline utility: renders a smooth SVG line with gradient fill ---
         function drawSparkline(svgId, values, color) {
             const svg = document.getElementById(svgId);
@@ -868,8 +981,9 @@
                 ? values.slice(-30).map(v => Number(v) || 0)
                 : null;
             if (!vs) {
-                // Synthetic pleasing line (gentle up-trend) when no data
-                vs = [10, 12, 11, 14, 13, 16, 18, 17, 20, 22, 21, 25, 24, 28];
+                // No real data (need ≥2 points) → quiet empty area, never a fictitious line
+                svg.innerHTML = '';
+                return;
             }
             const min = Math.min(...vs);
             const max = Math.max(...vs);
@@ -998,8 +1112,20 @@
             // ---------- Top KPIs ----------
             const netWorth = assetsTotal - liabilitiesTotal;
             const el = (id) => document.getElementById(id);
+
+            // First-run onboarding: no data in any dataset → replace the dash-strip
+            // with an active "build your portfolio" hero (never shown in demo mode).
+            const isFresh = !finance && !portfolio && !mortgage && !isDemoMode();
+            const obHero = el('onboardingHero');
+            if (obHero) obHero.style.display = isFresh ? '' : 'none';
+            el('topKpis').style.display = isFresh ? 'none' : '';
+            const insightsStripEl = el('insightsStrip');
+            if (insightsStripEl) insightsStripEl.style.display = isFresh ? 'none' : '';
+
             if (netWorth !== 0) el('kpiNetWorth').textContent = formatCurrency(netWorth);
+            else setKpiAction('kpiNetWorth', 'הוסף נכסים והתחייבויות ←', 'finance.html');
             if (portfolioValue > 0) el('kpiPortfolio').textContent = formatCurrency(portfolioValue);
+            else setKpiAction('kpiPortfolio', 'הוסף החזקה ראשונה ←', 'portfolio.html');
 
             const ytdEl = el('kpiYtd');
             const ytdLabelEl = ytdEl?.parentElement?.querySelector('.label');
@@ -1069,7 +1195,7 @@
             }
             drawSparkline('sparkFinance', financeSpark, 'hsl(210, 80%, 58%)');
 
-            // Tax sparkline: synthetic gentle downward bracket shape (tax savings typically accumulate)
+            // Tax sparkline: no time series exists for tax savings — stays empty
             drawSparkline('sparkTax', null, 'hsl(38, 92%, 55%)');
 
             // Mortgage sparkline: amortization schedule if available, else synthetic
@@ -1098,9 +1224,10 @@
                     }
                 });
             }
-            const monthlyExpenses = totalExpenses || 1;
-            const emergencyMonths = liquidAssets > 0 && monthlyExpenses > 0
-                ? (liquidAssets / monthlyExpenses)
+            // Months covered only makes sense with real expense data — no ÷1 fallback
+            // (it used to show liquid assets as an absurd "1834668.0 months").
+            const emergencyMonths = liquidAssets > 0 && totalExpenses > 0
+                ? (liquidAssets / totalExpenses)
                 : null;
 
             if (emergencyMonths !== null) {
@@ -1111,6 +1238,8 @@
                 const efColor = emergencyMonths >= 6 ? 'var(--profit)' : emergencyMonths >= 3 ? 'var(--warning)' : 'var(--loss)';
                 el('icEmergencyFund').style.color = efColor;
                 el('icEmergencyBar').style.background = efColor;
+            } else {
+                setKpiAction('icEmergencySub', 'הוסף נכסים נזילים והוצאות ←', 'finance.html');
             }
 
             // --- FIRE Progress ---
@@ -1158,6 +1287,8 @@
                 }
             } else if (fireNumber > 0) {
                 el('icFireSub').textContent = `יעד: ${(fireNumber / 1e6).toFixed(2)}M ₪`;
+            } else {
+                setKpiAction('icFireSub', 'הוסף הוצאות חודשיות ←', 'finance.html');
             }
 
             // --- Debt Service Ratio ---
@@ -1179,6 +1310,12 @@
                 el('icDsrBar').style.background = dsrColor;
                 const dsrLabel = dsr <= 28 ? 'תקין (מתחת ל-28%)' : dsr <= 36 ? 'גבולי (28-36%)' : 'גבוה (מעל 36%)';
                 el('icDsrSub').textContent = dsrLabel;
+            } else if (totalIncome > 0 && totalDebtService === 0) {
+                el('icDsr').textContent = '0%';
+                el('icDsr').style.color = 'var(--profit)';
+                el('icDsrSub').textContent = 'אין חוב פעיל';
+            } else {
+                setKpiAction('icDsrSub', 'הוסף הכנסות במעקב הכספי ←', 'finance.html');
             }
         }
 
@@ -1266,6 +1403,13 @@
                 }
             });
         }
+
+        // Onboarding: "try with sample data" → session-scoped demo mode (real data untouched)
+        const tryDemoBtn = document.getElementById('tryDemoBtn');
+        if (tryDemoBtn) tryDemoBtn.addEventListener('click', () => {
+            enterDemoMode();
+            window.location.reload();
+        });
 
         // Logout button
         logoutBtn.addEventListener('click', async () => {
