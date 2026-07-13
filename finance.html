@@ -9329,8 +9329,10 @@
         }
         
         // Load saved theme on page load
+        // Shared key + shared default: the whole app is dark-first ('theme' is the
+        // single cross-page key; a toggle on any page carries to all of them).
         function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
+            const savedTheme = localStorage.getItem('theme') || 'dark';
             const html = document.documentElement;
             const icon = document.getElementById('theme-icon');
             

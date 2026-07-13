@@ -1077,13 +1077,14 @@ function toggleTheme() {
   const next = current === 'light' ? 'dark' : 'light';
   html.setAttribute('data-theme', next);
   document.querySelector('.theme-toggle').textContent = next === 'light' ? '☀️' : '🌙';
-  localStorage.setItem('mortgage-theme', next);
+  localStorage.setItem('theme', next); // shared cross-page key (was 'mortgage-theme')
   if(document.getElementById('p-graph').classList.contains('active')) setTimeout(updateGraph,50);
   if(document.getElementById('p-stress').classList.contains('active')) setTimeout(updateStress,50);
   if(document.getElementById('p-methods').classList.contains('active')) setTimeout(updateMethods,50);
 }
 (function(){
-  const saved = localStorage.getItem('mortgage-theme');
+  // Shared 'theme' key; fall back to the legacy 'mortgage-theme' once for migration.
+  const saved = localStorage.getItem('theme') || localStorage.getItem('mortgage-theme');
   if(saved) {
     document.documentElement.setAttribute('data-theme', saved);
     if(saved==='light') document.querySelector('.theme-toggle').textContent='☀️';
