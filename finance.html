@@ -279,6 +279,26 @@
             border: 1px solid var(--accent);
         }
 
+        /* Category bar above the tab row (Phase 4b: 13 flat tabs → 5 categories) */
+        .fin-cat-btn {
+            padding: 8px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-family: inherit;
+            transition: var(--transition-fast);
+        }
+        .fin-cat-btn:hover { color: var(--text-primary); }
+        .fin-cat-btn.fin-cat-active {
+            background: var(--accent-dim);
+            color: var(--accent);
+            border-color: var(--accent);
+        }
+
         .btn {
             transition: var(--transition-fast);
             border: none;
@@ -822,7 +842,7 @@
                 <a href="tax-optimizer.html" style="width:36px;height:36px;border-radius:8px;border:1px solid var(--border,#374151);background:var(--bg-elevated,#1e293b);display:flex;align-items:center;justify-content:center;font-size:16px;text-decoration:none;transition:all .2s;" title="אופטימיזציית מס">🧮</a>
             </div>
             <div style="text-align:center;flex:1;">
-                <span class="hero-eyebrow" style="display:inline-block;margin-bottom:6px;">FINANCE · DASHBOARD</span>
+                <span class="hero-eyebrow" style="display:inline-block;margin-bottom:6px;">מעקב כספי · סקירה</span>
                 <h1 class="text-4xl font-bold text-white mb-2" style="text-shadow: 0 2px 10px rgba(0,0,0,0.2);">💰 מעקב כספי חכם</h1>
                 <p class="text-white/80" style="animation: fadeInUp 0.6s ease 0.2s both;">נהל את הכספים שלך בפשטות ובקלות</p>
             </div>
@@ -840,21 +860,29 @@
         </div>
 
         <div class="glass p-6">
-            <div class="flex flex-wrap gap-2 mb-6 border-b pb-4" style="justify-content: space-between; align-items: center;">
-                <div class="flex flex-wrap gap-2">
-                    <button onclick="showTab('overview')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800 tab-active">סקירה</button>
-                    <button onclick="showTab('add')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הוסף נתונים</button>
-                    <button onclick="showTab('accrual')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">📐 חודש בצבירה</button>
-                    <button onclick="showTab('reports')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">דוחות</button>
-                    <button onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
-                    <button onclick="showTab('tithe')" class="tab-btn tithe-feature px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
-                    <button onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
-                    <button onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
-                    <button onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
-                    <button onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
-                    <button onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
-                    <button onclick="showTab('debt')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">סימולטור חוב</button>
-                    <button id="migrate-tab-btn" onclick="showTab('migrate')" class="tab-btn px-6 py-2 rounded-lg font-medium text-orange-600 hover:text-orange-800 hidden" style="border:1px dashed currentColor;">🔧 העשרת היסטוריה</button>
+            <!-- 5 categories + a per-category tab row (Phase 4b: was 13 flat tabs on two broken lines) -->
+            <div class="mb-6 border-b pb-4">
+                <div class="flex flex-wrap gap-2" id="fin-cat-bar">
+                    <button onclick="showFinCategory('overview', this)" class="fin-cat-btn fin-cat-active">סקירה</button>
+                    <button onclick="showFinCategory('transactions', this)" class="fin-cat-btn">תנועות</button>
+                    <button onclick="showFinCategory('analysis', this)" class="fin-cat-btn">ניתוח</button>
+                    <button onclick="showFinCategory('planning', this)" class="fin-cat-btn">תכנון</button>
+                    <button onclick="showFinCategory('settings', this)" class="fin-cat-btn">הגדרות</button>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-3" id="fin-sub-bar" style="display:none;">
+                    <button data-cat="overview" onclick="showTab('overview')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800 tab-active">סקירה</button>
+                    <button data-cat="transactions" onclick="showTab('add')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הוסף נתונים</button>
+                    <button data-cat="transactions" onclick="showTab('accrual')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">📐 חודש בצבירה</button>
+                    <button data-cat="transactions" onclick="showTab('bills')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">חיובים ומנויים</button>
+                    <button data-cat="analysis" onclick="showTab('reports')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">דוחות</button>
+                    <button data-cat="analysis" onclick="showTab('analysis')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">ניתוח מתקדם</button>
+                    <button data-cat="analysis" onclick="showTab('cashflow')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">תחזית תזרים</button>
+                    <button data-cat="planning" onclick="showTab('networth')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">שווי נקי</button>
+                    <button data-cat="planning" onclick="showTab('fire')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מחשבון FIRE</button>
+                    <button data-cat="planning" onclick="showTab('debt')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">סימולטור חוב</button>
+                    <button data-cat="settings" onclick="showTab('settings')" class="tab-btn px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">הגדרות</button>
+                    <button data-cat="settings" onclick="showTab('tithe')" class="tab-btn tithe-feature px-6 py-2 rounded-lg font-medium text-gray-600 hover:text-gray-800">מעשרות</button>
+                    <button data-cat="settings" id="migrate-tab-btn" onclick="showTab('migrate')" class="tab-btn px-6 py-2 rounded-lg font-medium text-orange-600 hover:text-orange-800 hidden" style="border:1px dashed currentColor;">🔧 העשרת היסטוריה</button>
                 </div>
             </div>
 
@@ -3066,6 +3094,28 @@
         }
 
         // Tabs
+        // Category bar → filters which tab buttons are visible, then opens the
+        // category's first tab. Categories with a single tab hide the second row.
+        function showFinCategory(cat, btn) {
+            document.querySelectorAll('.fin-cat-btn').forEach(b => b.classList.remove('fin-cat-active'));
+            if (btn) btn.classList.add('fin-cat-active');
+            const buttons = document.querySelectorAll('#fin-sub-bar .tab-btn');
+            let firstVisible = null;
+            let visibleCount = 0;
+            buttons.forEach(b => {
+                const inCat = b.dataset.cat === cat;
+                // '' (not 'block') so class/CSS-driven hiding (.hidden, tithe-off) still wins
+                b.style.display = inCat ? '' : 'none';
+                if (inCat && !b.classList.contains('hidden') && getComputedStyle(b).display !== 'none') {
+                    visibleCount++;
+                    if (!firstVisible) firstVisible = b;
+                }
+            });
+            const subBar = document.getElementById('fin-sub-bar');
+            if (subBar) subBar.style.display = visibleCount > 1 ? '' : 'none';
+            if (firstVisible) firstVisible.click();
+        }
+
         function showTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
@@ -9251,6 +9301,7 @@
 
         // Expose functions to window for HTML onclick handlers
         window.showTab = showTab;
+        window.showFinCategory = showFinCategory;
         window.showReportSubTab = showReportSubTab;
         window.addIncome = addIncome;
         window.addExpense = addExpense;
