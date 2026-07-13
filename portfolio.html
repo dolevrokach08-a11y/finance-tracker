@@ -998,6 +998,21 @@
             direction: ltr;
             unicode-bidi: isolate;
         }
+        /* Mixed-currency line ("$13,662 + €0 ↑8%") — whole line reads LTR,
+           anchored right inside the RTL card (finding #9) */
+        #stocks-value-original {
+            direction: ltr;
+            unicode-bidi: isolate;
+            text-align: right;
+        }
+        /* Jargon explainer under analysis KPI cards (mockup "?" pattern) */
+        .kpi-tip {
+            margin-top: 8px; padding: 8px 10px;
+            text-align: start; font-size: 0.75rem; line-height: 1.55;
+            color: var(--text-secondary, #94a3b8);
+            background: var(--bg-elevated, hsla(0,0%,100%,0.04));
+            border: 1px solid var(--border, #334155); border-radius: 8px;
+        }
 
         canvas {
             max-height: 100%;
@@ -2185,7 +2200,7 @@
                 <!-- ===== TAB: OVERVIEW ===== -->
                 <div id="tab-overview" class="tab-content active">
                     <div class="page-hero">
-                        <span class="hero-eyebrow">PORTFOLIO · OVERVIEW</span>
+                        <span class="hero-eyebrow">תיק השקעות · סיכום</span>
                         <h1>סיכום תיק ההשקעות</h1>
                         <p>מבט על הביצועים והתשואות שלך</p>
                     </div>
@@ -2484,57 +2499,64 @@
                     <!-- Sharpe Ratio Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(210, 80%, 55%, 0.12);"><i data-lucide="trending-up" style="width:22px;height:22px;color:#3b82f6;"></i></div>
-                        <div class="kpi-label">Sharpe Ratio</div>
+                        <div class="kpi-label">Sharpe Ratio <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-sharpe')" aria-label="מה זה Sharpe?">?</button></div>
                         <div class="kpi-value" id="sharpe-ratio" style="color: #3b82f6;">-</div>
                         <div class="kpi-desc">תשואה מול סיכון · <span style="color: var(--profit);">↑ יותר טוב</span></div>
+                        <div class="kpi-tip" id="tip-sharpe" style="display:none;">כמה תשואה קיבלת על כל יחידת סיכון (תנודתיות). מעל 1 נחשב טוב; מתחת ל-0.5 התשואה לא מפצה על הטלטלה.</div>
                     </div>
 
                     <!-- Max Drawdown Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(0, 72%, 55%, 0.12);"><i data-lucide="trending-down" style="width:22px;height:22px;color:#dc2626;"></i></div>
-                        <div class="kpi-label">Max Drawdown</div>
+                        <div class="kpi-label">Max Drawdown <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-mdd')" aria-label="מה זה Max Drawdown?">?</button></div>
                         <div class="kpi-value" id="max-drawdown" style="color: #dc2626;">-</div>
                         <div class="kpi-desc">ירידה מקסימלית · <span style="color: var(--profit);">קרוב ל-0% יותר טוב</span></div>
+                        <div class="kpi-tip" id="tip-mdd" style="display:none;">הירידה החדה ביותר מפסגה לשפל שהתיק חווה בפועל. מודד את "התרחיש הגרוע" שכבר קרה — וכמה סבלנות הוא דרש.</div>
                     </div>
 
                     <!-- Volatility Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(38, 92%, 55%, 0.12);"><i data-lucide="activity" style="width:22px;height:22px;color:#d97706;"></i></div>
-                        <div class="kpi-label">Volatility</div>
+                        <div class="kpi-label">Volatility <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-vol')" aria-label="מה זה Volatility?">?</button></div>
                         <div class="kpi-value" id="volatility" style="color: #d97706;">-</div>
                         <div class="kpi-desc">סטיית תקן שנתית · <span style="color: var(--profit);">↓ פחות תנודות</span></div>
+                        <div class="kpi-tip" id="tip-vol" style="display:none;">כמה התיק "מקפץ" סביב הממוצע שלו (סטיית תקן שנתית). גבוה = נסיעה מטלטלת יותר — לא בהכרח תשואה גבוהה יותר.</div>
                     </div>
 
                     <!-- Win Rate Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(142, 60%, 50%, 0.12);"><i data-lucide="target" style="width:22px;height:22px;color:#059669;"></i></div>
-                        <div class="kpi-label">Win Rate</div>
+                        <div class="kpi-label">Win Rate <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-winrate')" aria-label="מה זה Win Rate?">?</button></div>
                         <div class="kpi-value" id="win-rate" style="color: #059669;">-</div>
                         <div class="kpi-desc">אחוז מניות ברווח · <span style="color: var(--profit);">↑ יותר טוב</span></div>
+                        <div class="kpi-tip" id="tip-winrate" style="display:none;">אחוז ההחזקות שנמצאות כרגע ברווח ביחס לעלות הקנייה שלהן.</div>
                     </div>
 
                     <!-- MWR Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(270, 60%, 55%, 0.12);"><i data-lucide="coins" style="width:22px;height:22px;color:#9333ea;"></i></div>
-                        <div class="kpi-label">MWR (IRR)</div>
+                        <div class="kpi-label">MWR (IRR) <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-mwr')" aria-label="מה זה MWR?">?</button></div>
                         <div class="kpi-value" id="mwr-value" style="color: #9333ea;">-</div>
                         <div class="kpi-desc">תשואה משוקללת כסף · <span style="color: var(--profit);">כולל timing</span></div>
+                        <div class="kpi-tip" id="tip-mwr" style="display:none;">התשואה על הכסף שלך בפועל, כולל עיתוי ההפקדות (IRR). זה המספר שעונה על "כמה הכסף שלי עבד" — בשונה מ-TWR שמודד את ההשקעות עצמן.</div>
                     </div>
 
                     <!-- Sortino Ratio Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(180, 70%, 45%, 0.12);"><i data-lucide="shield-check" style="width:22px;height:22px;color:#0d9488;"></i></div>
-                        <div class="kpi-label">Sortino Ratio</div>
+                        <div class="kpi-label">Sortino Ratio <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-sortino')" aria-label="מה זה Sortino?">?</button></div>
                         <div class="kpi-value" id="sortino-ratio" style="color: #0d9488;">-</div>
                         <div class="kpi-desc">תשואה מול סיכון שלילי · <span style="color: var(--profit);">↑ יותר טוב</span></div>
+                        <div class="kpi-tip" id="tip-sortino" style="display:none;">כמו Sharpe, אבל מעניש רק על תנודות כלפי מטה — ירידות, לא עליות. רלוונטי למי שמפריעות לו נפילות, לא קפיצות.</div>
                     </div>
 
                     <!-- Portfolio Beta Card -->
                     <div class="kpi-card">
                         <div class="kpi-icon" style="background: hsla(330, 65%, 50%, 0.12);"><i data-lucide="gauge" style="width:22px;height:22px;color:#db2777;"></i></div>
-                        <div class="kpi-label">Beta</div>
+                        <div class="kpi-label">Beta <button type="button" class="info-tip-btn" onclick="toggleKpiTip('tip-beta')" aria-label="מה זה Beta?">?</button></div>
                         <div class="kpi-value" id="portfolio-beta" style="color: #db2777;">-</div>
                         <div class="kpi-desc">סיכון שיטתי מול שוק · <span style="color: var(--text-muted);">1.0 = כמו השוק</span></div>
+                        <div class="kpi-tip" id="tip-beta" style="display:none;">כמה התיק זז ביחס לשוק: ‎1.0‎ = בדיוק כמו השוק, ‎0.5‎ = חצי מהתנודה, ‎1.5‎ = מגביר את תנודות השוק.</div>
                     </div>
 
                 </div>
@@ -2657,30 +2679,32 @@
                     <button onclick="refreshPrices()" class="btn btn-primary">🔄 רענן מחירים</button>
                 </div>
 
-                <div class="section-card" style="border-right: 3px solid var(--info); margin-bottom: 20px;">
-                    <div style="display: flex; align-items: start; gap: 12px;">
-                        <div class="card-icon blue" style="width:32px;height:32px;margin-bottom:0;flex-shrink:0;">IL</div>
-                        <div>
-                            <strong style="color: var(--text-primary);">ניירות ערך ישראליים:</strong>
-                            <p style="margin: 5px 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
-                                למספרי ניירות ערך ישראליים (7 ספרות, לדוגמא: 1209220), <strong>הזן את המספר</strong>. המערכת תנסה לשאוב מחירים מהבורסה.
+                <!-- Israeli-securities guidance collapsed by default (Phase 4b #8):
+                     the table comes first, the explanation opens only when relevant -->
+                <details class="section-card" style="border-right: 3px solid var(--info); margin-bottom: 20px; padding: 12px 16px;">
+                    <summary style="cursor: pointer; display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 0.88rem;">
+                        <span class="card-icon blue" style="width:26px;height:26px;margin-bottom:0;flex-shrink:0;font-size:0.7rem;">IL</span>
+                        <span>מוסיף נייר ישראלי (מספר בן 7 ספרות)? הנחיות לשאיבת מחירים</span>
+                    </summary>
+                    <div style="margin-top: 10px; padding-right: 36px;">
+                        <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                            למספרי ניירות ערך ישראליים (7 ספרות, לדוגמא: 1209220), <strong>הזן את המספר</strong>. המערכת תנסה לשאוב מחירים מהבורסה.
+                        </p>
+                        <div style="margin: 8px 0 0 0; padding: 10px; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border);">
+                            <p style="margin: 0; color: var(--text-secondary); font-size: 0.85rem;">
+                                <strong>חשוב:</strong> שאיבת מחירים אוטומטית מהבורסה הישראלית לא תמיד עובדת (בגלל מגבלות טכניות).
                             </p>
-                            <div style="margin: 8px 0 0 0; padding: 10px; background: var(--bg-elevated); border-radius: var(--radius-sm); border: 1px solid var(--border);">
-                                <p style="margin: 0; color: var(--text-secondary); font-size: 0.85rem;">
-                                    <strong>חשוב:</strong> שאיבת מחירים אוטומטית מהבורסה הישראלית לא תמיד עובדת (בגלל מגבלות טכניות).
-                                </p>
-                            </div>
-                            <p style="margin: 8px 0 0 0; color: var(--text-secondary); font-size: 0.85rem;">
-                                <strong>המלצה:</strong>
-                            </p>
-                            <ol style="margin: 5px 0 0 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6;">
-                                <li>הגדר <strong>"טיקר חלופי"</strong> (אם יש - לדוגמא: VWRL.L לתעודת סל)</li>
-                                <li>או השתמש בכפתור <strong>"מחיר"</strong> לעדכן ידנית</li>
-                                <li>עדכן מחירים ידנית מ<a href="https://www.tase.co.il" target="_blank" style="color: var(--accent);">אתר הבורסה</a></li>
-                            </ol>
                         </div>
+                        <p style="margin: 8px 0 0 0; color: var(--text-secondary); font-size: 0.85rem;">
+                            <strong>המלצה:</strong>
+                        </p>
+                        <ol style="margin: 5px 0 0 20px; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6;">
+                            <li>הגדר <strong>"טיקר חלופי"</strong> (אם יש - לדוגמא: VWRL.L לתעודת סל)</li>
+                            <li>או השתמש בכפתור <strong>"מחיר"</strong> לעדכן ידנית</li>
+                            <li>עדכן מחירים ידנית מ<a href="https://www.tase.co.il" target="_blank" style="color: var(--accent);">אתר הבורסה</a></li>
+                        </ol>
                     </div>
-                </div>
+                </details>
 
                 <div id="add-holding-form" style="display: none; margin-bottom: 30px; padding: 20px; background: var(--bg-secondary, #1e1e2e); border: 1px solid var(--border, rgba(255,255,255,0.1)); border-radius: 12px;">
                     <h3 style="margin-bottom: 20px;">הוסף החזקה חדשה</h3>
@@ -7403,6 +7427,12 @@ function calculateTWRv3(startDate = null) {
             if (ex) ex.style.display = ex.style.display === 'none' ? '' : 'none';
         };
 
+        // Analysis-tab jargon explainers ("?" on Sharpe/Sortino/Beta/...)
+        window.toggleKpiTip = function (tipId) {
+            const el = document.getElementById(tipId);
+            if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+        };
+
         // Toggle Dark/Light Mode (Dark is default)
         function toggleTheme() {
             const html = document.documentElement;
@@ -11247,7 +11277,7 @@ ${msg}`, 'warning');
             const stocksPL = stocksValue - stocksInvested;
             const stocksPLpct = stocksInvested > 0 ? ((stocksPL / stocksInvested) * 100).toFixed(1) : 0;
             document.getElementById('stocks-value-original').innerHTML =
-                `$${Math.round(usdTotal).toLocaleString()} + €${Math.round(eurTotal).toLocaleString()} <span style="margin-right: 6px; color: ${stocksPL >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-weight: 600;">${stocksPL >= 0 ? '↑' : '↓'}${Math.abs(stocksPLpct)}%</span>`;
+                `$${Math.round(usdTotal).toLocaleString()} + €${Math.round(eurTotal).toLocaleString()} <span style="margin-inline-start: 6px; color: ${stocksPL >= 0 ? 'var(--profit)' : 'var(--loss)'}; font-weight: 600;">${stocksPL >= 0 ? '↑' : '↓'}${Math.abs(stocksPLpct)}%</span>`;
             
             document.getElementById('stocks-count').textContent = `${portfolio.holdings.length} החזקות`;
             document.getElementById('stocks-capital').textContent = `₪${Math.round(stocksInvested).toLocaleString()}`;
