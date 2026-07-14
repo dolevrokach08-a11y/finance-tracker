@@ -299,6 +299,60 @@
             border-color: var(--accent);
         }
 
+        /* Excel-import wizard (per the ImportExcel mockup): step line + file-type cards */
+        .import-step {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--accent);
+            margin-bottom: 8px;
+        }
+        .import-type-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 10px;
+            margin-bottom: 4px;
+        }
+        .itc {
+            text-align: right;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            background: var(--bg-surface);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .itc span {
+            display: block;
+            font-weight: 400;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .itc:hover { border-color: var(--border-accent, var(--accent)); }
+        .itc.selected {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+        .upload-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            background: var(--accent);
+            color: var(--bg-base);
+            transition: var(--transition-fast);
+        }
+        .upload-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+
         .btn {
             transition: var(--transition-fast);
             border: none;
@@ -965,26 +1019,37 @@
                 </div>
                 
                 <div class="glass p-4 mb-6">
-                    <h3 class="text-lg font-semibold mb-3">ייבוא אוטומטי</h3>
-                    <p class="text-sm text-gray-600 mb-3">ייבא תנועות מקובץ Excel</p>
-                    
-                    <!-- סוג הייבוא -->
-                    <div class="mb-4">
-                        <label class="text-sm font-medium block mb-2">בחר סוג קובץ:</label>
-                        <select id="import-type" class="p-2 border rounded-lg text-sm mb-2">
-                            <option value="auto">זיהוי אוטומטי</option>
-                            <option value="credit">כרטיס אשראי (MAX)</option>
-                            <option value="bank">תנועות בנק (בחובה/בזכות)</option>
-                        </select>
+                    <h3 class="text-lg font-semibold mb-1">ייבוא מקובץ אקסל</h3>
+                    <p class="text-sm text-gray-600 mb-3">מהבנק או מחברת האשראי — בשני שלבים: בחירת קובץ, ואישור אחרי תצוגה מקדימה.</p>
+
+                    <div class="import-step">שלב 1 מתוך 2 · סוג הקובץ</div>
+                    <div class="import-type-cards mb-4" id="importTypeCards">
+                        <button type="button" class="itc selected" data-v="auto" onclick="selectImportType(this)">
+                            🪄 זיהוי אוטומטי
+                            <span>המערכת מזהה לבד את פורמט הקובץ</span>
+                        </button>
+                        <button type="button" class="itc" data-v="credit" onclick="selectImportType(this)">
+                            💳 כרטיס אשראי (MAX)
+                            <span>קובץ העסקאות מאתר מקס</span>
+                        </button>
+                        <button type="button" class="itc" data-v="bank" onclick="selectImportType(this)">
+                            🏦 תנועות בנק
+                            <span>דוח בחובה/בזכות (למשל לאומי)</span>
+                        </button>
                     </div>
-                    
+                    <select id="import-type" class="hidden">
+                        <option value="auto" selected>זיהוי אוטומטי</option>
+                        <option value="credit">כרטיס אשראי (MAX)</option>
+                        <option value="bank">תנועות בנק (בחובה/בזכות)</option>
+                    </select>
+
                     <div class="flex gap-3 items-center flex-wrap">
                         <label class="text-sm font-medium">חודש החיוב:</label>
                         <select id="import-year" class="p-2 border rounded-lg text-sm"></select>
                         <select id="import-month-num" class="p-2 border rounded-lg text-sm"></select>
                         <input type="hidden" id="import-month">
                         <span class="text-xs text-gray-500">(כברירת מחדל זהה ל\"חודש:\" שלמעלה — שנה אם החיוב שייך לחודש אחר)</span>
-                        <label class="btn bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
+                        <label class="upload-btn">
                             📄 בחר קובץ אקסל
                             <input type="file" accept=".xlsx,.xls" onchange="handleImportFile(event)" class="hidden">
                         </label>
@@ -1168,6 +1233,7 @@
                         <button onclick="cancelImportPreview()" class="edit-modal-close">&times;</button>
                     </div>
                     <div class="edit-modal-body" style="overflow-y: auto;">
+                        <div class="import-step">שלב 2 מתוך 2 · בדיקה ואישור</div>
                         <p class="text-sm mb-3" style="color: var(--text-muted);">
                             עבור על השורות, תקן מה שצריך (תיאור / סכום / קטגוריה / תאריך), והסר סימון משורות שאינך רוצה לייבא.
                             רק שורות מסומנות יוכנסו למערכת.
@@ -9299,6 +9365,13 @@
         // Expose functions to window for HTML onclick handlers
         window.showTab = showTab;
         window.showFinCategory = showFinCategory;
+        // Import wizard: file-type cards drive the hidden #import-type select
+        window.selectImportType = function (btn) {
+            const sel = document.getElementById('import-type');
+            if (sel) sel.value = btn.dataset.v;
+            document.querySelectorAll('#importTypeCards .itc').forEach(b =>
+                b.classList.toggle('selected', b === btn));
+        };
         window.showReportSubTab = showReportSubTab;
         window.addIncome = addIncome;
         window.addExpense = addExpense;
