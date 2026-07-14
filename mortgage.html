@@ -362,13 +362,15 @@ tr:hover td{background:var(--bg-elevated);}
   </div>
   <div class="nav-actions">
     <span id="syncWidgetSlot" style="display:inline-flex;"></span>
-    <a href="index.html" class="nav-link-home" title="דף ראשי">🏠</a>
-    <a href="finance.html" class="nav-link-home" title="מעקב כספי">💵</a>
-    <a href="portfolio.html" class="nav-link-home" title="תיק השקעות">📈</a>
-    <a href="tax-optimizer.html" class="nav-link-home" title="אופטימיזציית מס">🧮</a>
+    <!-- Cross-page links moved to the shared top nav (Phase 4b) -->
     <button class="theme-toggle" onclick="toggleTheme()" title="מצב תצוגה">🌙</button>
   </div>
 </nav>
+<script type="module">
+  // Unified cross-page nav strip (Phase 4b; local slot keeps the sync widget)
+  import { injectNav } from './shared/nav.js';
+  injectNav('mortgage', 'sharedNavSyncSlot');
+</script>
 
 <!-- ═══════════════ PAGE 1 — CURRENT MORTGAGE ═══════════════ -->
 <div id="p-current" class="page active">
@@ -1395,8 +1397,10 @@ function updatePieChart(principalTotal, interestTotal) {
       labels: ['קרן', 'ריבית'],
       datasets: [{
         data: [principalTotal, interestTotal],
-        backgroundColor: ['rgba(45,216,122,0.8)', 'rgba(239,68,68,0.6)'],
-        borderColor: ['rgba(45,216,122,1)', 'rgba(239,68,68,1)'],
+        // Neutral palette: principal/interest is a split, not profit/loss —
+        // green/red stays reserved for money gained/lost (Phase 4b #13)
+        backgroundColor: ['rgba(59,130,246,0.75)', 'rgba(147,51,234,0.6)'],
+        borderColor: ['rgba(59,130,246,1)', 'rgba(147,51,234,1)'],
         borderWidth: 2,
         hoverOffset: 8
       }]

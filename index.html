@@ -901,6 +901,8 @@
         import { auth, signOut, onAuthStateChanged, db, doc, getDoc } from './firebase-config.js';
         import { isDemoMode, enterDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
         import { SyncBus } from './shared/sync-bus.js';
+        import { injectNav } from './shared/nav.js';
+        injectNav('index');
 
         const loadingScreen = document.getElementById('loadingScreen');
         const mainContainer = document.getElementById('mainContainer');

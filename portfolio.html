@@ -2129,10 +2129,7 @@
                 </div>
                 <div class="top-header-actions" style="display:flex;gap:6px;align-items:center;">
                     <span id="syncWidgetSlot" style="display:inline-flex;"></span>
-                    <a href="index.html" class="nav-sq" title="דף ראשי">🏠</a>
-                    <a href="finance.html" class="nav-sq" title="מעקב כספי">💵</a>
-                    <a href="mortgage.html" class="nav-sq" title="מחשבון משכנתא">🏡</a>
-                    <a href="tax-optimizer.html" class="nav-sq" title="אופטימיזציית מס">🧮</a>
+                    <!-- Cross-page links moved to the shared top nav (Phase 4b) -->
                     <button class="nav-sq" onclick="toggleTheme()" id="themeToggleBtn" title="מצב תצוגה">
                         <span id="theme-icon">☀️</span>
                     </button>
@@ -3661,6 +3658,10 @@
 <div id="notification" class="notification"></div>
 
     <script type="module">
+        // Unified cross-page nav strip (Phase 4b; local slot keeps the sync widget)
+        import { injectNav } from './shared/nav.js';
+        injectNav('portfolio', 'sharedNavSyncSlot');
+
         // Demo mode check
         let _isDemoMode = false;
         try {
@@ -11012,10 +11013,10 @@ ${msg}`, 'warning');
                     </td>
                     <td style="padding: 14px 16px; text-align: center;">
                         <div style="display: flex; gap: 4px; justify-content: center;">
-                            <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות">+</button>
-                            <button onclick="showSellSharesForm(${holding.id})" class="action-btn" title="מכור">$</button>
-                            <button onclick="editHolding(${holding.id})" class="action-btn" title="ערוך"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
-                            <button onclick="deleteHolding(${holding.id})" class="action-btn danger" title="מחק"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
+                            <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות" aria-label="הוסף מניות ל-${holding.symbol}">+</button>
+                            <button onclick="showSellSharesForm(${holding.id})" class="action-btn" title="מכור" aria-label="מכור מניות של ${holding.symbol}">$</button>
+                            <button onclick="editHolding(${holding.id})" class="action-btn" title="ערוך" aria-label="ערוך את ${holding.symbol}"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
+                            <button onclick="deleteHolding(${holding.id})" class="action-btn danger" title="מחק" aria-label="מחק את ${holding.symbol}"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
                         </div>
                     </td>
                 </tr>`;
