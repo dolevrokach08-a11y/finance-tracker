@@ -629,6 +629,32 @@
     </style>
 </head>
 <body>
+    <script>
+        // Apply the shared theme key before first paint (tokens come from shared/theme.css)
+        (function () {
+            if (localStorage.getItem('theme') === 'light') {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+        })();
+        function toggleTheme() {
+            const html = document.documentElement;
+            const toLight = html.getAttribute('data-theme') !== 'light';
+            if (toLight) {
+                html.setAttribute('data-theme', 'light');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.removeAttribute('data-theme');
+                localStorage.setItem('theme', 'dark');
+            }
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn) btn.textContent = toLight ? '☀️' : '🌙';
+        }
+        window.toggleTheme = toggleTheme;
+        document.addEventListener('DOMContentLoaded', () => {
+            const btn = document.getElementById('themeToggleBtn');
+            if (btn && document.documentElement.getAttribute('data-theme') === 'light') btn.textContent = '☀️';
+        });
+    </script>
     <div class="loading-screen" id="loadingScreen">
         טוען... 🔄
     </div>
@@ -639,7 +665,10 @@
                 <img id="userAvatar" class="user-avatar" src="" alt="User">
                 <span id="userName"></span>
             </div>
-            <button class="logout-btn" id="logoutBtn">🚪 התנתק</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button class="logout-btn" id="themeToggleBtn" onclick="toggleTheme()" title="מצב תצוגה" aria-label="החלף מצב תצוגה">🌙</button>
+                <button class="logout-btn" id="logoutBtn">🚪 התנתק</button>
+            </div>
         </div>
 
         <!-- Live Market Ticker Bar -->
