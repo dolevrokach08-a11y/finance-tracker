@@ -381,6 +381,96 @@
             .ob-steps { grid-template-columns: 1fr; }
         }
 
+        /* ===== Hero layout per the HomeDashboard mockup (Phase 4b) ===== */
+        .updated-line { color: var(--text-muted); font-size: 0.78rem; margin: 2px 4px 10px; }
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1fr 300px; /* RTL: hero right, side KPIs left */
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        .hero-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 22px 24px 18px;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-cta {
+            position: absolute; top: 18px; left: 18px;
+            padding: 7px 16px; border-radius: 9px;
+            font-size: 0.82rem; font-weight: 600; text-decoration: none;
+            color: hsl(142, 60%, 55%);
+            background: hsla(142, 60%, 50%, 0.08);
+            border: 1px solid hsla(142, 60%, 50%, 0.35);
+            transition: var(--transition);
+        }
+        .hero-cta:hover { background: hsla(142, 60%, 50%, 0.16); }
+        .hero-label { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 6px; }
+        .hero-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2.7rem; font-weight: 700; line-height: 1.1;
+            letter-spacing: -1px; color: var(--text-primary);
+            direction: ltr; unicode-bidi: isolate; text-align: right;
+        }
+        .hero-twr-line {
+            margin-top: 8px; font-size: 0.9rem; color: var(--text-secondary);
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+        }
+        .hero-twr-line .twr-num {
+            font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 1.05rem;
+            direction: ltr; unicode-bidi: isolate;
+        }
+        .hero-benchmark { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; }
+        .hero-chart-wrap { margin-top: 16px; height: 170px; }
+        .hero-chart-wrap svg { width: 100%; height: 100%; display: block; }
+        .hero-empty-note { color: var(--text-muted); font-size: 0.8rem; margin-top: 16px; }
+        .side-kpis { display: flex; flex-direction: column; gap: 14px; }
+        .side-kpi {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 18px;
+            flex: 1;
+        }
+        .side-kpi .label { color: var(--text-muted); font-size: 0.76rem; margin-bottom: 6px; }
+        .side-kpi .value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem; font-weight: 700; color: var(--text-primary);
+            direction: ltr; unicode-bidi: isolate; text-align: right; display: block;
+        }
+        .side-kpi .sub { color: var(--text-muted); font-size: 0.72rem; margin-top: 4px; }
+        .activity-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .activity-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 4px;
+        }
+        .activity-head .ac-title { color: var(--text-primary); font-size: 0.95rem; font-weight: 700; }
+        .activity-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 0; font-size: 0.85rem;
+            border-top: 1px solid var(--border);
+        }
+        .activity-row:first-of-type { border-top: none; }
+        .activity-row .ar-label { color: var(--text-secondary); display: flex; align-items: center; gap: 8px; }
+        .activity-row .ar-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; }
+        .activity-row .ar-amount {
+            font-family: 'JetBrains Mono', monospace; font-weight: 600;
+            direction: ltr; unicode-bidi: isolate;
+        }
+        .activity-row .ar-date { color: var(--text-muted); font-size: 0.75rem; margin-inline-start: 12px; }
+        @media (max-width: 900px) {
+            .hero-grid { grid-template-columns: 1fr; }
+            .hero-value { font-size: 2.1rem; }
+        }
+
         /* Entry grid — 4 large app cards with sparklines */
         .entry-grid {
             display: grid;
@@ -675,11 +765,7 @@
         <!-- Live Market Ticker Bar -->
         <div class="ticker-bar" id="liveTicker" aria-label="Live market ticker" style="margin-bottom: 18px; border-radius: 10px;"></div>
 
-        <div class="page-hero" style="text-align:center; margin-bottom: 22px;">
-            <span class="hero-eyebrow">סיכום · דף ראשי</span>
-            <h1 style="margin-top:4px;">💰 ניהול פיננסי אישי 📊</h1>
-            <p class="subtitle">מרכז השליטה הפיננסי שלך במקום אחד</p>
-        </div>
+        <div class="updated-line" id="updatedLine" style="display:none;"></div>
 
         <!-- Onboarding hero — shown only when the account has no data yet -->
         <div class="onboarding-hero stagger-in" id="onboardingHero" style="display:none;">
@@ -716,20 +802,50 @@
             </div>
         </div>
 
-        <!-- Top KPI strip -->
-        <div class="top-kpis stagger-in" id="topKpis">
-            <div class="top-kpi">
-                <div class="label">הון נטו</div>
-                <div class="value" id="kpiNetWorth" style="color: var(--info);">—</div>
+        <!-- Hero grid per the HomeDashboard mockup: big portfolio card + side KPIs -->
+        <div class="hero-grid stagger-in" id="heroGrid" style="display:none;">
+            <div class="hero-card">
+                <a href="portfolio.html" class="hero-cta">← לתיק המלא</a>
+                <div class="hero-label">שווי תיק ההשקעות</div>
+                <div class="hero-value" id="kpiPortfolio">—</div>
+                <div class="hero-twr-line" id="heroTwrLine" style="display:none;">
+                    <span class="twr-num" id="heroTwrNum"></span>
+                    <span id="heroTwrLabel">תשואה משוקללת-זמן (TWR)</span>
+                </div>
+                <div class="hero-benchmark" id="heroBenchmark" style="display:none;"></div>
+                <div class="hero-chart-wrap" id="heroChartWrap">
+                    <svg id="heroChart" viewBox="0 0 600 170" preserveAspectRatio="none"></svg>
+                </div>
+                <div class="hero-empty-note" id="heroChartEmpty" style="display:none;">
+                    אין עדיין היסטוריית שווי — כל הפקדה או משיכה בתיק יוצרת נקודה בגרף.
+                </div>
             </div>
-            <div class="top-kpi">
-                <div class="label">תשואה YTD</div>
-                <div class="value" id="kpiYtd" style="color: var(--profit);">—</div>
+            <div class="side-kpis">
+                <div class="side-kpi">
+                    <div class="label">הון נטו</div>
+                    <span class="value" id="kpiNetWorth" style="color: var(--info);">—</span>
+                    <div class="sub">נכסים פחות התחייבויות</div>
+                </div>
+                <div class="side-kpi">
+                    <div class="label">מזומן פנוי</div>
+                    <span class="value" id="kpiFreeCash">—</span>
+                    <div class="sub">בחשבון ההשקעות</div>
+                </div>
+                <div class="side-kpi">
+                    <div class="label">הוצאות החודש</div>
+                    <span class="value" id="kpiMonthExpenses">—</span>
+                    <div class="sub" id="kpiMonthExpensesSub">מהמעקב הכספי</div>
+                </div>
             </div>
-            <div class="top-kpi">
-                <div class="label">שווי תיק כולל</div>
-                <div class="value" id="kpiPortfolio" style="color: var(--profit);">—</div>
+        </div>
+
+        <!-- Recent activity (portfolio events) -->
+        <div class="activity-card stagger-in" id="activityCard" style="display:none;">
+            <div class="activity-head">
+                <span class="ac-title">פעילות אחרונה</span>
+                <a href="portfolio.html" class="kpi-action">כל הפעילות</a>
             </div>
+            <div id="activityList"></div>
         </div>
 
         <!-- Big entry cards -->
@@ -992,6 +1108,73 @@
             `;
         }
 
+        // Bigger area chart for the hero card — same rule as sparklines:
+        // real data only (≥2 points), otherwise a quiet note instead of a chart.
+        function drawHeroChart(svgId, values) {
+            const svg = document.getElementById(svgId);
+            const wrap = document.getElementById('heroChartWrap');
+            const emptyNote = document.getElementById('heroChartEmpty');
+            if (!svg) return;
+            const vs = Array.isArray(values) && values.length >= 2
+                ? values.slice(-60).map(v => Number(v) || 0)
+                : null;
+            if (!vs) {
+                svg.innerHTML = '';
+                if (wrap) wrap.style.display = 'none';
+                if (emptyNote) emptyNote.style.display = '';
+                return;
+            }
+            if (wrap) wrap.style.display = '';
+            if (emptyNote) emptyNote.style.display = 'none';
+            const width = 600, height = 170;
+            const min = Math.min(...vs), max = Math.max(...vs);
+            const range = (max - min) || 1;
+            const step = width / (vs.length - 1);
+            const pts = vs.map((v, i) => [i * step, height - ((v - min) / range) * (height - 24) - 8]);
+            let d = `M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+            for (let i = 1; i < pts.length; i++) {
+                const p = pts[i - 1], c = pts[i];
+                const cx = (p[0] + c[0]) / 2;
+                d += ` C ${cx.toFixed(1)},${p[1].toFixed(1)} ${cx.toFixed(1)},${c[1].toFixed(1)} ${c[0].toFixed(1)},${c[1].toFixed(1)}`;
+            }
+            const color = 'hsl(142, 60%, 50%)';
+            svg.innerHTML = `
+                <defs>
+                    <linearGradient id="heroGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="${color}" stop-opacity="0.30"/>
+                        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <path d="${d} L ${width},${height} L 0,${height} Z" fill="url(#heroGrad)"/>
+                <path d="${d}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+        }
+
+        // Recent portfolio events (purchases/sales/deposits/withdrawals) for the activity card
+        function renderActivity(portfolio) {
+            const card = document.getElementById('activityCard');
+            const list = document.getElementById('activityList');
+            if (!card || !list) return;
+            if (!portfolio) { card.style.display = 'none'; return; }
+            const usdR = portfolio.rates?.USD || 3.7;
+            const eurR = portfolio.rates?.EUR || 4.1;
+            const toILS = (amt, cur) => (Number(amt) || 0) * (cur === 'USD' ? usdR : cur === 'EUR' ? eurR : 1);
+            const ev = [];
+            (portfolio.purchases || []).forEach(p => ev.push({ date: p.date, label: `קנייה · ${p.symbol} · ${p.shares} יח׳`, ils: toILS(p.amount, p.currency), color: 'var(--info)' }));
+            (portfolio.sales || []).forEach(s => ev.push({ date: s.date, label: `מכירה · ${s.symbol}`, ils: toILS(s.amount, s.currency), color: 'var(--warning)' }));
+            (portfolio.deposits || []).forEach(d => ev.push({ date: d.date, label: 'הפקדה לתיק', ils: toILS(d.amount, d.currency || 'ILS'), color: 'var(--profit)' }));
+            (portfolio.withdrawals || []).forEach(w => ev.push({ date: w.date, label: 'משיכה מהתיק', ils: toILS(w.amount, w.currency || 'ILS'), color: 'var(--loss)' }));
+            const recent = ev
+                .filter(e => e.date && isFinite(e.ils))
+                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                .slice(0, 4);
+            if (!recent.length) { card.style.display = 'none'; return; }
+            list.innerHTML = recent.map(e => `
+                <div class="activity-row">
+                    <span class="ar-label"><span class="ar-dot" style="background:${e.color}"></span>${e.label}</span>
+                    <span><span class="ar-amount">₪${Math.round(e.ils).toLocaleString('he-IL')}</span><span class="ar-date">${new Date(e.date).toLocaleDateString('he-IL')}</span></span>
+                </div>`).join('');
+        }
+
         function loadDashboard() {
             const financeRaw = localStorage.getItem('financeTrackerData');
             const portfolioRaw = localStorage.getItem('portfolio');
@@ -1070,14 +1253,21 @@
                 }
             } catch (e) {}
 
-            const snapshots = Array.isArray(portfolio?.portfolioSnapshots) ? portfolio.portfolioSnapshots.slice() : [];
+            // Real field is portfolio.snapshots — 'portfolioSnapshots' is a legacy name
+            // that portfolio.html migrates away and deletes (this page read a dead field
+            // for a long time, so the home page never actually saw snapshot history).
+            const snapshots = Array.isArray(portfolio?.snapshots) ? portfolio.snapshots.slice()
+                : Array.isArray(portfolio?.portfolioSnapshots) ? portfolio.portfolioSnapshots.slice()
+                : [];
+            const snapValue = (s) => Number(s?.totalValue ?? s?.value ?? ((Number(s?.value_before_flow) || 0) + (Number(s?.cash_flow) || 0))) || 0;
+            snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
             if (returnPct == null && snapshots.length >= 2) {
                 snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
                 const yearStart = new Date(new Date().getFullYear(), 0, 1);
                 const startSnap = snapshots.find(s => new Date(s.date) >= yearStart) || snapshots[0];
                 const lastSnap = snapshots[snapshots.length - 1];
-                const startVal = Number(startSnap?.value) || 0;
-                const endVal = Number(lastSnap?.value) || portfolioValue;
+                const startVal = snapValue(startSnap);
+                const endVal = snapValue(lastSnap) || portfolioValue;
                 if (startVal > 0) {
                     returnPct = ((endVal - startVal) / startVal) * 100;
                     returnLabel = 'תשואה YTD';
@@ -1090,36 +1280,91 @@
                 returnLabel = 'תשואה כוללת';
             }
 
-            // ---------- Top KPIs ----------
+            // ---------- Hero + side KPIs (HomeDashboard mockup layout) ----------
             const netWorth = assetsTotal - liabilitiesTotal;
             const el = (id) => document.getElementById(id);
 
-            // First-run onboarding: no data in any dataset → replace the dash-strip
+            // First-run onboarding: no data in any dataset → replace the dashboard
             // with an active "build your portfolio" hero (never shown in demo mode).
             const isFresh = !finance && !portfolio && !mortgage && !isDemoMode();
             const obHero = el('onboardingHero');
             if (obHero) obHero.style.display = isFresh ? '' : 'none';
-            el('topKpis').style.display = isFresh ? 'none' : '';
-            const insightsStripEl = el('insightsStrip');
-            if (insightsStripEl) insightsStripEl.style.display = isFresh ? 'none' : '';
+            ['heroGrid', 'activityCard', 'insightsStrip', 'updatedLine'].forEach(id => {
+                const n = el(id);
+                if (n) n.style.display = isFresh ? 'none' : '';
+            });
+            const updatedEl = el('updatedLine');
+            if (updatedEl && !isFresh) {
+                const now = new Date();
+                updatedEl.textContent = `עודכן ${now.toLocaleDateString('he-IL')} · ${now.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}`;
+            }
 
-            if (netWorth !== 0) el('kpiNetWorth').textContent = formatCurrency(netWorth);
-            else setKpiAction('kpiNetWorth', 'הוסף נכסים והתחייבויות ←', 'finance.html');
+            // Hero: portfolio value as the single headline number
             if (portfolioValue > 0) el('kpiPortfolio').textContent = formatCurrency(portfolioValue);
             else setKpiAction('kpiPortfolio', 'הוסף החזקה ראשונה ←', 'portfolio.html');
 
-            const ytdEl = el('kpiYtd');
-            const ytdLabelEl = ytdEl?.parentElement?.querySelector('.label');
-            if (returnPct != null) {
-                ytdEl.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
-                ytdEl.style.color = returnPct >= 0 ? 'var(--profit)' : 'var(--loss)';
-                if (ytdLabelEl) ytdLabelEl.textContent = returnLabel;
-            } else {
-                // No portfolio at all — hide the KPI entirely rather than showing "—"
-                const card = ytdEl?.closest('.top-kpi');
-                if (card) card.style.display = 'none';
-                el('topKpis').style.gridTemplateColumns = 'repeat(2, 1fr)';
+            // TWR line under the hero number
+            const twrLine = el('heroTwrLine');
+            if (twrLine) {
+                if (returnPct != null) {
+                    twrLine.style.display = '';
+                    const num = el('heroTwrNum');
+                    num.textContent = (returnPct >= 0 ? '+' : '') + returnPct.toFixed(1) + '%';
+                    num.style.color = returnPct >= 0 ? 'var(--profit)' : 'var(--loss)';
+                    el('heroTwrLabel').textContent =
+                        returnLabel === 'תשואה כוללת (TWR)' ? 'תשואה משוקללת-זמן (TWR)'
+                        : returnLabel === 'תשואה YTD' ? 'תשואה מתחילת השנה'
+                        : 'תשואה כוללת מול עלות';
+                } else {
+                    twrLine.style.display = 'none';
+                }
             }
+
+            // Benchmark comparison (cached by portfolio.html; read defensively)
+            try {
+                const bmRaw = localStorage.getItem('portfolio_cachedBenchmarks');
+                const bm = bmRaw ? JSON.parse(bmRaw) : null;
+                const taEntry = bm?.TA125 ?? bm?.benchmarks?.TA125;
+                const ta = typeof taEntry === 'number' ? taEntry : taEntry?.returnPct;
+                const bmEl = el('heroBenchmark');
+                if (bmEl && typeof ta === 'number' && isFinite(ta) && returnPct != null) {
+                    bmEl.style.display = '';
+                    bmEl.textContent = `ת"א 125 באותה תקופה: ${ta >= 0 ? '+' : ''}${ta.toFixed(1)}%`;
+                }
+            } catch (e) {}
+
+            // Side KPIs
+            if (netWorth !== 0) el('kpiNetWorth').textContent = formatCurrency(netWorth);
+            else setKpiAction('kpiNetWorth', 'הוסף נכסים והתחייבויות ←', 'finance.html');
+
+            let freeCash = 0;
+            if (portfolio && portfolio.cash) {
+                const usdR = portfolio.rates?.USD || 3.7;
+                const eurR = portfolio.rates?.EUR || 4.1;
+                freeCash = (Number(portfolio.cash.ILS) || 0)
+                    + (Number(portfolio.cash.USD) || 0) * usdR
+                    + (Number(portfolio.cash.EUR) || 0) * eurR;
+            }
+            if (freeCash > 0) el('kpiFreeCash').textContent = formatCurrency(freeCash);
+            else setKpiAction('kpiFreeCash', 'הוסף מזומן לתיק ←', 'portfolio.html');
+
+            let monthExpenses = 0;
+            if (finance && Array.isArray(finance.transactions)) {
+                const now = new Date();
+                const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                finance.transactions.forEach(t => {
+                    if (t.month === monthKey && t.type !== 'income') {
+                        monthExpenses += Number(t.amount ?? t.amt) || 0;
+                    }
+                });
+            }
+            if (monthExpenses > 0) el('kpiMonthExpenses').textContent = formatCurrency(monthExpenses);
+            else setKpiAction('kpiMonthExpenses', 'הוסף תנועות במעקב ←', 'finance.html');
+
+            // Hero chart + activity feed
+            const heroVals = snapshots.length >= 2 ? snapshots.map(snapValue) : null;
+            drawHeroChart('heroChart', heroVals);
+            if (!isFresh) renderActivity(portfolio);
 
             // ---------- Entry card KPIs ----------
             // Portfolio card: show the same return (YTD or Total) with matching label
@@ -1155,7 +1400,7 @@
             }
 
             // ---------- Sparklines ----------
-            const portfolioSpark = snapshots.length >= 2 ? snapshots.map(s => Number(s.value) || 0) : null;
+            const portfolioSpark = snapshots.length >= 2 ? snapshots.map(snapValue) : null;
             drawSparkline('sparkPortfolio', portfolioSpark, 'hsl(142, 60%, 50%)');
 
             // Finance sparkline: monthly savings from transactions (last 12 months)
