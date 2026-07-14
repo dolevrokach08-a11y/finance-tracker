@@ -1210,7 +1210,8 @@ function syncPropertyValue(val) {
 // Backwards compat alias
 function saveTranches() { saveMortgage(); }
 
-const TYPE_LABELS = {prime:'פריים',var5:'משתנה 5Y',var1:'משתנה 1Y',fix:'קבועה ל"צ',cpi:'קבועה צמודה'};
+// Hebrew-only labels — the old "משתנה 5Y" scrambled in RTL (rendered "Yמשתנה 5")
+const TYPE_LABELS = {prime:'פריים',var5:'משתנה כל 5',var1:'משתנה כל שנה',fix:'קבועה ל"צ',cpi:'קבועה צמודה'};
 const TYPE_BADGES = {prime:'b-pri',var5:'b-mut',var1:'b-mut',fix:'b-fix',cpi:'b-cpi'};
 const TYPE_COLORS = {prime:'#38d4c8',var5:'#f5a623',var1:'#e8915c',fix:'#4f7cff',cpi:'#a78bfa'};
 const METHOD_COLORS = {spitzer:'#2dd87a', kerenShava:'#4f7cff', balloon:'#a78bfa', gracePartial:'#38d4c8', graceFull:'#f5a623'};
@@ -1677,7 +1678,7 @@ function autoRecommend() {
   const prime = +(document.getElementById('b-prime')||{value:5.5}).value || 5.5;
   builderTranches = [
     {id:nextId++, name:'פריים', type:'prime', rate:prime, pct:33, months},
-    {id:nextId++, name:'משתנה 5Y', type:'var5', rate:4.9, pct:34, months},
+    {id:nextId++, name:'משתנה כל 5', type:'var5', rate:4.9, pct:34, months},
     {id:nextId++, name:'קבועה ל"צ', type:'fix', rate:4.6, pct:33, months}
   ];
   renderBuilderTranches();
@@ -1943,7 +1944,7 @@ function renderRefiPage() {
       sc.innerHTML += `<div class="tranche" style="margin-bottom:8px;">
         <div class="tranche-head"><div class="rec-title">${s.name}</div></div>
         <div class="tranche-grid">
-          <div class="field" style="margin:0"><div class="f-label">משתנה 5Y %</div><input type="number" step="0.05" value="${s.r1}" class="sc-r1" oninput="updateRefi()"></div>
+          <div class="field" style="margin:0"><div class="f-label">משתנה כל 5 %</div><input type="number" step="0.05" value="${s.r1}" class="sc-r1" oninput="updateRefi()"></div>
           <div class="field" style="margin:0"><div class="f-label">קל"צ %</div><input type="number" step="0.05" value="${s.r2}" class="sc-r2" oninput="updateRefi()"></div>
           <div class="field" style="margin:0"><div class="f-label">פריים %</div><input type="number" step="0.05" value="${s.r3}" class="sc-r3" oninput="updateRefi()"></div>
         </div>
