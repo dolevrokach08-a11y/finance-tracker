@@ -2523,8 +2523,9 @@
 
     <script type="module">
         // Unified cross-page nav strip (Phase 4b)
-        import { injectNav } from './shared/nav.js';
+        import { injectNav, injectDemoBanner } from './shared/nav.js';
         injectNav('finance');
+        window.__injectDemoBanner = injectDemoBanner;
 
         // Demo mode imports
         let _isDemoMode = false;
@@ -5861,12 +5862,8 @@
             ensureFinanceSettings();
             applyFinanceSettings();
 
-            // Add demo banner at top of main content
-            const mainContent = document.getElementById('mainContent');
-            const banner = document.createElement('div');
-            banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin: 0 16px 16px; text-align: center;';
-            banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
-            mainContent.insertBefore(banner, mainContent.firstChild);
+            // Unified banner under the shared nav (Phase 4b #14)
+            if (window.__injectDemoBanner) window.__injectDemoBanner();
 
             populateYearMonthSelectors();
             const months = getMonths();

@@ -143,6 +143,29 @@ export function injectNav(currentPage = '', syncSlotId = 'syncWidgetSlot') {
 }
 
 /**
+ * Injects the unified demo-mode banner right below the shared nav
+ * (one component instead of four per-page styles — Phase 4b #14).
+ */
+export function injectDemoBanner(text = '👁️ מצב הדגמה — נתונים פיקטיביים לקריאה בלבד') {
+  if (document.getElementById('shared-demo-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'shared-demo-banner';
+  banner.textContent = text;
+  banner.style.cssText =
+    'background: hsla(45, 100%, 60%, 0.08); border: 1px solid hsla(45, 100%, 60%, 0.35);' +
+    'color: hsl(45, 90%, 62%); padding: 9px 16px; border-radius: 10px;' +
+    'font-size: 0.85rem; font-weight: 600; text-align: center; margin: 10px 16px;' +
+    'direction: rtl; width: calc(100% - 32px); box-sizing: border-box;';
+  const nav = document.querySelector('.shared-nav');
+  if (nav) nav.insertAdjacentElement('afterend', banner);
+  else document.body.insertBefore(banner, document.body.firstChild);
+  if (getComputedStyle(document.body).display.includes('flex')) {
+    banner.style.flexBasis = '100%';
+  }
+  return banner;
+}
+
+/**
  * Populates the user section of the nav bar.
  * @param {object} user - Firebase user or demo user object
  */

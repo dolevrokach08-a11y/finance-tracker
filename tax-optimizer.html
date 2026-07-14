@@ -70,6 +70,15 @@ a { color: var(--accent); }
   cursor: pointer;
 }
 .year-selector select option { background: hsl(220, 18%, 10%); }
+
+/* Mobile rescue layer (Phase 4b #12 — this page had ZERO media queries).
+   The app is React with inline styles, so grids are collapsed with !important. */
+@media (max-width: 700px) {
+  #root [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  #root table { display: block; overflow-x: auto; }
+  .year-selector { flex-wrap: wrap; }
+  .data-banner { margin: 10px 8px; }
+}
 </style>
 <script src="shared/user-storage.js"></script>
 <script src="shared/data.js"></script>
@@ -90,7 +99,7 @@ a { color: var(--accent); }
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
-  import { injectNav, setNavUser } from './shared/nav.js';
+  import { injectNav, setNavUser, injectDemoBanner } from './shared/nav.js';
   injectNav('tax');
 
   // Demo mode check
@@ -304,14 +313,9 @@ a { color: var(--accent); }
     const result = processIncomeData(transactions, fixedIncomes);
     window.__taxData = { loaded: true, years: result.years, availableYears: result.availableYears };
 
-    // Add demo banner
-    const root = document.getElementById('root');
-    const banner = document.createElement('div');
-    banner.className = 'data-banner warning';
-    banner.style.cssText = 'margin: 12px 14px;';
-    banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
-    root.parentNode.insertBefore(banner, root);
+    injectDemoBanner(); // unified banner under the shared nav (Phase 4b #14)
 
+    const root = document.getElementById('root');
     const loading = document.getElementById('auth-loading');
     loading.style.display = 'none';
     root.style.display = 'block';

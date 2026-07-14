@@ -901,7 +901,7 @@
         import { auth, signOut, onAuthStateChanged, db, doc, getDoc } from './firebase-config.js';
         import { isDemoMode, enterDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
         import { SyncBus } from './shared/sync-bus.js';
-        import { injectNav } from './shared/nav.js';
+        import { injectNav, injectDemoBanner } from './shared/nav.js';
         injectNav('index');
 
         const loadingScreen = document.getElementById('loadingScreen');
@@ -1364,12 +1364,7 @@
             const demoUser = getDemoUser();
             showUI(demoUser);
 
-            // Add demo banner
-            const banner = document.createElement('div');
-            banner.style.cssText = 'background: rgba(255, 215, 0, 0.1); border: 1px solid rgba(255, 215, 0, 0.3); color: #ffd93d; padding: 10px 16px; border-radius: 10px; font-size: 0.85rem; margin-bottom: 16px; text-align: center;';
-            banner.textContent = '👁️ מצב הדגמה - נתונים פיקטיביים לקריאה בלבד';
-            // (the h1 is not a direct child of mainContainer — insertBefore(h1) threw; prepend instead)
-            mainContainer.insertBefore(banner, mainContainer.firstChild);
+            injectDemoBanner(); // unified banner under the shared nav (Phase 4b #14)
         } else {
             // Check if user is signed in
             onAuthStateChanged(auth, (user) => {
