@@ -7,7 +7,7 @@
     <script src="shared/user-storage.js"></script>
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#00f0ff">
+    <meta name="theme-color" content="#0f1419">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Finance">
@@ -18,24 +18,21 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
-    
+
+    <!-- Shared design tokens (dark default + light overrides) -->
+    <link rel="stylesheet" href="shared/theme.css">
+    <script>
+        // Respect the shared theme key before first paint
+        if (localStorage.getItem('theme') === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
+
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-        }
-
-        :root {
-            --bg-base: #0a0a0f;
-            --bg-surface: #12121a;
-            --bg-elevated: #1a1a24;
-            --accent: #00f5d4;
-            --accent-dim: rgba(0, 245, 212, 0.15);
-            --text-primary: #ffffff;
-            --text-secondary: #a0a0b0;
-            --text-muted: #6a6a7a;
-            --border: rgba(255, 255, 255, 0.1);
         }
 
         body {
@@ -58,16 +55,24 @@
             text-align: center;
         }
 
-        .logo {
-            font-size: 3.5rem;
-            margin-bottom: 16px;
-        }
-
-        h1 {
+        h1.brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
             color: var(--text-primary);
             margin-bottom: 8px;
             font-size: 1.75rem;
-            font-weight: 600;
+            font-weight: 700;
+        }
+
+        h1.brand::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 12px var(--accent);
+            flex-shrink: 0;
         }
 
         .subtitle {
@@ -170,21 +175,16 @@
                 padding: 36px 24px;
             }
 
-            h1 {
+            h1.brand {
                 font-size: 1.5rem;
-            }
-
-            .logo {
-                font-size: 2.8rem;
             }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <div class="logo">📊</div>
-        <h1>ניהול פיננסי אישי</h1>
-        <p class="subtitle">התחבר כדי לגשת למערכת שלך</p>
+        <h1 class="brand">המעקב הפיננסי</h1>
+        <p class="subtitle">תיק השקעות, תשואות והשוואה למדדים — התחבר כדי לגשת למערכת שלך</p>
 
         <button class="google-btn" id="googleSignInBtn">
             <svg class="google-icon" viewBox="0 0 24 24">
