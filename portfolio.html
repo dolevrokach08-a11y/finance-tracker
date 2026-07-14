@@ -730,6 +730,19 @@
             color: var(--text-muted);
         }
 
+        /* Asset-class card hero numbers (summary tab) — white mono, LTR-isolated;
+           green/red stay reserved for profit/loss semantics only */
+        .asset-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            font-variant-numeric: tabular-nums;
+            direction: ltr;
+            unicode-bidi: isolate;
+            text-align: right;
+        }
+
         /* Lovable-style group badge */
         .group-badge {
             display: inline-flex;
@@ -2196,12 +2209,6 @@
 
                 <!-- ===== TAB: OVERVIEW ===== -->
                 <div id="tab-overview" class="tab-content active">
-                    <div class="page-hero">
-                        <span class="hero-eyebrow">תיק השקעות · סיכום</span>
-                        <h1>סיכום תיק ההשקעות</h1>
-                        <p>מבט על הביצועים והתשואות שלך</p>
-                    </div>
-
                     <!-- Main Summary Cards - Lovable Style -->
                     <div class="summary-grid stagger-in">
                         <div class="summary-card">
@@ -2240,7 +2247,7 @@
                         <div class="summary-card">
                             <div class="card-icon blue"><i data-lucide="wallet" style="width:20px;height:20px;"></i></div>
                             <h3>שווי כולל</h3>
-                            <div class="value" id="total-value" style="color: var(--profit);">₪0</div>
+                            <div class="value" id="total-value">₪0</div>
                             <div class="sub">נכסים + מזומן</div>
                         </div>
                     </div>
@@ -2255,7 +2262,7 @@
                             </div>
                             <div style="margin-bottom: 12px;">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
-                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="stocks-value">₪0</div>
+                                <div class="asset-value" id="stocks-value">₪0</div>
                                 <div style="font-size: 0.8rem; color: var(--text-muted);" id="stocks-value-original">$0 + €0</div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
@@ -2278,7 +2285,7 @@
                             </div>
                             <div style="margin-bottom: 12px;">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
-                                <div style="font-size: 1.8rem; font-weight: 700; color: var(--warning); font-family: 'JetBrains Mono', monospace;" id="bonds-value">₪0</div>
+                                <div class="asset-value" id="bonds-value">₪0</div>
                                 <div style="font-size: 0.8rem; color: var(--text-muted);" id="bonds-count">0 קרנות</div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
@@ -2302,7 +2309,7 @@
                             </div>
                             <div style="margin-bottom: 12px;">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי נוכחי</div>
-                                <div style="font-size: 1.8rem; font-weight: 700; color: #f5a623; font-family: 'JetBrains Mono', monospace;" id="pensions-value">₪0</div>
+                                <div class="asset-value" id="pensions-value">₪0</div>
                                 <div style="font-size: 0.8rem; color: var(--text-muted);" id="pensions-count">0 חסכונות</div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
@@ -2325,7 +2332,7 @@
                             </div>
                             <div style="margin-bottom: 12px;">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">שווי כולל</div>
-                                <div style="font-size: 1.8rem; font-weight: 700; color: #a855f7; font-family: 'JetBrains Mono', monospace;" id="total-value-2">₪0</div>
+                                <div class="asset-value" id="total-value-2">₪0</div>
                                 <div style="font-size: 0.8rem; color: var(--text-muted);">נכסים + מזומן</div>
                             </div>
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.85rem; padding-top: 12px; border-top: 1px solid var(--border);">
@@ -2357,11 +2364,11 @@
                             </div>
                             <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">מזומן פנוי</div>
-                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--info); font-family: 'JetBrains Mono', monospace;" id="available-cash-summary">₪0</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;" id="available-cash-summary">₪0</div>
                             </div>
                             <div style="padding: 16px; background: var(--bg-elevated); border-radius: var(--radius-sm);">
                                 <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px;">💸 עלות מזומן (שנתי)</div>
-                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--warning); font-family: 'JetBrains Mono', monospace;" id="cash-drag-value">₪0</div>
+                                <div style="font-size: 1.4rem; font-weight: 700; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;" id="cash-drag-value">₪0</div>
                                 <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;" id="cash-drag-pct">0% מהתיק במזומן</div>
                             </div>
                         </div>
