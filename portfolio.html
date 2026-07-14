@@ -31,6 +31,8 @@
     <link rel="stylesheet" href="shared-theme.css">
     <script src="shared/user-storage.js"></script>
     <script src="shared/data.js"></script>
+    <!-- SheetJS for the holdings Excel-import wizard (same version finance.html uses) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="ticker.js" defer></script>
     
     <style>
@@ -2680,7 +2682,86 @@
 <div id="tab-holdings" class="tab-content">
                 <div style="display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap;">
                     <button onclick="showAddHoldingForm()" class="btn btn-success">➕ הוסף החזקה</button>
+                    <button onclick="showHoldingsImport()" class="btn btn-primary">📥 ייבוא מאקסל</button>
                     <button onclick="refreshPrices()" class="btn btn-primary">🔄 רענן מחירים</button>
+                </div>
+
+                <!-- Holdings Excel-import wizard (generic column mapping, 3 steps) -->
+                <div id="holdingsImportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+                    <div style="background:var(--bg-surface); border:1px solid var(--border); border-radius:16px; width:1100px; max-width:96vw; max-height:92vh; display:flex; flex-direction:column; text-align:right;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 22px; border-bottom:1px solid var(--border);">
+                            <h3 style="margin:0; font-size:1.05rem;">ייבוא החזקות מקובץ אקסל</h3>
+                            <button onclick="hiClose()" style="background:none; border:none; color:var(--text-muted); font-size:1.5rem; cursor:pointer; line-height:1;">&times;</button>
+                        </div>
+                        <div style="padding:18px 22px; overflow-y:auto;">
+                            <div id="hi-step-line" style="font-size:0.72rem; font-weight:700; letter-spacing:0.5px; color:var(--accent); margin-bottom:12px;">שלב 1 מתוך 3 · בחירת קובץ</div>
+
+                            <!-- Step 1: file -->
+                            <div id="hi-step-1">
+                                <p style="color:var(--text-secondary); font-size:0.9rem; margin:0 0 14px;">
+                                    העלה קובץ אקסל עם רשימת קניות או החזקות מהברוקר — כל פורמט עמודות מתאים.
+                                    בשלב הבא תמפה אילו עמודות הן סימול, כמות, מחיר, תאריך, מטבע ועמלה.
+                                </p>
+                                <label class="btn btn-primary" style="cursor:pointer; display:inline-flex; align-items:center; gap:8px;">
+                                    📄 בחר קובץ
+                                    <input type="file" accept=".xlsx,.xls,.csv" onchange="hiFileChange(event)" style="display:none;">
+                                </label>
+                                <div id="hi-file-error" style="color:var(--loss); font-size:0.85rem; margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Step 2: column mapping -->
+                            <div id="hi-step-2" style="display:none;">
+                                <p style="color:var(--text-secondary); font-size:0.9rem; margin:0 0 12px;">
+                                    התאם כל שדה לעמודה בקובץ. המערכת ניחשה לפי כותרות העמודות — תקן אם צריך.
+                                    שדות חובה: סימול, כמות, מחיר.
+                                </p>
+                                <div id="hi-map-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:14px;"></div>
+                                <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">שלוש השורות הראשונות בקובץ:</div>
+                                <div id="hi-sample" style="overflow-x:auto; border:1px solid var(--border); border-radius:8px; margin-bottom:14px;"></div>
+                                <button onclick="hiBuildPreview()" class="btn btn-success">המשך לתצוגה מקדימה ←</button>
+                                <div id="hi-map-error" style="color:var(--loss); font-size:0.85rem; margin-top:10px;"></div>
+                            </div>
+
+                            <!-- Step 3: preview + options -->
+                            <div id="hi-step-3" style="display:none;">
+                                <div id="hi-stats" style="display:flex; gap:14px; flex-wrap:wrap; font-size:0.85rem; margin-bottom:12px;"></div>
+                                <div style="overflow-x:auto; max-height:44vh; overflow-y:auto; border:1px solid var(--border); border-radius:8px; margin-bottom:14px;">
+                                    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                        <thead style="position:sticky; top:0; background:var(--bg-elevated); z-index:1;">
+                                            <tr>
+                                                <th style="padding:8px; width:36px;">✓</th>
+                                                <th style="padding:8px; text-align:right;">תאריך</th>
+                                                <th style="padding:8px; text-align:right;">סימול</th>
+                                                <th style="padding:8px; text-align:right;">כמות</th>
+                                                <th style="padding:8px; text-align:right;">מחיר</th>
+                                                <th style="padding:8px; text-align:right;">מטבע</th>
+                                                <th style="padding:8px; text-align:right;">עמלה</th>
+                                                <th style="padding:8px; text-align:right;">סה"כ</th>
+                                                <th style="padding:8px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="hi-tbody"></tbody>
+                                    </table>
+                                </div>
+                                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px; font-size:0.88rem;">
+                                    <label style="display:flex; align-items:center; gap:8px;">
+                                        קבוצת השקעה להחזקות חדשות:
+                                        <select id="hi-group" style="padding:4px 8px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; color:inherit;"></select>
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                                        <input type="checkbox" id="hi-opt-deposits" checked>
+                                        צור הפקדות תואמות לכל קנייה (נדרש לחישוב MWR מדויק — "הכסף האמיתי")
+                                    </label>
+                                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;" id="hi-opt-snapshots-label">
+                                        <input type="checkbox" id="hi-opt-snapshots">
+                                        צור נקודות היסטוריה מקורבות ל-TWR (מבוסס עלות — קירוב בלבד; זמין רק לתיק ללא היסטוריה קיימת)
+                                    </label>
+                                </div>
+                                <button id="hi-confirm-btn" onclick="hiConfirm()" class="btn btn-success">אישור וייבוא</button>
+                                <button onclick="hiSetStep(2)" class="btn" style="background:var(--bg-elevated); color:var(--text-secondary); border:1px solid var(--border);">→ חזרה למיפוי</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Israeli-securities guidance collapsed by default (Phase 4b #8):
@@ -15414,6 +15495,379 @@ ${msg}`, 'warning');
         window.closeExchangeModal = closeExchangeModal;
         window.executeCurrencyExchange = executeCurrencyExchange;
         window.fixTWR = fixTWR;
+
+        // ===== Holdings Excel-import wizard (generic column mapping) =====
+        // Adds ONLY: purchases (+aggregated holdings), optional matching deposits
+        // (accurate MWR), optional cost-based approx snapshots — the snapshot
+        // option is allowed ONLY on a portfolio with no existing snapshot history,
+        // so real TWR data can never be polluted by approximations.
+        let hiState = null;
+
+        const HI_FIELDS = [
+            { key: 'symbol',   label: 'סימול / מס\' נייר', required: true,  guesses: ['סימול', 'נייר', 'ני"ע', 'ticker', 'symbol', 'שם'] },
+            { key: 'shares',   label: 'כמות',              required: true,  guesses: ['כמות', 'יחידות', 'מניות', 'shares', 'qty', 'quantity', 'units'] },
+            { key: 'price',    label: 'מחיר ליחידה',       required: true,  guesses: ['מחיר', 'שער', 'price', 'עלות'] },
+            { key: 'date',     label: 'תאריך',             required: false, guesses: ['תאריך', 'date'] },
+            { key: 'currency', label: 'מטבע',              required: false, guesses: ['מטבע', 'currency'] },
+            { key: 'fee',      label: 'עמלה',              required: false, guesses: ['עמלה', 'fee', 'commission'] }
+        ];
+
+        function hiEsc(s) {
+            return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function showHoldingsImport() {
+            hiState = null;
+            document.getElementById('hi-file-error').textContent = '';
+            document.getElementById('holdingsImportModal').style.display = 'flex';
+            hiSetStep(1);
+        }
+
+        function hiClose() {
+            hiState = null;
+            document.getElementById('holdingsImportModal').style.display = 'none';
+        }
+
+        function hiSetStep(n) {
+            [1, 2, 3].forEach(i => {
+                document.getElementById('hi-step-' + i).style.display = i === n ? '' : 'none';
+            });
+            const titles = { 1: 'שלב 1 מתוך 3 · בחירת קובץ', 2: 'שלב 2 מתוך 3 · מיפוי עמודות', 3: 'שלב 3 מתוך 3 · בדיקה ואישור' };
+            document.getElementById('hi-step-line').textContent = titles[n];
+        }
+
+        function hiFileChange(event) {
+            const file = event.target.files[0];
+            event.target.value = '';
+            if (!file) return;
+            const errEl = document.getElementById('hi-file-error');
+            if (typeof XLSX === 'undefined' || !XLSX.read) {
+                errEl.textContent = 'ספריית קריאת האקסל לא נטענה — בדוק חיבור לאינטרנט ורענן.';
+                return;
+            }
+            // CSV files are read as UTF-8 text (array-mode codepage detection
+            // garbles Hebrew headers in BOM-less CSVs); binary formats as array.
+            const isCsv = /\.csv$/i.test(file.name);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    // raw:true on CSV keeps cells as strings — otherwise SheetJS
+                    // parses "12/05/2025" as the US date Dec 5 instead of May 12.
+                    const wb = isCsv
+                        ? XLSX.read(e.target.result, { type: 'string', raw: true })
+                        : XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+                    const sheet = wb.Sheets[wb.SheetNames[0]];
+                    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+                    // First non-empty row = headers
+                    const headerIdx = grid.findIndex(r => Array.isArray(r) && r.filter(c => c !== null && c !== undefined && String(c).trim() !== '').length >= 2);
+                    if (headerIdx === -1) { errEl.textContent = 'לא נמצאו נתונים בקובץ.'; return; }
+                    const headers = grid[headerIdx].map(h => String(h ?? '').trim());
+                    const rows = grid.slice(headerIdx + 1).filter(r => Array.isArray(r) && r.some(c => c !== null && c !== undefined && String(c).trim() !== ''));
+                    if (!rows.length) { errEl.textContent = 'הקובץ מכיל כותרות בלבד, בלי שורות נתונים.'; return; }
+                    hiState = { headers, rows, mapping: {}, candidates: [] };
+                    hiRenderMapGrid();
+                    hiRenderSample();
+                    document.getElementById('hi-map-error').textContent = '';
+                    hiSetStep(2);
+                } catch (err) {
+                    console.error('holdings import parse failed:', err);
+                    errEl.textContent = 'קריאת הקובץ נכשלה: ' + err.message;
+                }
+            };
+            if (isCsv) reader.readAsText(file, 'utf-8');
+            else reader.readAsArrayBuffer(file);
+        }
+
+        function hiGuessColumn(field) {
+            const lower = hiState.headers.map(h => h.toLowerCase());
+            for (const g of field.guesses) {
+                const idx = lower.findIndex(h => h.includes(g.toLowerCase()));
+                if (idx !== -1) return idx;
+            }
+            return -1;
+        }
+
+        function hiRenderMapGrid() {
+            const grid = document.getElementById('hi-map-grid');
+            grid.innerHTML = HI_FIELDS.map(f => {
+                const guess = hiGuessColumn(f);
+                const colOpts = hiState.headers.map((h, i) =>
+                    `<option value="${i}" ${i === guess ? 'selected' : ''}>${hiEsc(h) || ('עמודה ' + (i + 1))}</option>`).join('');
+                const noneSel = guess === -1 ? 'selected' : '';
+                // Currency also offers fixed values (files often have no currency column)
+                const fixed = f.key === 'currency'
+                    ? ['ILS', 'USD', 'EUR'].map(c => `<option value="__fixed:${c}" ${guess === -1 && c === 'ILS' ? 'selected' : ''}>קבוע: ${c}</option>`).join('')
+                    : '';
+                return `<label style="display:flex; flex-direction:column; gap:4px; font-size:0.82rem; color:var(--text-secondary);">
+                    ${hiEsc(f.label)}${f.required ? ' *' : ''}
+                    <select data-hi-field="${f.key}" style="padding:6px 8px; background:var(--bg-elevated); border:1px solid var(--border); border-radius:6px; color:inherit;">
+                        ${f.key === 'currency' ? fixed : `<option value="-1" ${noneSel}>— לא בקובץ —</option>`}
+                        ${f.key === 'currency' && guess === -1 ? '' : ''}
+                        ${colOpts}
+                    </select>
+                </label>`;
+            }).join('');
+        }
+
+        function hiRenderSample() {
+            const rows = hiState.rows.slice(0, 3);
+            document.getElementById('hi-sample').innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <thead><tr>${hiState.headers.map(h => `<th style="padding:6px; text-align:right; background:var(--bg-elevated);">${hiEsc(h)}</th>`).join('')}</tr></thead>
+                <tbody>${rows.map(r => `<tr>${hiState.headers.map((_, i) => `<td style="padding:6px; border-top:1px solid var(--border); color:var(--text-secondary);">${hiEsc(r[i])}</td>`).join('')}</tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        function hiParseDate(v) {
+            if (v === null || v === undefined || v === '') return null;
+            if (typeof v === 'number' && v > 20000 && v < 60000) {
+                // Excel serial date
+                const d = new Date(Math.round((v - 25569) * 86400 * 1000));
+                return isNaN(d) ? null : d.toISOString().slice(0, 10);
+            }
+            const s = String(v).trim();
+            let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+            m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+            if (m) {
+                const yr = m[3].length === 2 ? '20' + m[3] : m[3];
+                return `${yr}-${String(m[2]).padStart(2, '0')}-${String(m[1]).padStart(2, '0')}`;
+            }
+            return null;
+        }
+
+        function hiParseCurrency(v) {
+            const s = String(v ?? '').trim().toUpperCase();
+            if (!s) return 'ILS';
+            if (s.includes('USD') || s.includes('$') || s.includes('דולר')) return 'USD';
+            if (s.includes('EUR') || s.includes('€') || s.includes('אירו') || s.includes('יורו')) return 'EUR';
+            return 'ILS';
+        }
+
+        function hiParseNum(v) {
+            if (typeof v === 'number') return v;
+            const n = parseFloat(String(v ?? '').replace(/[^\d.\-]/g, ''));
+            return isNaN(n) ? null : n;
+        }
+
+        function hiBuildPreview() {
+            const mapping = {};
+            document.querySelectorAll('#hi-map-grid select[data-hi-field]').forEach(sel => {
+                mapping[sel.getAttribute('data-hi-field')] = sel.value;
+            });
+            const errEl = document.getElementById('hi-map-error');
+            for (const f of HI_FIELDS) {
+                if (f.required && (mapping[f.key] === '-1' || mapping[f.key] === undefined)) {
+                    errEl.textContent = `שדה חובה חסר במיפוי: ${f.label}`;
+                    return;
+                }
+            }
+            errEl.textContent = '';
+            hiState.mapping = mapping;
+
+            const today = new Date().toISOString().slice(0, 10);
+            const col = (row, key) => {
+                const m = mapping[key];
+                if (m === undefined || m === '-1') return null;
+                if (String(m).startsWith('__fixed:')) return String(m).slice(8);
+                return row[parseInt(m)];
+            };
+
+            const candidates = [];
+            for (const row of hiState.rows) {
+                const symbol = String(col(row, 'symbol') ?? '').trim().toUpperCase();
+                const shares = hiParseNum(col(row, 'shares'));
+                const price = hiParseNum(col(row, 'price'));
+                if (!symbol || !shares || !price || shares <= 0 || price <= 0) continue;
+                const currency = hiParseCurrency(col(row, 'currency'));
+                const fee = Math.max(0, hiParseNum(col(row, 'fee')) || 0);
+                const date = hiParseDate(col(row, 'date')) || today;
+                const existingHolding = portfolio.holdings.find(h => h.symbol === symbol);
+                const currencyConflict = !!existingHolding && (existingHolding.currency || 'ILS') !== currency;
+                const isDup = (portfolio.purchases || []).some(p =>
+                    p.symbol === symbol && p.date === date &&
+                    Math.abs((p.shares || 0) - shares) < 0.0001);
+                candidates.push({
+                    symbol, shares, price, currency, fee, date,
+                    totalInCurrency: shares * price + fee,
+                    _isDuplicate: isDup,
+                    _conflict: currencyConflict,
+                    _included: !isDup && !currencyConflict
+                });
+            }
+            if (!candidates.length) {
+                errEl.textContent = 'אף שורה לא עברה את הפירוק — בדוק את מיפוי העמודות.';
+                return;
+            }
+            candidates.sort((a, b) => a.date.localeCompare(b.date));
+            hiState.candidates = candidates;
+
+            // Group select for NEW holdings
+            const groupSel = document.getElementById('hi-group');
+            groupSel.innerHTML = (portfolio.groups || []).map(g =>
+                `<option value="${g.id}">${hiEsc(g.name)}</option>`).join('') || '<option value="">—</option>';
+
+            // Approx-snapshot option is only safe on a history-less portfolio
+            const hasHistory = (portfolio.snapshots || []).length > 0;
+            const snapChk = document.getElementById('hi-opt-snapshots');
+            snapChk.checked = false;
+            snapChk.disabled = hasHistory;
+            document.getElementById('hi-opt-snapshots-label').style.opacity = hasHistory ? '0.45' : '1';
+
+            hiRenderPreview();
+            hiSetStep(3);
+        }
+
+        function hiRenderPreview() {
+            const c = hiState.candidates;
+            const included = c.filter(x => x._included).length;
+            document.getElementById('hi-stats').innerHTML = [
+                `סה"כ שורות: <strong>${c.length}</strong>`,
+                `מסומנות לייבוא: <strong style="color:var(--profit);">${included}</strong>`,
+                `כפילויות: <strong style="color:var(--warning);">${c.filter(x => x._isDuplicate).length}</strong>`,
+                `סתירת מטבע מול החזקה קיימת: <strong style="color:var(--loss);">${c.filter(x => x._conflict).length}</strong>`
+            ].map(s => `<span>${s}</span>`).join('');
+            document.getElementById('hi-confirm-btn').textContent = `אישור וייבוא ${included} קניות`;
+            document.getElementById('hi-tbody').innerHTML = c.map((x, i) => {
+                const badge = x._conflict
+                    ? '<span style="background:hsla(0,72%,55%,0.15); color:var(--loss); padding:2px 6px; border-radius:4px; font-size:11px;">מטבע שונה</span>'
+                    : x._isDuplicate
+                        ? '<span style="background:hsla(45,90%,55%,0.2); color:hsl(45,90%,55%); padding:2px 6px; border-radius:4px; font-size:11px;">כפילות</span>'
+                        : '<span style="background:hsla(142,60%,50%,0.15); color:hsl(142,60%,50%); padding:2px 6px; border-radius:4px; font-size:11px;">חדש</span>';
+                return `<tr style="opacity:${x._included ? 1 : 0.5}; border-top:1px solid var(--border);">
+                    <td style="text-align:center; padding:6px;"><input type="checkbox" data-hi-i="${i}" ${x._included ? 'checked' : ''} ${x._conflict ? 'disabled' : ''} onchange="hiRowToggle(event)"></td>
+                    <td style="padding:6px;">${x.date}</td>
+                    <td style="padding:6px; font-weight:600;">${hiEsc(x.symbol)}</td>
+                    <td style="padding:6px;">${x.shares}</td>
+                    <td style="padding:6px;">${x.price}</td>
+                    <td style="padding:6px;">${x.currency}</td>
+                    <td style="padding:6px;">${x.fee || 0}</td>
+                    <td style="padding:6px;">${x.totalInCurrency.toFixed(2)}</td>
+                    <td style="padding:6px;">${badge}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function hiRowToggle(event) {
+            const i = parseInt(event.target.getAttribute('data-hi-i'));
+            hiState.candidates[i]._included = event.target.checked;
+            hiRenderPreview();
+        }
+
+        function hiConfirm() {
+            const rows = hiState.candidates.filter(x => x._included);
+            if (!rows.length) { notify('❌ אין שורות מסומנות לייבוא', 'error'); return; }
+            const makeDeposits = document.getElementById('hi-opt-deposits').checked;
+            const makeSnapshots = document.getElementById('hi-opt-snapshots').checked &&
+                !document.getElementById('hi-opt-snapshots').disabled;
+            const groupId = document.getElementById('hi-group').value;
+
+            if (!portfolio.purchases) portfolio.purchases = [];
+            if (!portfolio.deposits) portfolio.deposits = [];
+            if (!portfolio.snapshots) portfolio.snapshots = [];
+
+            let idBase = Date.now();
+            let cumCostIls = 0; // cost-based running total for approx snapshots
+            const byDate = {};
+
+            for (const r of rows) {
+                const totalIls = convertToILS(r.totalInCurrency, r.currency);
+
+                // Holding: aggregate by symbol (weighted avg cost incl fee)
+                let h = portfolio.holdings.find(x => x.symbol === r.symbol);
+                const rowUnitCost = (r.shares * r.price + r.fee) / r.shares;
+                if (h) {
+                    const oldCost = (h.shares || 0) * (h.costBasis || 0);
+                    const newShares = (h.shares || 0) + r.shares;
+                    h.costBasis = (oldCost + r.shares * rowUnitCost) / newShares;
+                    h.shares = newShares;
+                    if (!h.purchaseDate || r.date < h.purchaseDate) h.purchaseDate = r.date;
+                    h.lastUpdate = new Date().toISOString();
+                } else {
+                    h = {
+                        id: ++idBase,
+                        symbol: r.symbol,
+                        shares: r.shares,
+                        costBasis: rowUnitCost,
+                        currentPrice: r.price,
+                        currency: r.currency,
+                        groupId: groupId,
+                        altTicker: '',
+                        purchaseDate: r.date,
+                        isCPIIndexed: false,
+                        account: '',
+                        lastUpdate: new Date().toISOString()
+                    };
+                    portfolio.holdings.push(h);
+                }
+
+                portfolio.purchases.push({
+                    id: ++idBase,
+                    date: r.date,
+                    symbol: r.symbol,
+                    shares: r.shares,
+                    original_currency: r.currency,
+                    original_price: r.price,
+                    original_amount: r.shares * r.price,
+                    fee: r.fee,
+                    fee_currency: r.currency,
+                    amount: totalIls,
+                    originalAmount: r.totalInCurrency,
+                    currency: r.currency,
+                    assetType: 'stocks',
+                    assetId: h.id,
+                    note: `ייבוא מאקסל: ${r.shares} × ${r.price} ${r.currency}` + (r.fee > 0 ? ` + ${r.fee} עמלה` : '')
+                });
+
+                if (makeDeposits) {
+                    portfolio.deposits.push({
+                        id: ++idBase,
+                        date: r.date,
+                        amount: totalIls,
+                        currency: r.currency,
+                        assetType: 'stocks',
+                        note: `ייבוא מאקסל: הפקדה לקנייה ${r.symbol}`
+                    });
+                }
+
+                if (makeSnapshots) {
+                    (byDate[r.date] = byDate[r.date] || []).push(totalIls);
+                }
+            }
+
+            if (makeSnapshots) {
+                for (const date of Object.keys(byDate).sort()) {
+                    const flow = byDate[date].reduce((s, v) => s + v, 0);
+                    portfolio.snapshots.push({
+                        id: ++idBase,
+                        date,
+                        value_before_flow: Math.round(cumCostIls),
+                        cash_flow: Math.round(flow),
+                        stocksValue: Math.round(cumCostIls + flow),
+                        bondsValue: 0,
+                        implicitCash: 0,
+                        totalValue: Math.round(cumCostIls + flow),
+                        triggerType: 'deposit',
+                        triggerNote: 'ייבוא היסטוריה מאקסל (קירוב מבוסס עלות)'
+                    });
+                    cumCostIls += flow;
+                }
+            }
+
+            saveData();
+            renderHoldingsList();
+            updateOverview();
+            hiClose();
+            notify(`✅ יובאו ${rows.length} קניות` + (makeDeposits ? ' + הפקדות תואמות' : '') + (makeSnapshots ? ' + נקודות היסטוריה' : ''));
+        }
+
+        window.showHoldingsImport = showHoldingsImport;
+        window.hiClose = hiClose;
+        window.hiSetStep = hiSetStep;
+        window.hiFileChange = hiFileChange;
+        window.hiBuildPreview = hiBuildPreview;
+        window.hiConfirm = hiConfirm;
+        window.hiRowToggle = hiRowToggle;
+
         window.showAddHoldingForm = showAddHoldingForm;
         window.hideAddHoldingForm = hideAddHoldingForm;
         window.calculateInvestment = calculateInvestment;
