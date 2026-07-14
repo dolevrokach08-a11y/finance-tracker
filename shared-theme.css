@@ -86,8 +86,30 @@
     flex: 1;
     overflow: hidden;
     position: relative;
-    mask-image: linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%);
-    -webkit-mask-image: linear-gradient(to right, transparent 0, black 4%, black 96%, transparent 100%);
+    /* Edge fade via overlay gradients — NOT mask-image: a mask over the
+       infinitely-animating strip hangs Chrome's compositor on page scroll
+       (the index.html "renderer freeze" bug). */
+}
+
+.ticker-viewport::before,
+.ticker-viewport::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 4%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+.ticker-viewport::before {
+    left: 0;
+    background: linear-gradient(to right, var(--bg-surface, hsl(220, 18%, 10%)), transparent);
+}
+
+.ticker-viewport::after {
+    right: 0;
+    background: linear-gradient(to left, var(--bg-surface, hsl(220, 18%, 10%)), transparent);
 }
 
 .ticker-scroll {
