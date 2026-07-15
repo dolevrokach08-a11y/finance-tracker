@@ -15504,13 +15504,31 @@ ${msg}`, 'warning');
         let hiState = null;
 
         const HI_FIELDS = [
-            { key: 'symbol',   label: 'סימול / מס\' נייר', required: true,  guesses: ['סימול', 'נייר', 'ני"ע', 'ticker', 'symbol', 'שם'] },
+            { key: 'symbol',   label: 'סימול / מס\' נייר', required: true,  guesses: ['סימול', 'מספר נייר', 'ticker', 'symbol', 'ני"ע', 'נייר', 'שם'] },
             { key: 'shares',   label: 'כמות',              required: true,  guesses: ['כמות', 'יחידות', 'מניות', 'shares', 'qty', 'quantity', 'units'] },
             { key: 'price',    label: 'מחיר ליחידה',       required: true,  guesses: ['מחיר', 'שער', 'price', 'עלות'] },
             { key: 'date',     label: 'תאריך',             required: false, guesses: ['תאריך', 'date'] },
             { key: 'currency', label: 'מטבע',              required: false, guesses: ['מטבע', 'currency'] },
-            { key: 'fee',      label: 'עמלה',              required: false, guesses: ['עמלה', 'fee', 'commission'] }
+            { key: 'fee',      label: 'עמלה',              required: false, guesses: ['עמלה', 'fee', 'commission'] },
+            // Broker "transaction journal" files (e.g. מיטב תנועות היסטוריות) mix
+            // buys/sells/transfers/interest in one sheet and quote TASE prices in
+            // agorot. The action column classifies rows; the total column, when
+            // present, derives the true per-unit price (total/qty) so agorot
+            // quotes can't poison cost basis.
+            { key: 'action',   label: 'סוג פעולה (רשות)',  required: false, guesses: ['פעולה', 'סוג תנועה', 'סוג', 'action', 'type'] },
+            { key: 'total',    label: 'שווי כולל (רשות)',  required: false, guesses: ['שווי כולל בשקלים', 'שווי כולל', 'סכום', 'שווי', 'total', 'amount'] }
         ];
+
+        // Classify a journal action value. Anything not clearly a buy/deposit is
+        // excluded from import (interest, dividends, fees, FX, sells).
+        function hiClassifyAction(v) {
+            const s = String(v ?? '').trim();
+            if (!s) return 'buy';
+            if (/^ק[\/רצ]|קניה|קנייה|רכישה|buy/i.test(s)) return 'buy';
+            if (/^מ\/|מכירה|sell/i.test(s)) return 'sell';
+            if (/העברה|הפקדה|deposit/i.test(s)) return 'deposit';
+            return 'other';
+        }
 
         function hiEsc(s) {
             return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -15672,23 +15690,62 @@ ${msg}`, 'warning');
                 return row[parseInt(m)];
             };
 
+            const hasActionCol = mapping.action !== undefined && mapping.action !== '-1';
+            const hasTotalCol = mapping.total !== undefined && mapping.total !== '-1';
+
             const candidates = [];
             for (const row of hiState.rows) {
-                const symbol = String(col(row, 'symbol') ?? '').trim().toUpperCase();
+                const symbolRaw = String(col(row, 'symbol') ?? '').trim();
+                const symbol = symbolRaw.toUpperCase();
                 const shares = hiParseNum(col(row, 'shares'));
-                const price = hiParseNum(col(row, 'price'));
-                if (!symbol || !shares || !price || shares <= 0 || price <= 0) continue;
+                const rawPrice = hiParseNum(col(row, 'price'));
                 const currency = hiParseCurrency(col(row, 'currency'));
                 const fee = Math.max(0, hiParseNum(col(row, 'fee')) || 0);
                 const date = hiParseDate(col(row, 'date')) || today;
+                const total = hasTotalCol ? hiParseNum(col(row, 'total')) : null;
+                const kind = hasActionCol ? hiClassifyAction(col(row, 'action')) : 'buy';
+                const actionText = hasActionCol ? String(col(row, 'action') ?? '').trim() : '';
+
+                if (kind === 'deposit') {
+                    // Cash transfer into the account — a dated flow, not a purchase.
+                    const amount = (total && total > 0) ? total : (shares && shares > 0 ? shares : null);
+                    if (!amount) continue;
+                    candidates.push({
+                        kind, actionText, symbol: '—', shares: '', price: '', currency, fee: 0, date,
+                        totalInCurrency: amount,
+                        _isDuplicate: (portfolio.deposits || []).some(d =>
+                            d.date === date && Math.abs((d.amount || 0) - convertToILS(amount, currency)) < 1),
+                        _conflict: false,
+                        _included: true
+                    });
+                    if (candidates[candidates.length - 1]._isDuplicate) candidates[candidates.length - 1]._included = false;
+                    continue;
+                }
+
+                if (kind === 'sell' || kind === 'other') {
+                    // Shown for transparency, never imported (sells/interest/dividends/fees)
+                    candidates.push({
+                        kind, actionText, symbol: symbol || '—', shares: shares || '', price: rawPrice || '',
+                        currency, fee, date, totalInCurrency: total || 0,
+                        _isDuplicate: false, _conflict: false, _included: false, _blocked: true
+                    });
+                    continue;
+                }
+
+                // BUY row. Prefer price derived from the total column — immune to
+                // agorot-quoted TASE prices (total 818 / qty 2 = ₪409, not 40,900).
+                if (!symbol || symbol === '-' || !shares || shares <= 0) continue;
+                let price = rawPrice;
+                if (total && total > 0 && shares > 0) price = total / shares;
+                if (!price || price <= 0) continue;
                 const existingHolding = portfolio.holdings.find(h => h.symbol === symbol);
                 const currencyConflict = !!existingHolding && (existingHolding.currency || 'ILS') !== currency;
                 const isDup = (portfolio.purchases || []).some(p =>
                     p.symbol === symbol && p.date === date &&
                     Math.abs((p.shares || 0) - shares) < 0.0001);
                 candidates.push({
-                    symbol, shares, price, currency, fee, date,
-                    totalInCurrency: shares * price + fee,
+                    kind: 'buy', actionText, symbol, shares, price: +price.toFixed(4), currency, fee, date,
+                    totalInCurrency: (total && total > 0 ? total : shares * price) + fee,
                     _isDuplicate: isDup,
                     _conflict: currencyConflict,
                     _included: !isDup && !currencyConflict
@@ -15700,6 +15757,12 @@ ${msg}`, 'warning');
             }
             candidates.sort((a, b) => a.date.localeCompare(b.date));
             hiState.candidates = candidates;
+
+            // Explicit transfer rows are the REAL cash flows — when they exist,
+            // per-buy synthetic deposits would double-count, so default them off.
+            const hasExplicitDeposits = candidates.some(c => c.kind === 'deposit' && c._included);
+            const depChk = document.getElementById('hi-opt-deposits');
+            depChk.checked = !hasExplicitDeposits;
 
             // Group select for NEW holdings
             const groupSel = document.getElementById('hi-group');
@@ -15719,30 +15782,37 @@ ${msg}`, 'warning');
 
         function hiRenderPreview() {
             const c = hiState.candidates;
-            const included = c.filter(x => x._included).length;
+            const buys = c.filter(x => x.kind === 'buy' && x._included).length;
+            const deps = c.filter(x => x.kind === 'deposit' && x._included).length;
             document.getElementById('hi-stats').innerHTML = [
                 `סה"כ שורות: <strong>${c.length}</strong>`,
-                `מסומנות לייבוא: <strong style="color:var(--profit);">${included}</strong>`,
+                `קניות לייבוא: <strong style="color:var(--profit);">${buys}</strong>`,
+                `הפקדות לייבוא: <strong style="color:var(--info);">${deps}</strong>`,
                 `כפילויות: <strong style="color:var(--warning);">${c.filter(x => x._isDuplicate).length}</strong>`,
-                `סתירת מטבע מול החזקה קיימת: <strong style="color:var(--loss);">${c.filter(x => x._conflict).length}</strong>`
+                `לא מיובאות (מכירה/ריבית/אחר): <strong style="color:var(--text-muted);">${c.filter(x => x._blocked).length}</strong>`,
+                `סתירת מטבע: <strong style="color:var(--loss);">${c.filter(x => x._conflict).length}</strong>`
             ].map(s => `<span>${s}</span>`).join('');
-            document.getElementById('hi-confirm-btn').textContent = `אישור וייבוא ${included} קניות`;
+            document.getElementById('hi-confirm-btn').textContent = `אישור וייבוא ${buys} קניות` + (deps ? ` + ${deps} הפקדות` : '');
             document.getElementById('hi-tbody').innerHTML = c.map((x, i) => {
-                const badge = x._conflict
-                    ? '<span style="background:hsla(0,72%,55%,0.15); color:var(--loss); padding:2px 6px; border-radius:4px; font-size:11px;">מטבע שונה</span>'
-                    : x._isDuplicate
-                        ? '<span style="background:hsla(45,90%,55%,0.2); color:hsl(45,90%,55%); padding:2px 6px; border-radius:4px; font-size:11px;">כפילות</span>'
-                        : '<span style="background:hsla(142,60%,50%,0.15); color:hsl(142,60%,50%); padding:2px 6px; border-radius:4px; font-size:11px;">חדש</span>';
+                const kindBadge = x.kind === 'deposit'
+                    ? `<span style="background:hsla(210,80%,55%,0.15); color:var(--info); padding:2px 6px; border-radius:4px; font-size:11px;">הפקדה${x.actionText ? ' · ' + hiEsc(x.actionText) : ''}</span>`
+                    : x._blocked
+                        ? `<span style="background:hsla(0,0%,60%,0.12); color:var(--text-muted); padding:2px 6px; border-radius:4px; font-size:11px;">לא מיובא · ${hiEsc(x.actionText || (x.kind === 'sell' ? 'מכירה' : 'אחר'))}</span>`
+                        : x._conflict
+                            ? '<span style="background:hsla(0,72%,55%,0.15); color:var(--loss); padding:2px 6px; border-radius:4px; font-size:11px;">מטבע שונה</span>'
+                            : x._isDuplicate
+                                ? '<span style="background:hsla(45,90%,55%,0.2); color:hsl(45,90%,55%); padding:2px 6px; border-radius:4px; font-size:11px;">כפילות</span>'
+                                : `<span style="background:hsla(142,60%,50%,0.15); color:hsl(142,60%,50%); padding:2px 6px; border-radius:4px; font-size:11px;">קנייה${x.actionText ? ' · ' + hiEsc(x.actionText) : ''}</span>`;
                 return `<tr style="opacity:${x._included ? 1 : 0.5}; border-top:1px solid var(--border);">
-                    <td style="text-align:center; padding:6px;"><input type="checkbox" data-hi-i="${i}" ${x._included ? 'checked' : ''} ${x._conflict ? 'disabled' : ''} onchange="hiRowToggle(event)"></td>
+                    <td style="text-align:center; padding:6px;"><input type="checkbox" data-hi-i="${i}" ${x._included ? 'checked' : ''} ${(x._conflict || x._blocked) ? 'disabled' : ''} onchange="hiRowToggle(event)"></td>
                     <td style="padding:6px;">${x.date}</td>
                     <td style="padding:6px; font-weight:600;">${hiEsc(x.symbol)}</td>
                     <td style="padding:6px;">${x.shares}</td>
                     <td style="padding:6px;">${x.price}</td>
                     <td style="padding:6px;">${x.currency}</td>
                     <td style="padding:6px;">${x.fee || 0}</td>
-                    <td style="padding:6px;">${x.totalInCurrency.toFixed(2)}</td>
-                    <td style="padding:6px;">${badge}</td>
+                    <td style="padding:6px;">${(x.totalInCurrency || 0).toFixed ? (x.totalInCurrency || 0).toFixed(2) : x.totalInCurrency}</td>
+                    <td style="padding:6px;">${kindBadge}</td>
                 </tr>`;
             }).join('');
         }
@@ -15768,9 +15838,28 @@ ${msg}`, 'warning');
             let idBase = Date.now();
             let cumCostIls = 0; // cost-based running total for approx snapshots
             const byDate = {};
+            // With explicit transfer rows, THEY are the flows — buys must not
+            // also create flow points (that would double-count the money)
+            const hasExplicitDeposits = rows.some(r => r.kind === 'deposit');
 
             for (const r of rows) {
                 const totalIls = convertToILS(r.totalInCurrency, r.currency);
+
+                // Explicit transfer rows become deposits only — the real cash flows
+                if (r.kind === 'deposit') {
+                    portfolio.deposits.push({
+                        id: ++idBase,
+                        date: r.date,
+                        amount: totalIls,
+                        currency: r.currency,
+                        assetType: 'stocks',
+                        note: 'ייבוא מאקסל: העברה/הפקדה לחשבון'
+                    });
+                    if (makeSnapshots) {
+                        (byDate[r.date] = byDate[r.date] || []).push(totalIls);
+                    }
+                    continue;
+                }
 
                 // Holding: aggregate by symbol (weighted avg cost incl fee)
                 let h = portfolio.holdings.find(x => x.symbol === r.symbol);
@@ -15818,7 +15907,7 @@ ${msg}`, 'warning');
                     note: `ייבוא מאקסל: ${r.shares} × ${r.price} ${r.currency}` + (r.fee > 0 ? ` + ${r.fee} עמלה` : '')
                 });
 
-                if (makeDeposits) {
+                if (makeDeposits && !hasExplicitDeposits) {
                     portfolio.deposits.push({
                         id: ++idBase,
                         date: r.date,
@@ -15829,7 +15918,7 @@ ${msg}`, 'warning');
                     });
                 }
 
-                if (makeSnapshots) {
+                if (makeSnapshots && !hasExplicitDeposits) {
                     (byDate[r.date] = byDate[r.date] || []).push(totalIls);
                 }
             }
@@ -15857,7 +15946,9 @@ ${msg}`, 'warning');
             renderHoldingsList();
             updateOverview();
             hiClose();
-            notify(`✅ יובאו ${rows.length} קניות` + (makeDeposits ? ' + הפקדות תואמות' : '') + (makeSnapshots ? ' + נקודות היסטוריה' : ''));
+            const buysN = rows.filter(r => r.kind === 'buy').length;
+            const depsN = rows.filter(r => r.kind === 'deposit').length;
+            notify(`✅ יובאו ${buysN} קניות` + (depsN ? ` + ${depsN} הפקדות` : '') + (makeSnapshots ? ' + נקודות היסטוריה' : ''));
         }
 
         window.showHoldingsImport = showHoldingsImport;
