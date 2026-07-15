@@ -2716,7 +2716,7 @@
                                     שדות חובה: סימול, כמות, מחיר.
                                 </p>
                                 <div id="hi-map-grid" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; margin-bottom:14px;"></div>
-                                <div style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">שלוש השורות הראשונות בקובץ:</div>
+                                <div id="hi-sample-label" style="font-size:0.8rem; color:var(--text-muted); margin-bottom:8px;">שלוש השורות הראשונות בקובץ:</div>
                                 <div id="hi-sample" style="overflow-x:auto; border:1px solid var(--border); border-radius:8px; margin-bottom:14px;"></div>
                                 <button onclick="hiBuildPreview()" class="btn btn-success">המשך לתצוגה מקדימה ←</button>
                                 <div id="hi-map-error" style="color:var(--loss); font-size:0.85rem; margin-top:10px;"></div>
@@ -15628,6 +15628,9 @@ ${msg}`, 'warning');
         }
 
         function hiRenderSample() {
+            const label = document.getElementById('hi-sample-label');
+            if (label) label.textContent =
+                `נמצאו ${hiState.rows.length} שורות נתונים בקובץ. אלו 3 הראשונות — לבדיקת המיפוי בלבד; כולן ייטענו בשלב הבא:`;
             const rows = hiState.rows.slice(0, 3);
             document.getElementById('hi-sample').innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:12px;">
                 <thead><tr>${hiState.headers.map(h => `<th style="padding:6px; text-align:right; background:var(--bg-elevated);">${hiEsc(h)}</th>`).join('')}</tr></thead>
