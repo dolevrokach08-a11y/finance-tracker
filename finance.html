@@ -2815,6 +2815,28 @@
             try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); } catch(e) {}
         }
 
+        // Keep the last local copy that was about to be replaced by a cloud copy in a
+        // two-sided conflict, so a wrong choice is recoverable rather than final.
+        function backupLocalSnapshot() {
+            try {
+                const raw = localStorage.getItem('financeTrackerData');
+                if (!raw) return;
+                localStorage.setItem('financeTrackerData_conflictBackup', JSON.stringify({
+                    savedAt: new Date().toISOString(),
+                    meta: getSyncMeta(),
+                    data: JSON.parse(raw)
+                }));
+            } catch(e) { console.warn('conflict backup failed', e); }
+        }
+
+        function countLocalTransactions() {
+            try {
+                const raw = localStorage.getItem('financeTrackerData');
+                const parsed = raw ? JSON.parse(raw) : null;
+                return (parsed && Array.isArray(parsed.transactions)) ? parsed.transactions.length : 0;
+            } catch(e) { return 0; }
+        }
+
         function updateSyncWidget() {
             const widget = document.getElementById('syncWidget');
             const iconEl = document.getElementById('syncIcon');
@@ -2892,6 +2914,41 @@
             updateSyncWidget();
         });
         
+        // The page only reads the cloud once, at load. An installed/desktop tab that
+        // stays open for a day therefore keeps showing yesterday's data — and worse, a
+        // later edit from it pushes that stale copy over whatever the phone saved
+        // meanwhile. When the tab becomes visible again, check whether another device
+        // moved the cloud forward, and reload if so.
+        let lastVisibilityCheck = 0;
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState !== 'visible') return;
+            if (_isDemoMode || !currentUser || !db || !navigator.onLine) return;
+            if (syncStatus === 'syncing') return;
+            if (importPreviewState) return; // don't reload out from under an open import review
+            if (Date.now() - lastVisibilityCheck < 30000) return; // don't spam on tab flicking
+            lastVisibilityCheck = Date.now();
+            try {
+                const snap = await getDoc(doc(db, 'users', currentUser.uid, 'finance', 'data'));
+                if (!snap.exists()) return;
+                const cloudMod = snap.data()?.lastModified || null;
+                if (!cloudMod || cloudMod === cloudLastModified) return;
+
+                const meta = getSyncMeta();
+                if (meta && meta.hasUnsyncedChanges) {
+                    // Both sides moved — reloading here would silently drop local edits.
+                    notify('⚠️ מכשיר אחר עדכן את הנתונים ויש כאן שינויים שלא סונכרנו - לחץ על כפתור הסנכרון');
+                    syncStatus = 'pending';
+                    updateSyncWidget();
+                    return;
+                }
+                console.log('🔄 Cloud changed on another device - reloading', { cloudLastModified, cloudMod });
+                notify('🔄 הנתונים עודכנו במכשיר אחר - טוען מחדש...');
+                setTimeout(() => location.reload(), 900);
+            } catch (e) {
+                console.warn('visibility sync check failed', e);
+            }
+        });
+
         // Check initial offline state after DOM loads
         document.addEventListener('DOMContentLoaded', () => {
             if (!navigator.onLine) {
@@ -3982,11 +4039,11 @@
         async function saveToFirebase(forceOverwrite = false, allowEmptyOverwrite = false) {
             if (_isDemoMode) {
                 notify('מצב הדגמה - השינויים לא נשמרים');
-                return;
+                return false;
             }
             if (!currentUser) {
                 console.warn('No user logged in, cannot save');
-                return;
+                return false;
             }
 
             // SAFETY GUARD: never overwrite an unknown cloud with empty data.
@@ -4006,22 +4063,28 @@
                     '• לחץ Cancel כדי להישאר בלי לשמור'
                 );
                 if (reload) location.reload();
-                return;
+                return false;
             }
+
+            // Persist locally and mark the data dirty BEFORE attempting the network
+            // write. If the tab is killed mid-write (routine on mobile — backgrounding
+            // the browser kills in-flight Firestore writes), the flag survives, so the
+            // next load preserves and pushes the change instead of silently discarding
+            // it in favour of the older cloud copy.
+            localStorage.setItem('financeTrackerData', JSON.stringify(data));
+            setSyncMeta({
+                localLastModified: new Date().toISOString(),
+                cloudLastModified: cloudLastModified,
+                hasUnsyncedChanges: true
+            });
 
             // If offline, only save locally - mark as pending
             if (isOffline || !navigator.onLine) {
                 console.log('📴 Offline - saving to localStorage only');
-                localStorage.setItem('financeTrackerData', JSON.stringify(data));
-                setSyncMeta({
-                    localLastModified: new Date().toISOString(),
-                    cloudLastModified: cloudLastModified,
-                    hasUnsyncedChanges: true
-                });
                 syncStatus = 'pending';
                 updateSyncWidget();
                 notify('⚠️ אופליין - נשמר מקומית בלבד');
-                return;
+                return false;
             }
 
             syncStatus = 'syncing';
@@ -4030,33 +4093,52 @@
             try {
                 const userDocRef = doc(db, 'users', currentUser.uid, 'finance', 'data');
 
-                // CONFLICT DETECTION: Check if cloud data is newer
-                if (!forceOverwrite && cloudLastModified) {
+                // CONFLICT DETECTION: never overwrite a cloud copy we haven't seen.
+                // This runs even when cloudLastModified is null — that means the load
+                // fell back to localStorage (timeout/offline/auth delay) and we have NO
+                // idea what the cloud holds; blindly setDoc-ing there is exactly how a
+                // stale device wipes out another device's newer data.
+                if (!forceOverwrite) {
                     const cloudDoc = await getDoc(userDocRef);
                     if (cloudDoc.exists()) {
                         const currentCloudModified = cloudDoc.data()?.lastModified;
+                        const neverLoaded = !cloudLastModified;
+                        const cloudIsNewer = currentCloudModified && cloudLastModified &&
+                                             currentCloudModified > cloudLastModified;
 
-                        if (currentCloudModified && currentCloudModified > cloudLastModified) {
-                            // Cloud has newer data than what we loaded!
+                        if (neverLoaded || cloudIsNewer) {
                             console.warn('⚠️ Conflict detected!', {
                                 cloudLastModified: cloudLastModified,
-                                currentCloudModified: currentCloudModified
+                                currentCloudModified: currentCloudModified,
+                                neverLoaded
                             });
 
+                            const when = currentCloudModified
+                                ? new Date(currentCloudModified).toLocaleString('he-IL')
+                                : 'לא ידוע';
                             const userChoice = confirm(
-                                '⚠️ זוהה קונפליקט!\n\n' +
-                                'הנתונים בענן עודכנו ממכשיר אחר מאז שטענת את הדף.\n\n' +
+                                (neverLoaded
+                                    ? '⚠️ לא הצלחתי לטעון את הנתונים מהענן בפתיחת הדף, ולכן אני עובד על עותק מקומי.\n\n'
+                                    : '⚠️ זוהה קונפליקט!\n\nהנתונים בענן עודכנו ממכשיר אחר מאז שטענת את הדף.\n\n') +
+                                `עדכון אחרון בענן: ${when}\n\n` +
                                 '• לחץ OK כדי לדרוס את הנתונים בענן עם הנתונים המקומיים\n' +
                                 '• לחץ Cancel כדי לרענן ולטעון את הנתונים מהענן\n\n' +
-                                '💡 טיפ: אם לא בטוח, לחץ Cancel ויצא גיבוי קודם'
+                                '💡 אם עדכנת מהפלאפון - לחץ Cancel, אחרת העדכון מהפלאפון יימחק'
                             );
 
                             if (!userChoice) {
-                                // User chose to reload from cloud
+                                // User chose the cloud copy. Back the local one up and
+                                // clear the dirty flag, so the reload below doesn't
+                                // immediately re-ask the same question on load.
+                                backupLocalSnapshot();
+                                setSyncMeta({
+                                    localLastModified: currentCloudModified || null,
+                                    cloudLastModified: currentCloudModified || null,
+                                    hasUnsyncedChanges: false
+                                });
                                 notify('🔄 טוען נתונים מהענן...');
-                                await loadFromFirebase();
                                 location.reload();
-                                return;
+                                return false;
                             }
                             // User chose to overwrite - continue with save
                         }
@@ -4088,18 +4170,15 @@
                 syncStatus = 'synced';
                 dataSource = 'cloud';
                 updateSyncWidget();
+                return true;
             } catch(e) {
                 console.error('❌ Firebase save failed:', e);
-                // Fallback to localStorage only - mark as unsynced
-                localStorage.setItem('financeTrackerData', JSON.stringify(data));
-                setSyncMeta({
-                    localLastModified: new Date().toISOString(),
-                    cloudLastModified: cloudLastModified,
-                    hasUnsyncedChanges: true
-                });
+                // localStorage + the dirty flag were already written before the attempt,
+                // so there's nothing to re-persist here — just surface the failure.
                 syncStatus = 'error';
                 updateSyncWidget();
                 notify('שגיאה בשמירה בענן, נשמר מקומית');
+                return false;
             }
         }
 
@@ -4132,13 +4211,20 @@
                     const firebaseData = docSnap.data();
                     const cloudMod = firebaseData.lastModified || null;
 
-                    // PROTECTION: Check if local has unsynced changes newer than cloud.
-                    // This prevents refresh from wiping out locally-saved data that
-                    // failed to reach the cloud.
+                    // PROTECTION: local has changes that never reached the cloud.
+                    // Two very different situations, and conflating them is what loses
+                    // data across devices:
+                    //   (a) only this device changed  → safe to keep local and push it.
+                    //   (b) the cloud ALSO moved since this device last synced (i.e. the
+                    //       phone saved something meanwhile) → a real two-sided conflict.
+                    //       Pushing local would erase the other device's work, and taking
+                    //       cloud would erase this device's — so ask, and back up first.
                     const meta = getSyncMeta();
-                    if (meta && meta.hasUnsyncedChanges && meta.localLastModified &&
-                        (!cloudMod || meta.localLastModified > cloudMod)) {
-                        console.warn('⚠️ Local has unsynced changes newer than cloud - preserving local', {
+                    const localDirty = !!(meta && meta.hasUnsyncedChanges && meta.localLastModified);
+                    const cloudMovedElsewhere = localDirty && !!cloudMod && cloudMod !== meta.cloudLastModified;
+
+                    if (localDirty && !cloudMovedElsewhere) {
+                        console.warn('⚠️ Local has unsynced changes, cloud unchanged - preserving local', {
                             localLastModified: meta.localLastModified,
                             cloudLastModified: cloudMod
                         });
@@ -4153,6 +4239,35 @@
                             setTimeout(() => saveToFirebase(true), 500);
                         }
                         return loaded;
+                    }
+
+                    if (cloudMovedElsewhere) {
+                        console.warn('⚠️ Two-sided conflict: local dirty AND cloud moved', {
+                            localLastModified: meta.localLastModified,
+                            lastSyncedCloud: meta.cloudLastModified,
+                            currentCloud: cloudMod
+                        });
+                        backupLocalSnapshot();
+                        const localCount = countLocalTransactions();
+                        const cloudCount = Array.isArray(firebaseData.transactions) ? firebaseData.transactions.length : 0;
+                        const keepLocal = confirm(
+                            '⚠️ גם המכשיר הזה וגם מכשיר אחר עדכנו נתונים.\n\n' +
+                            `• במכשיר הזה: ${localCount} עסקאות (שינויים שלא סונכרנו)\n` +
+                            `• בענן: ${cloudCount} עסקאות (עודכן ב-${new Date(cloudMod).toLocaleString('he-IL')})\n\n` +
+                            '• OK = להשאיר את הנתונים של המכשיר הזה (ידרוס את הענן)\n' +
+                            '• Cancel = לקחת את הנתונים מהענן\n\n' +
+                            'בכל מקרה שמרתי גיבוי של העותק המקומי (localStorage: financeTrackerData_conflictBackup).'
+                        );
+                        if (keepLocal) {
+                            const loaded = loadFromLocalStorage();
+                            if (loaded) {
+                                cloudLastModified = cloudMod;
+                                setTimeout(() => saveToFirebase(true), 500);
+                            }
+                            return loaded;
+                        }
+                        notify('☁️ נטענו הנתונים מהענן (גיבוי מקומי נשמר)');
+                        // fall through to the normal cloud load below
                     }
 
                     // Track the lastModified for conflict detection
@@ -5005,15 +5120,18 @@
 
         // Shared post-confirm pipeline used by all importers: append, save, refresh UI,
         // and chain the existing tithe/earner dialogs for any new income rows.
-        function applyPreviewedImport(txs, selectedMonth, skippedCount) {
+        // Returns true only once the import has actually reached the cloud — callers that
+        // consume a server-side queue (the pending-transactions API) must not mark rows
+        // as handled before the data is safely stored.
+        async function applyPreviewedImport(txs, selectedMonth, skippedCount) {
             if (!txs || txs.length === 0) {
                 if (skippedCount > 0) notify(`ℹ️ ${skippedCount} תנועות דולגו, לא נוספו עסקאות חדשות`);
-                return;
+                return false;
             }
             const incomeCount = txs.filter(t => t.type === 'income').length;
             const expenseCount = txs.filter(t => t.type === 'expense').length;
             for (const tx of txs) data.transactions.push(tx);
-            saveToLocalStorage();
+            const savedToCloud = await saveToFirebase();
             populateYearMonthSelectors();
             loadMonthTransactions();
             updateOverview();
@@ -5033,6 +5151,7 @@
             } else {
                 notify(`✅ נוספו ${txs.length} תנועות (${expenseCount} הוצאות)${skippedCount > 0 ? `, ${skippedCount} דולגו` : ''}`);
             }
+            return savedToCloud;
         }
 
         // ========== Auto-import from the scraper Worker (pending transactions) ==========
@@ -5066,10 +5185,28 @@
             return 'אחר';
         }
 
+        // The scrapers store the transaction date as an ISO *instant* at Israel-local
+        // midnight — a txn on the 22nd arrives as "2026-07-21T21:00:00.000Z" (UTC+3).
+        // Slicing that string naively lands a day early, so format in Asia/Jerusalem.
+        function israelDateFromIso(iso) {
+            const s = String(iso || '').trim();
+            if (!s) return '';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // already a plain calendar date
+            const d = new Date(s);
+            if (isNaN(d.getTime())) return s.slice(0, 10);
+            try {
+                const parts = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit'
+                }).formatToParts(d).reduce((acc, p) => (acc[p.type] = p.value, acc), {});
+                if (parts.year && parts.month && parts.day) return `${parts.year}-${parts.month}-${parts.day}`;
+            } catch (e) { /* fall through */ }
+            return s.slice(0, 10);
+        }
+
         function pendingToCandidate(p) {
             const charged = Number(p.charged_amount) || 0;
             const type = charged < 0 ? 'expense' : 'income';
-            const date = (p.transaction_date || '').slice(0, 10);
+            const date = israelDateFromIso(p.transaction_date);
             return {
                 type,
                 desc: p.description || '',
@@ -5180,8 +5317,16 @@
                     candidates,
                     selectedMonth: getImportMonth(),
                     fileLabel: `אוטומטי (מקס + לאומי) — ${pending.length} עסקאות`,
-                    onConfirmed: ({ txs, selectedMonth: m, skippedCount }) => {
-                        applyPreviewedImport(txs, m, skippedCount);
+                    onConfirmed: async ({ txs, selectedMonth: m, skippedCount }) => {
+                        const savedToCloud = await applyPreviewedImport(txs, m, skippedCount);
+                        if (!savedToCloud) {
+                            // The transactions never reached Firebase (offline / save error /
+                            // conflict declined). Consuming the queue now would delete them
+                            // from the server while they exist only in this browser — the
+                            // exact way an approval on the phone vanishes overnight.
+                            notify('⚠️ הנתונים לא נשמרו בענן - העסקאות נשארו ממתינות ויוצעו שוב בייבוא הבא');
+                            return;
+                        }
                         syncPendingDecisions(candidates);
                     }
                 });
