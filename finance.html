@@ -1296,6 +1296,9 @@
                     </div>
                     <div class="edit-modal-footer">
                         <button onclick="cancelImportPreview()" class="edit-btn edit-btn-cancel">ביטול ייבוא</button>
+                        <!-- Only for the scanner queue: rows live on the server until a
+                             decision is sent, so "close without deciding" strands them. -->
+                        <button onclick="dismissPendingQueue()" class="edit-btn edit-btn-cancel" id="ipv-dismiss-btn" style="display:none;" title="מסמן את כל השורות כטופלו בשרת - הן לא יופיעו שוב">🧹 נקה את התור (לא לייבא)</button>
                         <button onclick="confirmImportPreview()" class="edit-btn edit-btn-save" id="ipv-confirm-btn">אישור והכנס לעסקאות</button>
                     </div>
                 </div>
@@ -4462,7 +4465,7 @@
         // Candidate shape: { type, desc, amt, cat, transactionDate?, earner?, titheExempt?, _included, _isDuplicate, _dupReason? }
         let importPreviewState = null; // { candidates, selectedMonth, onConfirmed, fileLabel }
 
-        function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed }) {
+        function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll }) {
             // Mark duplicates against existing transactions in same month
             const existingInMonth = data.transactions.filter(t => t.month === selectedMonth);
             for (const c of candidates) {
@@ -4474,9 +4477,13 @@
                 );
                 if (c._isDuplicate) c._included = false; // default: don't re-import dupes
             }
-            importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed };
+            importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll };
             const titleEl = document.getElementById('import-preview-title');
             if (titleEl) titleEl.textContent = `תצוגה מקדימה: ${fileLabel || ''} → ${getMonthName(selectedMonth)}`;
+            // The "clear the queue" escape hatch only makes sense for a server-side
+            // queue (the scanner). A file import has nothing to leave behind.
+            const dismissBtn = document.getElementById('ipv-dismiss-btn');
+            if (dismissBtn) dismissBtn.style.display = onDismissAll ? '' : 'none';
             document.getElementById('importPreviewModal').style.display = 'flex';
             renderImportPreviewTable();
         }
@@ -4484,9 +4491,29 @@
         function cancelImportPreview() {
             importPreviewState = null;
             document.getElementById('importPreviewModal').style.display = 'none';
+            const dismissBtn = document.getElementById('ipv-dismiss-btn');
+            if (dismissBtn) dismissBtn.style.display = 'none';
             const tbody = document.getElementById('ipv-tbody');
             if (tbody) tbody.innerHTML = '';
         }
+
+        // Escape hatch for the scanner queue: mark every row as handled on the server
+        // without importing anything. Without this, a batch where every row is already
+        // in the app (the normal state after a failed cloud save) is unclearable —
+        // confirming does nothing, cancelling decides nothing, and the rows sit in the
+        // pending queue forever.
+        async function dismissPendingQueue() {
+            if (!importPreviewState || typeof importPreviewState.onDismissAll !== 'function') return;
+            const { candidates, onDismissAll } = importPreviewState;
+            if (!confirm(
+                `לסמן את כל ${candidates.length} השורות כטופלו?\n\n` +
+                'הן לא ייובאו ולא יופיעו שוב בתור הסריקה.\n' +
+                'העסקאות שכבר קיימות אצלך במערכת לא יושפעו.'
+            )) return;
+            cancelImportPreview();
+            await onDismissAll(candidates);
+        }
+        window.dismissPendingQueue = dismissPendingQueue;
 
         function getFilteredImportPreviewCandidates() {
             if (!importPreviewState) return [];
@@ -4593,9 +4620,24 @@
 
         function confirmImportPreview() {
             if (!importPreviewState) return;
-            const { candidates, selectedMonth, onConfirmed } = importPreviewState;
+            const { candidates, selectedMonth, onConfirmed, onDismissAll } = importPreviewState;
             const selected = candidates.filter(c => c._included);
             if (selected.length === 0) {
+                // Nothing selected — usually because every row is already in the app.
+                // For the scanner queue this is the common case, and simply closing
+                // used to strand the rows on the server forever: no decision was ever
+                // sent, so the same batch came back on the next pull, unclearable.
+                if (onDismissAll) {
+                    if (!confirm(
+                        'לא סומנו עסקאות לייבוא (כנראה כולן כבר קיימות אצלך).\n\n' +
+                        '• OK = לסמן אותן כטופלו ולנקות את תור הסריקה\n' +
+                        '• Cancel = לחזור לרשימה'
+                    )) return;
+                    const all = candidates;
+                    cancelImportPreview();
+                    onDismissAll(all);
+                    return;
+                }
                 if (!confirm('לא סומנו עסקאות לייבוא. לסגור בלי לייבא?')) return;
                 cancelImportPreview();
                 return;
@@ -5354,10 +5396,22 @@
                             // conflict declined). Consuming the queue now would delete them
                             // from the server while they exist only in this browser — the
                             // exact way an approval on the phone vanishes overnight.
+                            // They ARE in this browser though, so the next pull will show
+                            // them as duplicates — hence the "clear the queue" button.
                             notify('⚠️ הנתונים לא נשמרו בענן - העסקאות נשארו ממתינות ויוצעו שוב בייבוא הבא');
                             return;
                         }
-                        syncPendingDecisions(candidates);
+                        const synced = await syncPendingDecisions(candidates);
+                        if (!synced) notify('⚠️ חלק מהשורות לא סומנו כטופלו בשרת - הן עשויות להופיע שוב בייבוא הבא');
+                    },
+                    // Reached from the "🧹 נקה את התור" button and from confirming an
+                    // all-duplicates batch: decide every row on the server (approved rows
+                    // stay approved, the rest are rejected) without touching app data.
+                    onDismissAll: async (all) => {
+                        const ok = await syncPendingDecisions(all, { rejectAll: true });
+                        notify(ok
+                            ? `✅ ${all.length} שורות סומנו כטופלו - התור נוקה`
+                            : '⚠️ חלק מהשורות לא סומנו בשרת - נסה שוב');
                     }
                 });
             } catch (err) {
@@ -5369,22 +5423,43 @@
         }
 
         // After confirm: tell the Worker which pending rows were approved/rejected so
-        // they don't reappear. Best-effort — failures are non-fatal.
-        async function syncPendingDecisions(candidates) {
+        // they don't reappear. Returns false if any row failed to register — the caller
+        // needs to know, otherwise a silent failure leaves rows stuck in the queue with
+        // no sign that anything went wrong.
+        // rejectAll: decide every row as "handled, don't import" regardless of _included
+        // (the dismiss path — the rows are already in the app or unwanted).
+        async function syncPendingDecisions(candidates, { rejectAll = false } = {}) {
             const authHeaders = await pendingAuthHeaders({ 'Content-Type': 'application/json' });
-            if (!authHeaders) { console.warn('syncPendingDecisions: not signed in, skipping'); return; }
-            const post = (path, payload) => fetch(`${PENDING_API}/${path}`, {
-                method: 'POST',
-                headers: authHeaders,
-                body: JSON.stringify(payload),
-            }).catch(e => console.warn('sync', path, 'failed', e));
+            if (!authHeaders) { console.warn('syncPendingDecisions: not signed in, skipping'); return false; }
+            // HTTP status is the success test on purpose. The Worker answers 200 with
+            // { ok:false, changed:0 } when the row is no longer 'pending' — i.e. it was
+            // already decided, which is exactly the outcome we wanted. Only a transport
+            // error or a 4xx/5xx (auth expired, Worker down) means the row is stranded.
+            const post = async (path, payload) => {
+                try {
+                    const res = await fetch(`${PENDING_API}/${path}`, {
+                        method: 'POST',
+                        headers: authHeaders,
+                        body: JSON.stringify(payload),
+                    });
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return true;
+                } catch (e) {
+                    console.warn('sync', path, 'failed', e);
+                    return false;
+                }
+            };
 
+            let allOk = true;
             for (const c of candidates) {
                 if (!c._pendingId) continue;
-                if (c._included) await post('approve', { id: c._pendingId, final_category: c.cat });
-                else await post('reject', { id: c._pendingId });
+                const ok = (!rejectAll && c._included)
+                    ? await post('approve', { id: c._pendingId, final_category: c.cat })
+                    : await post('reject', { id: c._pendingId });
+                if (!ok) allOk = false;
             }
             refreshPendingBadge();
+            return allOk;
         }
 
         async function refreshPendingBadge() {
