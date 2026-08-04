@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v38';
+const SHELL_CACHE = 'finance-tracker-v39';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -67,7 +67,19 @@ self.addEventListener('install', event => {
     caches.open(SHELL_CACHE).then(cache =>
       // Individual adds, not addAll: addAll is atomic, so one 404 discards
       // every other entry and the failure is invisible.
-      Promise.allSettled(PRECACHE.map(url => cache.add(url))).then(results => {
+      //
+      // cache: 'reload' is essential, not tidiness. cache.add() goes through the
+      // browser's HTTP cache, and GitHub Pages serves assets with max-age=600 —
+      // so a freshly-installed worker would happily precache the version from up
+      // to ten minutes BEFORE the deploy, then serve it as if it were current.
+      // That is a stale deploy with a brand new cache name on it, which is the
+      // one failure this whole versioning scheme exists to prevent. Observed:
+      // shared/theme.css was live on the server with new rules while the browser
+      // kept using the previous copy out of the v38 precache.
+      Promise.allSettled(PRECACHE.map(url =>
+        fetch(new Request(url, { cache: 'reload' }))
+          .then(res => res.ok ? cache.put(url, res) : Promise.reject(new Error(res.status + ' ' + url)))
+      )).then(results => {
         const failed = results.filter(r => r.status === 'rejected').length;
         console.log('📦 Cached app shell', results.length - failed, '/', results.length, 'into', SHELL_CACHE);
         results.forEach((r, i) => { if (r.status === 'rejected') console.warn('  ✗', PRECACHE[i], String(r.reason)); });
@@ -117,7 +129,12 @@ function cacheFirst(request, cacheName) {
 
 function staleWhileRevalidate(request) {
   return caches.match(request).then(hit => {
-    const network = fetch(request).then(response => {
+    // Same reason as the precache above: revalidating through the HTTP cache can
+    // "refresh" an entry with a copy that is itself up to ten minutes stale.
+    // 'no-cache' still sends a conditional request, so an unchanged file costs a
+    // 304 rather than a full download.
+    const revalidate = hit ? new Request(request, { cache: 'no-cache' }) : request;
+    const network = fetch(revalidate).then(response => {
       if (response && response.ok && response.type === 'basic') {
         const copy = response.clone();
         caches.open(SHELL_CACHE).then(cache => cache.put(request, copy));
