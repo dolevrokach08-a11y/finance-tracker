@@ -137,7 +137,8 @@
         .bg-orange-500 { background: #f97316; }
         .bg-red-500 { background: #ef4444; }
     </style>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- cdn.tailwindcss.com used to load here. The generated stylesheet that
+         replaced it is at the END of <head> on purpose — see the note there. -->
     <style>
         /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
         :root {
@@ -842,6 +843,19 @@
 
     <!-- Shared Lovable-inspired theme additions (page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
+
+    <!-- Replaces cdn.tailwindcss.com, the Play CDN — it ships a compiler to the
+         browser and regenerates this stylesheet by scanning a 648KB DOM on every
+         load. Built ahead of time by tools/build-assets.mjs.
+
+         It sits LAST deliberately. The Play CDN injected its <style> at runtime,
+         which appended it after every block in the head, so Tailwind's preflight
+         won over the page's own rules — `body { line-height: 1.6 }` in the block
+         above was being overridden by preflight's `body { line-height: inherit }`,
+         giving 24px rather than 25.6px. Putting the link where the script tag used
+         to be silently changed that on every element. Matching the old order keeps
+         the rendering identical, which is the whole point of this swap. -->
+    <link rel="stylesheet" href="finance.tailwind.css">
     <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>

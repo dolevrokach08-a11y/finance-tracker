@@ -50,3 +50,27 @@ Each output starts with a header naming its source and that source's sha256.
 - **The ergonomic cost is real:** the tax page is no longer editable by opening a
   single file. That was accepted deliberately in exchange for deleting an
   in-browser JIT compiler from every page load.
+
+## Verifying the Tailwind swap
+
+```sh
+node tools/check-tailwind-coverage.mjs
+```
+
+Lists every Tailwind-looking class used in `finance.html` that has no rule in
+the generated stylesheet. This is the failure mode that matters: a missing
+utility produces a layout break, not an error, so nothing else catches it. Run
+it after any edit that adds classes to that page.
+
+One non-obvious thing it handles: Tailwind escapes special characters in
+selectors, so `md:grid-cols-2` is `.md\:grid-cols-2` in the CSS and `py-0.5` is
+`.py-0\.5`. A naive search reports 23 false positives.
+
+## Cascade position
+
+`finance.tailwind.css` is linked at the **end** of `<head>`, not where the CDN
+`<script>` was. The Play CDN injected its stylesheet at runtime, which landed it
+after every block in the head, so Tailwind's preflight won over the page's own
+rules — `body { line-height: 1.6 }` was being overridden to `inherit` (24px, not
+25.6px). Linking it in the script's old position silently changed line-height on
+every element. Don't move it.

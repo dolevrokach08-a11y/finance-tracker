@@ -67,9 +67,43 @@ targets.push({
 });
 
 // ---------------------------------------------------------------------------
-// 2. finance.html -> finance.tailwind.css   (added in batch 5)
+// 2. finance.html -> finance.tailwind.css
+//
+// Replaces cdn.tailwindcss.com, which is the Play CDN: it ships a compiler to
+// the browser and regenerates the stylesheet by scanning the DOM on every load —
+// on a 648KB document. Tailwind's own docs say it is not for production.
+//
+// Scanning finance.html alone is enough: nothing else on the page carries
+// Tailwind classes (shared/nav.js, sync-widget.js and ai-assistant.js inject
+// markup at runtime but style it inline), and there are no interpolated class
+// names like `bg-${x}` — every utility appears as a literal the scanner sees.
 // ---------------------------------------------------------------------------
-// placeholder — registered when the Tailwind batch lands
+targets.push({
+  name: 'finance-tailwind',
+  source: 'finance.html',
+  out: 'finance.tailwind.css',
+  async build() {
+    const postcss = (await import('postcss')).default;
+    const tailwindcss = (await import('tailwindcss')).default;
+    const cssnano = (await import('cssnano')).default;
+
+    const result = await postcss([
+      tailwindcss({
+        content: [join(ROOT, 'finance.html')],
+        // Toggled by classList rather than written as a literal in some places.
+        // They are literals elsewhere so the scanner already finds them; this
+        // costs nothing and removes a whole class of silent breakage.
+        safelist: ['hidden', 'tab-active', 'bg-blue-100', 'text-blue-700', 'text-gray-600']
+        // preflight stays ON: the Play CDN ships it, so turning it off here would
+        // change how the page looks. The goal is byte-for-byte the same rendering,
+        // not a tidier stylesheet.
+      }),
+      cssnano({ preset: 'default' })
+    ]).process('@tailwind base;@tailwind components;@tailwind utilities;', { from: undefined });
+
+    return result.css;
+  }
+});
 
 let stale = 0;
 for (const t of targets) {
