@@ -1,83 +1,177 @@
 // Service Worker for Finance Tracker PWA
-// Bump CACHE_NAME on every deploy that ships changed HTML/JS — the activate
+//
+// Bump SHELL_CACHE on every deploy that ships changed HTML/JS — the activate
 // handler purges the old cache, guaranteeing the new shell replaces any stale
 // cached firebase-config.js / *.html (the "change doesn't show up live" gotcha).
-const CACHE_NAME = 'finance-tracker-v28';
-const urlsToCache = [
-  '/finance-tracker/',
-  '/finance-tracker/index.html',
-  '/finance-tracker/login.html',
-  '/finance-tracker/portfolio.html',
-  '/finance-tracker/finance.html',
-  '/finance-tracker/tax-optimizer.html',
-  '/finance-tracker/mortgage.html',
-  '/finance-tracker/firebase-config.js',
-  '/finance-tracker/sync-widget.js',
-  '/finance-tracker/shared/user-storage.js',
-  '/finance-tracker/shared/data.js',
-  '/finance-tracker/manifest.json',
-  '/finance-tracker/icons/icon-192.png',
-  '/finance-tracker/icons/icon-512.png'
+//
+// VENDOR_CACHE is versioned separately and deliberately survives shell bumps.
+// Everything in it is fetched from a URL that names its own version (pinned CDN
+// paths, /vendor/<lib>-<version>.js, /firebasejs/10.7.1/...), so a cache hit can
+// never be stale — a different version is a different URL. Without this split,
+// every deploy would also throw away the third-party bytes and the cache-first
+// win would evaporate exactly when the user reloads to get the new code.
+const SHELL_CACHE = 'finance-tracker-v30';
+const VENDOR_CACHE = 'finance-tracker-vendor-v1';
+const KEEP = [SHELL_CACHE, VENDOR_CACHE];
+
+// Scope-relative, not absolute. Absolute '/finance-tracker/...' paths 404 under
+// `npx vite` at the repo root, and because cache.addAll is atomic that made the
+// whole precache silently empty in local dev.
+const SCOPE = new URL('./', self.registration.scope).pathname;
+const PRECACHE = [
+  '',
+  'index.html',
+  'login.html',
+  'mortgage.html',
+  'tax-optimizer.html',
+  'shared/theme.css',
+  'shared-theme.css',
+  'shared/user-storage.js',
+  'shared/data.js',
+  'shared/nav.js',
+  'manifest.json',
+  'icons/icon-192.png',
+  'icons/icon-512.png'
+].map(p => SCOPE + p);
+// portfolio.html (842KB) and finance.html (648KB) are deliberately NOT precached:
+// pulling 1.5MB of HTML during install competes for bandwidth with the page the
+// user is actually looking at. The runtime handler caches them on first visit.
+
+// Requests that must reach the network untouched. Firestore's long-poll channel
+// and the auth endpoints break if a SW mediates them, and the CF Worker proxies
+// live prices — caching any of these would serve stale money data.
+const NEVER_INTERCEPT = [
+  'firestore.googleapis.com',
+  'firebaseinstallations.googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'securetoken.googleapis.com',
+  'workers.dev',
+  'api.anthropic.com',
+  'finance.yahoo.com'
 ];
 
-// Install - cache files
+// Cross-origin hosts whose URLs carry a version, so cache-first is safe.
+const CACHEABLE_HOSTS = [
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'www.gstatic.com',
+  'cdn.jsdelivr.net',
+  'cdnjs.cloudflare.com',
+  'unpkg.com',
+  'd3js.org'
+];
+
+// Install - cache the shell
 self.addEventListener('install', event => {
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('📦 Caching app shell');
-        return cache.addAll(urlsToCache);
+    caches.open(SHELL_CACHE).then(cache =>
+      // Individual adds, not addAll: addAll is atomic, so one 404 discards
+      // every other entry and the failure is invisible.
+      Promise.allSettled(PRECACHE.map(url => cache.add(url))).then(results => {
+        const failed = results.filter(r => r.status === 'rejected').length;
+        console.log('📦 Cached app shell', results.length - failed, '/', results.length, 'into', SHELL_CACHE);
+        results.forEach((r, i) => { if (r.status === 'rejected') console.warn('  ✗', PRECACHE[i], String(r.reason)); });
       })
-      .catch(err => {
-        console.log('⚠️ Cache failed:', err);
-      })
+    )
   );
   self.skipWaiting();
 });
 
-// Activate - clean old caches
+// Activate - clean caches we no longer keep
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('🗑️ Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches.keys().then(names => Promise.all(
+      names.map(name => {
+        if (!KEEP.includes(name)) {
+          console.log('🗑️ Deleting old cache:', name);
+          return caches.delete(name);
+        }
+      })
+    ))
   );
   self.clients.claim();
 });
 
-// Fetch - network first, fallback to cache
-// ⚠️ רק לקבצי האפליקציה - לא מיירט בקשות API/proxy חיצוניות
-self.addEventListener('fetch', event => {
-  const url = new URL(event.request.url);
+function cacheFirst(request, cacheName) {
+  return caches.match(request).then(hit => {
+    if (hit) return hit;
+    return fetch(request).then(response => {
+      // Opaque responses (status 0) are what cross-origin scripts and fonts
+      // without CORS look like. The old handler's `status === 200 &&
+      // type === 'basic'` test rejected exactly those, which is why no CDN
+      // asset was ever cached. Store them; just never inspect them.
+      if (response && (response.ok || response.type === 'opaque')) {
+        const copy = response.clone();
+        caches.open(cacheName).then(cache => cache.put(request, copy));
+      }
+      return response;
+    });
+  });
+}
 
-  // אל תיירט בקשות cross-origin (API calls, CORS proxies)
-  if (url.origin !== self.location.origin) {
+function staleWhileRevalidate(request) {
+  return caches.match(request).then(hit => {
+    const network = fetch(request).then(response => {
+      if (response && response.ok && response.type === 'basic') {
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then(cache => cache.put(request, copy));
+      }
+      return response;
+    }).catch(() => hit);
+    return hit || network;
+  });
+}
+
+function networkFirstWithTimeout(request, ms) {
+  return new Promise(resolve => {
+    let settled = false;
+    const done = res => { if (!settled) { settled = true; resolve(res); } };
+
+    const timer = setTimeout(() => {
+      caches.match(request).then(hit => { if (hit) done(hit); });
+    }, ms);
+
+    fetch(request).then(response => {
+      clearTimeout(timer);
+      if (response && response.ok && response.type === 'basic') {
+        const copy = response.clone();
+        caches.open(SHELL_CACHE).then(cache => cache.put(request, copy));
+      }
+      done(response);
+    }).catch(() => {
+      clearTimeout(timer);
+      caches.match(request).then(hit => done(hit || Response.error()));
+    });
+  });
+}
+
+self.addEventListener('fetch', event => {
+  const request = event.request;
+  if (request.method !== 'GET') return; // never mediate writes
+
+  const url = new URL(request.url);
+  if (NEVER_INTERCEPT.some(host => url.hostname.includes(host))) return;
+
+  // HTML navigations stay network-first on purpose. All of this app's logic
+  // lives inline inside the HTML, so serving a stale document means serving
+  // stale application code. The timeout only decides how long we wait before
+  // falling back to the cached copy, which is what makes offline work.
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirstWithTimeout(request, 2500));
     return;
   }
 
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        // Clone and cache successful responses
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME)
-            .then(cache => {
-              cache.put(event.request, responseClone);
-            });
-        }
-        return response;
-      })
-      .catch(() => {
-        // Network failed, try cache
-        return caches.match(event.request);
-      })
-  );
+  if (url.origin === self.location.origin) {
+    if (url.pathname.includes('/vendor/')) {
+      event.respondWith(cacheFirst(request, VENDOR_CACHE));
+    } else {
+      event.respondWith(staleWhileRevalidate(request));
+    }
+    return;
+  }
+
+  if (CACHEABLE_HOSTS.some(host => url.hostname === host || url.hostname.endsWith('.' + host))) {
+    event.respondWith(cacheFirst(request, VENDOR_CACHE));
+  }
+  // anything else cross-origin: fall through to the network untouched
 });

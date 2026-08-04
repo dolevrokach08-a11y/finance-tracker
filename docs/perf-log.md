@@ -50,6 +50,31 @@ ai-assistant.js                                ← ~96KB, consumer runs at load+
 terms-modal.js
 ```
 
+## After batch 1 — commit `b98eaff`, SW cache v28
+
+`portfolio.html`, warm, 3 reloads, **median**:
+
+| metric | baseline | after batch 1 | change |
+|---|---|---|---|
+| DCL | 2301 | **1490** | −35% |
+| load | 2782 | **1982** | −29% |
+| requests | 57 | 46 | −11 |
+| blocking scripts | 8 | 0 | −8 |
+
+Individual samples were 2612 / 1490 / 811 ms DCL. The 2612 outlier is the load
+immediately after the SW swapped to v28 and purged the cache — effectively a
+cold load, not a warm one. Best warm sample: DCL 811ms, load 1290ms.
+
+**Read these timings as directional, not precise.** No throttling is applied, the
+network is live, and Firestore/Yahoo latency varies per load, so the spread
+between samples (811–2612) is wider than the effect we are measuring. The
+counted metrics — requests, blocking scripts — are exact and are the ones to
+trust. This is why the protocol says median of three.
+
+Probe note: the `blockingScripts` selector counts `<script type="module" src>`,
+which is deferred by default. `portfolio.html` reports 1 for `terms-modal.js`
+but is really at 0.
+
 ### Two findings that are not about our code
 
 - **An Adobe Acrobat Chrome extension** (`efaidnbmnnnibpcajpcglclefindmkaj`)
