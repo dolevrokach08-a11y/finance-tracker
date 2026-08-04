@@ -354,9 +354,22 @@ a { color: var(--accent); }
       // keeps the two independent failure paths below behaving as they did.
       const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
       window.__financeDocRef = userDocRef;
+
+      // Time-boxed, like the getDoc guards in finance.html and portfolio.html.
+      // Firestore under experimentalForceLongPolling does not always reject when
+      // it cannot reach the backend — it retries indefinitely. This page has no
+      // localStorage fallback, so a stalled round trip used to leave #root hidden
+      // forever: a permanently blank page with nothing in the console. Now the
+      // app renders with whatever arrived, and empty data is still a usable
+      // calculator.
+      const withTimeout = p => Promise.race([
+        p,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Firestore timeout')), 10000))
+      ]);
       const [financeResult, settingsResult] = await Promise.allSettled([
-        getDoc(userDocRef),
-        getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings'))
+        withTimeout(getDoc(userDocRef)),
+        withTimeout(getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings')))
       ]);
 
       // Load finance data from Firebase
