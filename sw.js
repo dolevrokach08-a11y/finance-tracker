@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v36';
+const SHELL_CACHE = 'finance-tracker-v37';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -72,9 +72,15 @@ self.addEventListener('install', event => {
         console.log('📦 Cached app shell', results.length - failed, '/', results.length, 'into', SHELL_CACHE);
         results.forEach((r, i) => { if (r.status === 'rejected') console.warn('  ✗', PRECACHE[i], String(r.reason)); });
       })
-    )
+    // skipWaiting() belongs INSIDE the waitUntil chain, not beside it. Called
+    // synchronously alongside it, the new worker was still installing when it
+    // ran and the request was dropped — it sat in `waiting` forever while the
+    // previous worker kept serving, which meant `activate` never ran and old
+    // caches were never purged. Observed live: v36 installed with 14 entries
+    // while v35 stayed active with 25. That silently defeats the whole
+    // bump-the-cache-name deploy discipline.
+    ).then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 // Activate - clean caches we no longer keep
