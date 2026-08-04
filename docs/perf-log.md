@@ -75,6 +75,27 @@ Probe note: the `blockingScripts` selector counts `<script type="module" src>`,
 which is deferred by default. `portfolio.html` reports 1 for `terms-modal.js`
 but is really at 0.
 
+## After batch 3 — commit `d6543af`, SW cache v31
+
+`finance.html`, warm:
+
+| metric | value |
+|---|---|
+| DCL | 1345 |
+| load | 1617 |
+| requests | 24 |
+| served from cache | 15 |
+| `Chart` / `XLSX` / `d3` at load | **all undefined** |
+
+`finance.html` was never measured at baseline, so there is no before/after row
+for it — the meaningful check here is the last one: the three libraries that used
+to block every visit (~1.3MB combined) are now absent until something needs them,
+and the fake `XLSX`/`Chart` stubs are gone with them.
+
+Blocking scripts remaining: `finance.html` has Tailwind's CDN (batch 5);
+`tax-optimizer.html` has React, ReactDOM and babel-standalone (batch 4). The
+other three pages are at zero.
+
 ### Two findings that are not about our code
 
 - **An Adobe Acrobat Chrome extension** (`efaidnbmnnnibpcajpcglclefindmkaj`)
