@@ -80,9 +80,11 @@ a { color: var(--accent); }
   .data-banner { margin: 10px 8px; }
 }
 </style>
-<script src="shared/user-storage.js"></script>
-<script src="shared/data.js"></script>
-<script src="sync-widget.js"></script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="modulepreload" href="./firebase-config.js">
+<script src="shared/user-storage.js" defer></script>
+<script src="shared/data.js" defer></script>
+<script src="sync-widget.js" defer></script>
 </head>
 <body>
 
@@ -338,11 +340,21 @@ a { color: var(--accent); }
       // Show user in nav
       setNavUser(user);
 
+      // Both documents are fetched before either is awaited. They used to be two
+      // sequential round trips gating first paint, and with
+      // experimentalForceLongPolling each one is a real RTT. allSettled (not all)
+      // keeps the two independent failure paths below behaving as they did.
+      const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
+      window.__financeDocRef = userDocRef;
+      const [financeResult, settingsResult] = await Promise.allSettled([
+        getDoc(userDocRef),
+        getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings'))
+      ]);
+
       // Load finance data from Firebase
       try {
-        const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
-        window.__financeDocRef = userDocRef;
-        const docSnap = await getDoc(userDocRef);
+        if (financeResult.status === 'rejected') throw financeResult.reason;
+        const docSnap = financeResult.value;
 
         if (docSnap.exists()) {
           const data = docSnap.data();
@@ -370,8 +382,8 @@ a { color: var(--accent); }
 
       // Load saved tax optimizer settings
       try {
-        const settingsRef = doc(db, 'users', user.uid, 'finance', 'taxSettings');
-        const settingsSnap = await getDoc(settingsRef);
+        if (settingsResult.status === 'rejected') throw settingsResult.reason;
+        const settingsSnap = settingsResult.value;
         if (settingsSnap.exists()) {
           window.__taxSettings = settingsSnap.data();
         }
@@ -2521,8 +2533,10 @@ window.__renderApp = () => {
   ReactDOM.render(<App />, document.getElementById('root'));
 };
 
-// Initial render (will show defaults until data loads)
-window.__renderApp();
+// No initial render here on purpose: #root is display:none until the auth block
+// unhides it, so mounting now would build the whole component tree into a hidden
+// div and immediately throw it away. Both real branches (demo and authenticated)
+// call __renderApp() themselves once the data is in.
 </script>
 </body>
 </html>

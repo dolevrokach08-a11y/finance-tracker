@@ -4,11 +4,18 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>מחשבון משכנתא מקצועי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared/theme.css">
 <link rel="stylesheet" href="shared-theme.css">
-<script src="shared/user-storage.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="modulepreload" href="./firebase-config.js">
+<script src="shared/user-storage.js" defer></script>
+<!-- defer is only safe because renderCurrentPage() is now waiting on
+     DOMContentLoaded — a deferred script runs AFTER parser-inserted inline
+     scripts, so calling it at the tail of the inline block would break. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
 <style>
 :root {
   /* Mortgage uses rgba-based borders (overrides shared/theme.css) */
@@ -341,7 +348,7 @@ tr:hover td{background:var(--bg-elevated);}
   .nav-tab{font-size:10px;padding:5px 8px;}
 }
 </style>
-<script src="sync-widget.js"></script>
+<script src="sync-widget.js" defer></script>
 </head>
 <body>
 
@@ -2553,7 +2560,9 @@ function renderCliff() {
   if (taxSellEl && mortgageState.taxShevachSell) taxSellEl.value = mortgageState.taxShevachSell;
 })();
 
-renderCurrentPage();
+// Chart.js is deferred, so it isn't parsed yet at this point in the document.
+// DOMContentLoaded fires after all deferred scripts have run.
+document.addEventListener('DOMContentLoaded', renderCurrentPage);
 </script>
     <script type="module" src="terms-modal.js"></script>
 </body>

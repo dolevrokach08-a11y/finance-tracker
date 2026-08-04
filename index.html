@@ -16,8 +16,14 @@
     <!-- Shared theme -->
     <link rel="stylesheet" href="shared/theme.css">
     <link rel="stylesheet" href="shared-theme.css">
-    <script src="shared/user-storage.js"></script>
+    <script src="shared/user-storage.js" defer></script>
     <script src="ticker.js" defer></script>
+
+    <!-- Start the Firebase chain during HTML parse instead of after the page's
+         inline module has parsed — modulepreload pulls firebase-config.js's own
+         three www.gstatic.com imports along with it. -->
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="modulepreload" href="./firebase-config.js">
 
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1517,7 +1523,7 @@
     </script>
 
     <!-- AI Assistant & UI Enhancement Modules -->
-    <script src="ai-assistant.js"></script>
+    <script src="ai-assistant.js" defer></script>
     <script>
     (function() {
         'use strict';

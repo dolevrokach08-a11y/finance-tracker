@@ -21,18 +21,25 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     
-    <!-- Chart.js - pinned (unpinned = silent breakage on next major release) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
+    <!-- Everything below is deferred: nothing here is needed at first paint, and
+         as blocking scripts they were the single biggest delay on this page.
+         defer (never async) — the load order these files assume is preserved. -->
 
-    <!-- Lucide Icons - pinned -->
-    <script src="https://unpkg.com/lucide@1.17.0"></script>
+    <!-- Chart.js - pinned (unpinned = silent breakage on next major release) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1" defer></script>
+
+    <!-- Lucide Icons - pinned. All createIcons() sites are window.lucide-guarded. -->
+    <script src="https://unpkg.com/lucide@1.17.0" defer></script>
 
     <!-- Shared Lovable-inspired theme additions (ticker bar, page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
-    <script src="shared/user-storage.js"></script>
-    <script src="shared/data.js"></script>
-    <!-- SheetJS for the holdings Excel-import wizard (same version finance.html uses) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+    <link rel="modulepreload" href="./firebase-config.js">
+    <script src="shared/user-storage.js" defer></script>
+    <script src="shared/data.js" defer></script>
+    <!-- SheetJS for the holdings Excel-import wizard (same version finance.html uses).
+         ~900KB for one hidden file input — batch 3 makes it load on demand. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
     <script src="ticker.js" defer></script>
     
     <style>
@@ -2122,7 +2129,7 @@
         }
 
         </style>
-    <script src="sync-widget.js"></script>
+    <script src="sync-widget.js" defer></script>
 </head>
 <body>
     <!-- Loading Screen -->
@@ -15262,12 +15269,28 @@ ${msg}`, 'warning');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('🚀 Initializing portfolio with bonds actions...');
 
-            // קריאה ל-init כדי לטעון נתונים
-            init();
+            // Only start here if auth already resolved (this is the demo path, where
+            // currentUser is assigned synchronously). Otherwise onAuthStateChanged
+            // owns initialization — calling init() with no currentUser used to make
+            // loadData() bail and the next line throw on an empty portfolio, and when
+            // auth won the race instead it caused a second getDoc and a full re-render.
+            if (currentUser) init();
         }
-        
+
+        let initStarted = false;
+
         async function init() {
-            await loadData();  // Load from localStorage
+            if (initStarted) return;
+            initStarted = true;
+
+            await loadData();
+            if (!currentUser) {
+                // loadData() bailed because auth hasn't resolved: portfolio is still {}
+                // and the next line would throw. Let the auth callback drive init instead.
+                // Deliberately narrow — every other loadData() outcome proceeds as before.
+                initStarted = false;
+                return;
+            }
             console.log('📊 Loaded holdings:', portfolio.holdings.length);
             
             updateOverview();
@@ -15287,20 +15310,30 @@ ${msg}`, 'warning');
             const mainContent = document.getElementById('mainContent');
             if (loadingScreen) {
                 loadingScreen.style.opacity = '0';
-                setTimeout(() => {
+
+                // Was two nested 300ms timers — 600ms of dead time before the user
+                // saw anything. Now the unhide rides the actual fade (with a failsafe
+                // in case the transition never fires, e.g. prefers-reduced-motion),
+                // and the charts wait one painted frame instead of a fixed delay.
+                let revealed = false;
+                const reveal = () => {
+                    if (revealed) return;
+                    revealed = true;
                     loadingScreen.style.display = 'none';
                     if (mainContent) mainContent.style.display = 'block';
-                    
+
                     // Initialize Lucide icons
                     if (typeof lucide !== 'undefined') {
                         lucide.createIcons();
                     }
-                    
-                    // Create advanced charts after content is visible
-                    setTimeout(() => {
+
+                    // Let the revealed content paint before blocking on 5 charts.
+                    requestAnimationFrame(() => requestAnimationFrame(() => {
                         createAdvancedCharts();
-                    }, 300);
-                }, 300);
+                    }));
+                };
+                loadingScreen.addEventListener('transitionend', reveal, { once: true });
+                setTimeout(reveal, 350);
             }
             
             // ניסיון עדכון אוטומטי (רקע - לא חוסם)
@@ -16884,7 +16917,7 @@ ${msg}`, 'warning');
     </script>
 
     <!-- AI Assistant & UI Enhancement Modules -->
-    <script src="ai-assistant.js"></script>
+    <script src="ai-assistant.js" defer></script>
     <script>
     (function() {
         'use strict';
