@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v30';
+const SHELL_CACHE = 'finance-tracker-v31';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -28,6 +28,7 @@ const PRECACHE = [
   'shared-theme.css',
   'shared/user-storage.js',
   'shared/data.js',
+  'shared/load-script.js',
   'shared/nav.js',
   'manifest.json',
   'icons/icon-192.png',

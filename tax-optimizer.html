@@ -94,10 +94,11 @@ a { color: var(--accent); }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>if(typeof pdfjsLib!=='undefined')pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
-<!-- Tesseract.js — OCR fallback for payslips whose totals (esp. net) aren't in the PDF text layer (e.g. Michpal). Loaded lazily on first scan. -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<!-- pdf.js and Tesseract are reachable only from the payslip file input, so they
+     are fetched on first scan instead of on every page load. The old comment here
+     claimed Tesseract was "loaded lazily" while it was in fact a blocking tag;
+     now it actually is. FTLoad.pdfjs() also sets the pdf.js workerSrc. -->
+<script src="shared/load-script.js"></script>
 
 <!-- Firebase Auth & Data Loading -->
 <script type="module">
@@ -800,6 +801,7 @@ function parseForm106(text) {
 }
 
 async function extractPDFText(arrayBuffer) {
+  await FTLoad.pdfjs();
   if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   let ltrText = '';
@@ -832,6 +834,8 @@ async function extractPDFText(arrayBuffer) {
 let _ocrWorker = null;
 async function getOCRWorker(onStatus) {
   if (_ocrWorker) return _ocrWorker;
+  if (onStatus) onStatus('טוען ספריית OCR...');
+  await FTLoad.tesseract();
   if (typeof Tesseract === 'undefined') throw new Error('ספריית OCR לא נטענה');
   if (onStatus) onStatus('טוען מנוע OCR (פעם ראשונה)...');
   _ocrWorker = await Tesseract.createWorker('heb+eng');
@@ -840,6 +844,7 @@ async function getOCRWorker(onStatus) {
 
 // Render every PDF page to canvas and OCR it. Returns the concatenated text.
 async function ocrPDF(arrayBuffer, onProgress) {
+  await FTLoad.pdfjs();
   if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
   const worker = await getOCRWorker(onProgress ? (s) => onProgress(0, 0, s) : null);
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

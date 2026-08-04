@@ -37,9 +37,9 @@
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
-    <!-- SheetJS for the holdings Excel-import wizard (same version finance.html uses).
-         ~900KB for one hidden file input — batch 3 makes it load on demand. -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+    <script src="shared/load-script.js"></script>
+    <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
+         file input in the holdings-import wizard. hiFileChange() fetches it. -->
     <script src="ticker.js" defer></script>
     
     <style>
@@ -15716,12 +15716,16 @@ ${msg}`, 'warning');
             document.getElementById('hi-step-line').textContent = titles[n];
         }
 
-        function hiFileChange(event) {
+        async function hiFileChange(event) {
+            // Read the file and reset the input BEFORE any await — the event is
+            // gone once we yield, and SheetJS is now fetched on demand.
             const file = event.target.files[0];
             event.target.value = '';
             if (!file) return;
             const errEl = document.getElementById('hi-file-error');
-            if (typeof XLSX === 'undefined' || !XLSX.read) {
+            try {
+                await FTLoad.xlsx();
+            } catch (e) {
                 errEl.textContent = 'ספריית קריאת האקסל לא נטענה — בדוק חיבור לאינטרנט ורענן.';
                 return;
             }

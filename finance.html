@@ -138,7 +138,6 @@
         .bg-red-500 { background: #ef4444; }
     </style>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
         :root {
@@ -826,33 +825,20 @@
             display: none !important;
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script>
-        // Fallback check for Chart.js
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js failed to load from CDN - using fallback');
-            // Basic Chart.js fallback - minimal implementation
-            window.Chart = function() {
-                return {
-                    data: {}, options: {}, destroy: function() {}
-                };
-            };
-        }
-        
-        // Fallback check for XLSX
-        if (typeof XLSX === 'undefined') {
-            console.warn('XLSX failed to load from CDN - limited functionality');
-            window.XLSX = {
-                read: function() { 
-                    alert('לא ניתן לקרוא קבצי Excel במצב אופליין. יש צורך בחיבור לאינטרנט לייבוא.');
-                    return null;
-                },
-                utils: { sheet_to_json: function() { return []; } }
-            };
-        }
-    </script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
+    <!-- Chart.js, SheetJS, d3 and d3-sankey used to load here, blocking, on every
+         visit. None of them is needed for the overview tab that opens by default:
+         SheetJS serves file inputs and the export button, d3 serves one flow
+         diagram, and every chart lives behind a tab click. shared/load-script.js
+         fetches each on first use.
+
+         The stub block that stood here is deliberately gone. It installed a fake
+         window.Chart and a fake window.XLSX whenever those globals were undefined
+         at parse time. That never fired while the CDN tags were blocking above it,
+         but with lazy loading it would run FIRST, install the dummies, and then
+         every `typeof XLSX === 'undefined'` guard would read false forever while
+         `new Chart()` silently returned an inert object. The real offline path is
+         now the load failure itself, which each caller reports. -->
+    <script src="shared/load-script.js"></script>
 
     <!-- Shared Lovable-inspired theme additions (page hero, KPI utilities) -->
     <link rel="stylesheet" href="shared-theme.css">
@@ -3543,9 +3529,24 @@
             }
         }
 
-        function handleMigrateFileSelect(event) {
+        // SheetJS is fetched on demand now. Every caller below reads
+        // event.target.files[0] synchronously first — the file reference must be
+        // captured before any await, because the event is gone after one.
+        async function ensureXlsx() {
+            try {
+                await FTLoad.xlsx();
+                return true;
+            } catch (e) {
+                notify('❌ ספריית XLSX לא נטענה. בדוק חיבור לאינטרנט ונסה שוב.');
+                console.error('XLSX load failed:', e);
+                return false;
+            }
+        }
+
+        async function handleMigrateFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
+            if (!await ensureXlsx()) return;
             document.getElementById('migrate-file-name').textContent = file.name;
 
             const reader = new FileReader();
@@ -3760,9 +3761,10 @@
         // Reads the exported XLSX, matches rows by `מזהה` (id), and stages transactionDate updates.
         let bulkUpdateState = null; // { plan: [{id, oldDate, newDate, action}], summary: {...} }
 
-        function handleBulkUpdateFileSelect(event) {
+        async function handleBulkUpdateFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
+            if (!await ensureXlsx()) return;
             document.getElementById('bulk-update-file-name').textContent = file.name;
 
             const reader = new FileReader();
@@ -4429,11 +4431,8 @@
 
         
         // ========== Export All Transactions ==========
-        function exportAllTransactions() {
-            if (typeof XLSX === 'undefined') {
-                notify('❌ ספריית XLSX לא נטענה. רענן ונסה שוב.');
-                return;
-            }
+        async function exportAllTransactions() {
+            if (!await ensureXlsx()) return;
             const txs = (data.transactions || []).slice();
             if (txs.length === 0) {
                 notify('ℹ️ אין עסקאות לייצוא');
@@ -4704,16 +4703,12 @@
             }
         }
 
-        function handleCreditCardFile(event) {
+        async function handleCreditCardFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
-            if (typeof XLSX === 'undefined') {
-                notify('❌ שגיאה: ספריית XLSX לא נטענה. רענן את הדף ונסה שוב.');
-                console.error('XLSX library not loaded');
-                return;
-            }
-            
+
+            if (!await ensureXlsx()) return;
+
             const selectedMonth = getImportMonth();
             if (!selectedMonth) {
                 notify('❌ בחר חודש לייבוא');
@@ -4809,15 +4804,12 @@
             event.target.value = '';
         }
 
-        function handleBankFile(event) {
+        async function handleBankFile(event) {
             const file = event.target.files[0];
             if (!file) return;
-            
-            if (typeof XLSX === 'undefined') {
-                notify('❌ שגיאה: ספריית XLSX לא נטענה. רענן את הדף ונסה שוב.');
-                return;
-            }
-            
+
+            if (!await ensureXlsx()) return;
+
             const selectedMonth = getImportMonth();
             if (!selectedMonth) {
                 notify('❌ בחר חודש לייבוא');
@@ -5502,14 +5494,11 @@
 
         setTimeout(refreshPendingBadge, 1200);
 
-        function handleSmartImport(event) {
+        async function handleSmartImport(event) {
             const file = event.target.files[0];
             if (!file) return;
 
-            if (typeof XLSX === 'undefined') {
-                notify('❌ שגיאה: ספריית XLSX לא נטענה. רענן את הדף ונסה שוב.');
-                return;
-            }
+            if (!await ensureXlsx()) return;
 
             const selectedMonth = getImportMonth();
             if (!selectedMonth) { notify('❌ בחר חודש לייבוא'); return; }
@@ -7649,7 +7638,8 @@
         }
 
         // ========== Savings Rate Chart ==========
-        function renderSavingsRateChart() {
+        async function renderSavingsRateChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('savings-rate-chart');
             if (!canvas) return;
             if (charts.savingsRate) charts.savingsRate.destroy();
@@ -8005,7 +7995,8 @@
         }
 
         // ========== Fixed vs Discretionary ==========
-        function renderFixedVsDiscretionary() {
+        async function renderFixedVsDiscretionary() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('fixed-disc-chart');
             if (!canvas) return;
 
@@ -8086,7 +8077,8 @@
         }
 
         // ========== Category Spending Trends ==========
-        function renderCategoryTrends() {
+        async function renderCategoryTrends() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('category-trends-chart');
             if (!canvas) return;
 
@@ -8176,7 +8168,8 @@
         }
 
         // ========== Year-over-Year Comparison Chart ==========
-        function renderYearOverYearChart() {
+        async function renderYearOverYearChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('yoy-chart');
             if (!canvas) return;
             if (charts.yoy) charts.yoy.destroy();
@@ -8358,7 +8351,8 @@
         }
 
         // ========== Prediction Chart ==========
-        function renderPredictionChart() {
+        async function renderPredictionChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('prediction-chart');
             if(!canvas) return;
             if(charts.prediction) charts.prediction.destroy();
@@ -8749,7 +8743,8 @@
             return {inc,exp,bal:inc-exp,tithe,available};
         }
 
-        function renderTrendChart() {
+        async function renderTrendChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('trend-chart');
             if(!canvas) return;
             if(charts.trend) charts.trend.destroy();
@@ -8871,7 +8866,8 @@
             });
         }
 
-        function renderSavingsChart() {
+        async function renderSavingsChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('savings-chart');
             if(!canvas) return;
             if(charts.savings) charts.savings.destroy();
@@ -8967,7 +8963,8 @@
             }
         }
 
-        function renderExpensePie() {
+        async function renderExpensePie() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('expense-pie');
             if(!canvas) return;
             if(charts.expPie) charts.expPie.destroy();
@@ -9067,7 +9064,8 @@
             });
         }
 
-        function renderIncomePie() {
+        async function renderIncomePie() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('income-pie');
             if(!canvas) return;
             if(charts.incPie) charts.incPie.destroy();
@@ -9252,7 +9250,8 @@
         // ========== גרפים חדשים - מתוקנים! ==========
         
         // Sankey Chart - זרימת כסף עם D3.js
-        function renderSankeyChart() {
+        async function renderSankeyChart() {
+            await FTLoad.d3sankey();
             const container = document.getElementById('sankey-container');
             if(!container) return;
 
@@ -9484,7 +9483,8 @@
         }
         
         // Waterfall Chart - 3 עמודות פשוטות וברורות!
-        function renderWaterfallChart() {
+        async function renderWaterfallChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('waterfall-chart');
             if(!canvas) return;
             if(charts.waterfall) charts.waterfall.destroy();
@@ -9579,7 +9579,8 @@
         }
         
         // Area Chart - מגמת חיסכון מצטברת
-        function renderAreaChart() {
+        async function renderAreaChart() {
+            await FTLoad.chart3();
             const canvas = document.getElementById('area-chart');
             if(!canvas) return;
             if(charts.area) charts.area.destroy();
@@ -9960,7 +9961,8 @@
             renderNWPies(assets, liabilities);
         }
 
-        function renderNWChart(history) {
+        async function renderNWChart(history) {
+            await FTLoad.chart3();
             const ctx = document.getElementById('nw-chart');
             if(!ctx) return;
             if(nwChart) nwChart.destroy();
@@ -9988,7 +9990,8 @@
             });
         }
 
-        function renderNWPies(assets, liabilities) {
+        async function renderNWPies(assets, liabilities) {
+            await FTLoad.chart3();
             const isDark = document.documentElement.getAttribute('data-theme')!=='light';
             // Assets pie
             const ctx1 = document.getElementById('nw-assets-pie');
@@ -10586,7 +10589,8 @@
             return { schedule, totalInterest, months: month };
         }
 
-        function renderDebtChart(avalancheResult, snowballResult, strategy) {
+        async function renderDebtChart(avalancheResult, snowballResult, strategy) {
+            await FTLoad.chart3();
             const canvas = document.getElementById('debt-payoff-chart');
             if (!canvas) return;
             if (debtChart) { debtChart.destroy(); debtChart = null; }
@@ -10676,7 +10680,8 @@
 
         let debtCompareChart = null;
 
-        function renderDebtComparison() {
+        async function renderDebtComparison() {
+            await FTLoad.chart3();
             const debts = data.debts || [];
             const noDebtsEl = document.getElementById('dc-no-debts');
             const chartCanvas = document.getElementById('debt-compare-chart');
@@ -10983,7 +10988,8 @@
 
         // ═══════════════ CASH FLOW FORECAST ═══════════════
         let cfChart = null;
-        function renderCashFlow() {
+        async function renderCashFlow() {
+            await FTLoad.chart3();
             const balance = parseFloat(document.getElementById('cf-current-balance')?.value) || 0;
             const period = parseInt(document.getElementById('cf-period')?.value) || 12;
             const scenario = document.getElementById('cf-scenario')?.value || 'expected';
@@ -11202,7 +11208,8 @@
         // ═══════════════ INCOME GROWTH PROJECTION ═══════════════
         let igpChart = null;
 
-        function renderIncomeGrowth() {
+        async function renderIncomeGrowth() {
+            await FTLoad.chart3();
             const years = parseInt(document.getElementById('igp-years')?.value) || 10;
             const incGrowth = parseFloat(document.getElementById('igp-income-growth')?.value) || 5;
             const expGrowth = parseFloat(document.getElementById('igp-expense-growth')?.value) || 3;
@@ -11314,7 +11321,8 @@
 
         // ═══════════════ FIRE CALCULATOR ═══════════════
         let fireChart = null;
-        function renderFIRE() {
+        async function renderFIRE() {
+            await FTLoad.chart3();
             const currentAge = parseInt(document.getElementById('fire-current-age')?.value) || 30;
             const monthlyExpense = parseFloat(document.getElementById('fire-monthly-expense')?.value) || 0;
             const monthlySaving = parseFloat(document.getElementById('fire-monthly-saving')?.value) || 0;
