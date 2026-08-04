@@ -141,6 +141,38 @@ at the end of `<head>`.
 Coverage check: 0 of the 160 Tailwind utilities used in the page are missing from
 the generated stylesheet (`node tools/check-tailwind-coverage.mjs`).
 
+## After batch 6 — commits `38ff141` + `2b7b315`, SW cache v37
+
+`portfolio.html`, warm, real account:
+
+| metric | baseline | now | change |
+|---|---|---|---|
+| DCL | 2301 | **456** | **−80%** |
+| load | 2782 | **495** | **−82%** |
+| requests | 57 | 45 | −12 |
+| served from cache | — | 26 of 45 | |
+| blocking scripts | 8 | 0 | −8 |
+| third-party script hosts | 4 | **0** | |
+
+3.4MB of libraries moved into `vendor/` with the version in each filename, which
+is what lets the service worker serve them cache-first with no revalidation.
+
+### A service worker bug this batch uncovered
+
+Verification showed cache v36 sitting alongside v35 — the new worker had
+installed and then parked in `waiting` forever, so `activate` never ran, old
+caches were never purged, and the previous worker kept serving. A deploy would
+not reach a tab until every tab for the origin was closed.
+
+Cause: `skipWaiting()` was called synchronously *beside* `event.waitUntil()`
+instead of inside it, so it fired while the worker was still installing and was
+dropped. It had been that way since the service worker was rewritten in batch 2.
+Fixed in `2b7b315`; confirmed afterwards that v37 is the only shell cache and
+nothing is left waiting.
+
+This is very likely part of the long-standing "the change isn't showing up live"
+problem, which was previously attributed to cache versioning alone.
+
 ### Two findings that are not about our code
 
 - **An Adobe Acrobat Chrome extension** (`efaidnbmnnnibpcajpcglclefindmkaj`)
