@@ -1,0 +1,2145 @@
+const { useState, useMemo, useEffect, useCallback } = React;
+
+const CG_TAX_RATE = 0.25;
+const SETTLEMENT_RATE = 0.12;
+const SETTLEMENT_CEILING = 213240;
+
+// ===== Per-year tax parameters (מדרגות מס + שווי נקודת זיכוי לפי שנה) =====
+// Brackets = annual ceilings (₪) with marginal rates. The final ₪→50% step
+// encodes the 3% "מס יסף" surtax on income above the top threshold (47%+3%).
+// 2024–2027 are frozen at 2024 levels (חוק ההתייעלות הכלכלית — הקפאת עדכוני
+// מס 2025–2027). Credit-point value = monthly value × 12.
+// Sources: רשות המסים / לשכת רו"ח / Globes / PwC. Update when the freeze ends.
+const TAX_RATES = [0.10, 0.14, 0.20, 0.31, 0.35, 0.47, 0.50];
+const mkBrackets = (ceilings) =>
+  ceilings.map((limit, i) => ({ limit, rate: TAX_RATES[i] })).concat([{ limit: Infinity, rate: TAX_RATES[6] }]);
+const FROZEN_BRACKETS = [84120, 120720, 193800, 269280, 560280, 721560]; // 2024–2027
+const TAX_PARAMS = {
+  2022: { creditPoint: 2676, brackets: mkBrackets([77400, 110880, 178080, 247440, 514920, 660000]) }, // נק' זיכוי 223₪/חודש
+  2023: { creditPoint: 2820, brackets: mkBrackets([81480, 116760, 187440, 260520, 542160, 698280]) }, // 235₪/חודש
+  2024: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },                                  // 242₪/חודש
+  2025: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+  2026: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+  2027: { creditPoint: 2904, brackets: mkBrackets(FROZEN_BRACKETS) },
+};
+const TAX_YEARS = Object.keys(TAX_PARAMS).map(Number).sort((a, b) => a - b);
+const LATEST_TAX_YEAR = TAX_YEARS[TAX_YEARS.length - 1];
+const CURRENT_YEAR = new Date().getFullYear();
+// True once the calendar year passes the last year we have data for — a reminder
+// to add the new brackets to TAX_PARAMS (no official feed exists to auto-fetch them).
+const TAX_PARAMS_STALE = CURRENT_YEAR > LATEST_TAX_YEAR;
+const clampTaxYear = (y) => Math.min(Math.max(y, TAX_YEARS[0]), TAX_YEARS[TAX_YEARS.length - 1]);
+// Resolve params for a (possibly out-of-range or empty) year. Falls back to the
+// nearest defined year (or the current year when none given) and flags `approx`.
+function getTaxParams(year) {
+  const y = parseInt(year, 10);
+  if (TAX_PARAMS[y]) return { ...TAX_PARAMS[y], year: y, approx: false };
+  const fallback = clampTaxYear(Number.isFinite(y) && y > 0 ? y : CURRENT_YEAR);
+  return { ...TAX_PARAMS[fallback], year: fallback, approx: Number.isFinite(y) && y > 0 && y !== fallback };
+}
+// Default bracket set (current year) — used by the waterfall when no prop given.
+const TAX_BRACKETS = getTaxParams(CURRENT_YEAR).brackets;
+
+function fatherChildPoints(age) {
+  if (age < 0) return 0;
+  if (age === 0) return 2.5;
+  if (age <= 2) return 4.5;
+  if (age === 3) return 3.5;
+  if (age <= 5) return 2.5;
+  return 0;
+}
+
+function motherChildPoints(age) {
+  if (age < 0) return 0;
+  if (age === 0) return 2.5;
+  if (age <= 2) return 4.5;
+  if (age === 3) return 3.5;
+  if (age <= 5) return 2.5;
+  if (age <= 17) return 1;
+  if (age === 18) return 0.5;
+  return 0;
+}
+
+function calcTax(annual, brackets = TAX_BRACKETS) {
+  let tax = 0, prev = 0;
+  for (const b of brackets) {
+    if (annual <= prev) break;
+    const t = Math.min(annual, b.limit) - prev;
+    if (t > 0) tax += t * b.rate;
+    prev = b.limit;
+  }
+  return Math.round(tax);
+}
+
+function calcGrant(monthly, nKids) {
+  const min = 2390, max = nKids >= 3 ? 7910 : 7220;
+  if (monthly < min || monthly > max) return { grant: 0, ok: false };
+  let base = 0;
+  if (nKids >= 3) {
+    if (monthly <= 4340) base = Math.min(420, (monthly - min) * 0.215);
+    else if (monthly <= 5410) base = 420;
+    else base = Math.max(0, 420 - (monthly - 5410) * 0.168);
+  } else {
+    if (monthly <= 4340) base = Math.min(290, (monthly - min) * 0.149);
+    else if (monthly <= 5140) base = 290;
+    else base = Math.max(0, 290 - (monthly - 5140) * 0.139);
+  }
+  const m = base * 1.5;
+  return { grant: Math.round(m * 12), ok: m > 2 };
+}
+
+function calcToddler(monthly, nToddlers, nKids) {
+  if (!nToddlers) return 0;
+  const max = nKids >= 3 ? 9243 : 8582;
+  if (monthly < 2400 || monthly > max) return 0;
+  let g = nToddlers * 500;
+  if (monthly > 6000) g *= Math.max(0, 1 - (monthly - 6000) / (max - 6000));
+  return Math.max(0, Math.round(g * 12));
+}
+
+function InfoTip({ text }) {
+  const [s, setS] = useState(false);
+  return (
+    <span style={{ position: "relative", display: "inline-block", marginRight: 4, cursor: "pointer" }}
+      onMouseEnter={() => setS(true)} onMouseLeave={() => setS(false)} onClick={() => setS(!s)}>
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "hsl(220, 18%, 10%)", fontSize: 10, fontWeight: 700 }}>?</span>
+      {s && <span style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "hsl(210, 20%, 92%)", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
+    </span>
+  );
+}
+
+function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
+  return (
+    <div style={{ gridColumn: wide ? "1 / -1" : undefined }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <label style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
+      </div>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
+    </div>
+  );
+}
+
+function Tog({ label, active, onClick }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12,
+      border: `1px solid ${active ? "hsl(142, 60%, 50%)" : "rgba(255,255,255,0.1)"}`,
+      background: active ? "rgba(76,175,80,0.15)" : "transparent",
+      color: active ? "hsl(142, 60%, 50%)" : "hsl(215, 12%, 52%)", fontWeight: active ? 600 : 400
+    }}>{active ? "\u2713 " : ""}{label}</button>
+  );
+}
+
+function R({ label, amount, color, bold }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: bold ? 14 : 12, fontWeight: bold ? 700 : 400, marginBottom: bold ? 0 : 4, paddingTop: bold ? 6 : 0, borderTop: bold ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
+      <span>{label}</span><span style={{ color: color || "hsl(210, 20%, 92%)" }}>{amount}</span>
+    </div>
+  );
+}
+
+// PDF parsing helper — amount pattern that handles ₪ sign and whitespace
+// Negative lookahead (?![.\d]*\s*%) prevents matching percentages like "4.00%"
+// e.g. "ביטוח לאומי 4.00% 68.00" → skips "4.00" (percentage), captures "68.00"
+const AMT = '₪?\\s*([0-9,]+(?:\\.\\d+)?)(?![.\\d]*\\s*%)';
+const QUO = '["\u05F4״\']{0,2}'; // Hebrew geresh/gershayim variants (handles '' double-apostrophe too)
+// Flexible gap: allows extra words between label and amount (handles "ביטוח לאומי עובד 250")
+const GAP = '[^\\n]{0,25}?';
+
+function parsePayslipPDF(text) {
+  const result = { month: null, year: null, gross: null, net: null, deductions: {}, totalDeductions: null };
+  const lines = text.split('\n');
+  const hebrewMonths = { 'ינואר':'01','פברואר':'02','מרץ':'03','מרס':'03','אפריל':'04','מאי':'05','יוני':'06','יולי':'07','אוגוסט':'08','ספטמבר':'09','אוקטובר':'10','נובמבר':'11','דצמבר':'12' };
+
+  for (const line of lines) {
+    // Try YYYY/MM and MM/YYYY formats
+    const mmyyyy = line.match(/(\d{1,2})[\/\-.](\d{4})/) || line.match(/(\d{4})[\/\-.](\d{1,2})/);
+    if (mmyyyy && !result.month) {
+      let m, y;
+      if (parseInt(mmyyyy[1]) > 31) { y = parseInt(mmyyyy[1]); m = parseInt(mmyyyy[2]); }
+      else { m = parseInt(mmyyyy[1]); y = parseInt(mmyyyy[2]); }
+      if (m >= 1 && m <= 12 && y >= 2020 && y <= 2030) {
+        result.month = String(m).padStart(2, '0');
+        result.year = String(y);
+      }
+    }
+    // Try "חודש 01 שנה 2025" or "שנת 2025" patterns
+    const periodMatch = line.match(/חודש\s*:?\s*(\d{1,2})\s.*?שנ[הת]\s*:?\s*(\d{4})/);
+    if (periodMatch && !result.month) {
+      const m = parseInt(periodMatch[1]), y = parseInt(periodMatch[2]);
+      if (m >= 1 && m <= 12 && y >= 2020 && y <= 2030) {
+        result.month = String(m).padStart(2, '0'); result.year = String(y);
+      }
+    }
+    for (const [name, num] of Object.entries(hebrewMonths)) {
+      if (line.includes(name)) {
+        const ym = line.match(/20\d{2}/);
+        if (ym && !result.month) { result.month = num; result.year = ym[0]; }
+      }
+    }
+  }
+
+  const tryMatch = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 500 && v < 200000) return v; }
+    }
+    return null;
+  };
+
+  // tryMatchDed — for deductions (lower range: 1-100,000)
+  // Extra safety: skip values followed by % (percentage rates, not amounts)
+  const tryMatchDed = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (!m) continue;
+      const v = parseFloat(m[1].replace(/,/g, ''));
+      if (v <= 0 || v >= 100000) continue;
+      // Belt-and-suspenders: verify this isn't a percentage (AMT lookahead should catch it, but just in case)
+      const afterPos = m.index + m[0].length;
+      const after = text.substring(afterPos, afterPos + 5);
+      if (/^[.\d]*\s*%/.test(after)) continue;
+      return v;
+    }
+    return null;
+  };
+
+  const SHK = `סה${QUO}כ`;
+
+  result.gross = tryMatch([
+    // Label → Amount (Hebrew reading order)
+    new RegExp(`${SHK}\\s*תשלומים${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*ברוטו${GAP}${AMT}`),
+    new RegExp(`שכר\\s*ברוטו${GAP}${AMT}`),
+    new RegExp(`ברוטו${GAP}${AMT}`),
+    new RegExp(`תשלומים${GAP}${AMT}`),
+    // Amount → Label (RTL PDF text extraction order)
+    new RegExp(`${AMT}\\s*${SHK}\\s*תשלומים`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*ברוטו`),
+    new RegExp(`${AMT}\\s*שכר\\s*ברוטו`),
+    new RegExp(`${AMT}\\s*ברוטו`),
+  ]);
+
+  result.net = tryMatch([
+    // Label → Amount
+    new RegExp(`נטו\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*נטו${GAP}${AMT}`),
+    new RegExp(`שכר\\s*נטו${GAP}${AMT}`),
+    new RegExp(`${SHK}\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`העברה\\s*לבנק${GAP}${AMT}`),
+    new RegExp(`סכום\\s*לתשלום${GAP}${AMT}`),
+    new RegExp(`נטו\\s*להעברה${GAP}${AMT}`),
+    new RegExp(`לתשלום${GAP}${AMT}`),
+    new RegExp(`נטו${GAP}${AMT}`),
+    // Amount → Label
+    new RegExp(`${AMT}\\s*נטו\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT}\\s*שכר\\s*נטו`),
+    new RegExp(`${AMT}\\s*${SHK}\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*העברה\\s*לבנק`),
+    new RegExp(`${AMT}\\s*סכום\\s*לתשלום`),
+    new RegExp(`${AMT}\\s*נטו\\s*להעברה`),
+    new RegExp(`${AMT}\\s*נטו`),
+  ]);
+
+  // Deduction definitions — GAP allows extra words between label and amount
+  // (e.g. "ביטוח לאומי עובד 250", "מס הכנסה מצטבר 1,200")
+  const A = `₪?\\s*([0-9,]+\\.?\\d*)`; // inline AMT for deductions
+  const G = `[^\\n]{0,20}?`; // short gap for deductions
+  const dedDefs = [
+    { key:'incomeTax', label:'מס הכנסה', patterns:[
+      new RegExp(`מס\\s*הכנסה${G}${A}`), new RegExp(`${A}\\s*מס\\s*הכנסה`),
+      new RegExp(`ניכוי\\s*מס${G}${A}`), new RegExp(`${A}\\s*ניכוי\\s*מס`),
+    ]},
+    { key:'nationalInsurance', label:'ביטוח לאומי', patterns:[
+      // Full name with flexible gap (handles "ביטוח לאומי עובד", "דמי ביטוח לאומי", etc.)
+      new RegExp(`ביטוח\\s*לאומי${G}${A}`), new RegExp(`${A}\\s*ביטוח\\s*לאומי`),
+      new RegExp(`דמי\\s*ביטוח\\s*לאומי${G}${A}`),
+      // Abbreviations: בט"ל, ב.לאומי, ב"ל
+      new RegExp(`בט${QUO}ל${G}${A}`), new RegExp(`${A}\\s*בט${QUO}ל`),
+      new RegExp(`ב\\.\\s*לאומי${G}${A}`),
+      new RegExp(`ב${QUO}ל[:\\s]*${A}`),
+    ]},
+    { key:'healthTax', label:'מס בריאות', patterns:[
+      new RegExp(`מס\\s*בריאות${G}${A}`), new RegExp(`${A}\\s*מס\\s*בריאות`),
+      new RegExp(`דמי\\s*בריאות${G}${A}`),
+      new RegExp(`בריאות${G}${A}`), new RegExp(`${A}\\s*בריאות`),
+    ]},
+    { key:'pension', label:'פנסיה', patterns:[
+      new RegExp(`פנסי[הת]${G}${A}`), new RegExp(`${A}\\s*פנסי[הת]`),
+      new RegExp(`הפרשה\\s*לפנסיה${G}${A}`),
+      /מנורה[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /מבטחים[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /גמל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /הראל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /מגדל[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /כלל\s*ביטוח[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+      /אלטשולר[^\\n]{0,15}?₪?\s*([0-9,]+\.?\d*)/,
+    ]},
+    { key:'hishtalmut', label:'קרן השתלמות', patterns:[
+      new RegExp(`קר[נן]\\s*השתלמות${G}${A}`), new RegExp(`${A}\\s*קר[נן]\\s*השתלמות`),
+      new RegExp(`קרה${QUO}ש${G}${A}`), new RegExp(`${A}\\s*קרה${QUO}ש`),
+      new RegExp(`השתלמות${G}${A}`),
+    ]}
+  ];
+  for (const d of dedDefs) {
+    const v = tryMatchDed(d.patterns);
+    if (v) result.deductions[d.key] = { label: d.label, amount: v };
+  }
+
+  // NOTE: net is taken ONLY from an explicit net label in the text (above) or
+  // from OCR. We deliberately do NOT derive net = gross − Σ(deductions): on the
+  // scrambled RTL text of payslips like Michpal the deduction regexes grab
+  // unrelated numbers (e.g. a house number from the address), producing a
+  // confident-but-wrong net. A missing net here triggers the OCR fallback.
+  if (result.gross && result.net) result.totalDeductions = Math.round((result.gross - result.net) * 100) / 100;
+
+  return result;
+}
+
+// Parse Israeli Form 106 (טופס 106) — annual tax summary from employer
+function parseForm106(text) {
+  // Detect if this is a 106 form (handles 106, 0106, Tax Authority portal, various Hebrew titles)
+  const is106 = /טופס\s*0?106|0?106\s*לשנת|אישור\s*שנתי|ריכוז\s*שנתי|סיכום\s*שנתי|אישור\s*(?:על\s*)?(?:ניכוי|הכנסה|לעובד)|דו.?ח?\s*שנתי|ריכוז\s*נתוני\s*שכר|סעיף\s*106|ניכויים\s*מ(?:משכורת|שכר\s*עבודה)|מידע\s*על\s*הכנסות|הכנסות\s*לשנת\s*המס|הופק\s*מ(?:ה)?אזור\s*אישי/.test(text);
+  if (!is106) return null;
+
+  const result = { year: null, annualGross: null, annualNet: null, monthlyGross: null, monthlyNet: null, months: 12 };
+
+  // Extract year: "שנת מס 2025", "לשנת המס 2024", "לשנת 2025", "שנת 2025"
+  const yearMatch = text.match(/שנ[תה]\s*(?:ה?מס\s*)?:?\s*(20\d{2})/) || text.match(/לשנ[תה]\s*(?:ה?מס\s*)?:?\s*(20\d{2})/) || text.match(/הכנסות\s*לשנ[תה]\s*(?:ה?מס\s*)?(20\d{2})/) || text.match(/(20\d{2})\s*שנ[תה]\s*(?:ה?מס)/);
+  if (yearMatch) result.year = yearMatch[1];
+
+  // If no year from label, try to find a standalone year
+  if (!result.year) {
+    const fallbackYear = text.match(/\b(202[0-9])\b/);
+    if (fallbackYear) result.year = fallbackYear[1];
+  }
+
+  const SHK = `סה${QUO}כ`;
+  // Annual amounts are typically 30,000–2,000,000
+  const AMT106 = '₪?\\s*([0-9,]+(?:\\.\\d+)?)';
+  const GAP106 = '[^\\n]{0,30}?';
+
+  const tryMatch106 = (patterns) => {
+    for (const p of patterns) {
+      const m = text.match(p);
+      if (m) { const v = parseFloat(m[1].replace(/,/g, '')); if (v > 100 && v < 2000000) return v; }
+    }
+    return null;
+  };
+
+  // Gross patterns for 106
+  const SKH = `סך\\s*(?:הכל|הכול)`;  // "סך הכל" / "סך הכול" alternative to סה"כ
+  result.annualGross = tryMatch106([
+    new RegExp(`${SHK}\\s*הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`הכנס[תה]\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*שכר\\s*ברוטו${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*תשלומים${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*תשלומים${GAP106}${AMT106}`),
+    new RegExp(`הכנסה\\s*(?:חייבת|ברוטו|ממשכורת)${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*ברוטו${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*ברוטו\\s*שנתי${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*עבודה${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*ברוטו${GAP106}${AMT106}`),
+    // Tax Authority portal format: "משכורת ותשלומים 1,874", "סה''כ (158/172) 1,874"
+    new RegExp(`משכורת\\s*ותשלומים${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*\\(158\\/172\\)${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*\\(158${GAP106}${AMT106}`),
+    // RTL order
+    new RegExp(`${AMT106}\\s*${SHK}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*${SKH}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*הכנס[תה]\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*${SHK}\\s*שכר\\s*ברוטו`),
+    new RegExp(`${AMT106}\\s*${SHK}\\s*תשלומים`),
+    new RegExp(`${AMT106}\\s*הכנסה\\s*(?:חייבת|ברוטו|ממשכורת)`),
+    new RegExp(`${AMT106}\\s*שכר\\s*עבודה`),
+    new RegExp(`${AMT106}\\s*משכורת\\s*ותשלומים`),
+  ]);
+
+  // Net patterns for 106
+  result.annualNet = tryMatch106([
+    new RegExp(`${SHK}\\s*נטו${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*נטו${GAP106}${AMT106}`),
+    new RegExp(`נטו\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`${SHK}\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`${SKH}\\s*לתשלום${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*נטו\\s*שנתי${GAP106}${AMT106}`),
+    new RegExp(`שכר\\s*נטו${GAP106}${AMT106}`),
+    // RTL order
+    new RegExp(`${AMT106}\\s*${SHK}\\s*נטו`),
+    new RegExp(`${AMT106}\\s*${SKH}\\s*נטו`),
+    new RegExp(`${AMT106}\\s*נטו\\s*לתשלום`),
+    new RegExp(`${AMT106}\\s*שכר\\s*נטו`),
+  ]);
+
+  // Number of months worked (if specified): "מספר חודשי עבודה: 10", "חדשי עבודה בשנת המס"
+  // Also count V marks from Tax Authority portal format: "V V V V 4"
+  const monthsMatch = text.match(/(?:מספר\s*)?חו?דש[יה]\s*(?:עבודה)?[:\s]*(\d{1,2})/)
+    || text.match(/(\d{1,2})\s*חו?דש[יה]\s*עבודה/)
+    || text.match(/חו?דש[יה]\s*עבודה[^]*?(?:V\s*)+(\d{1,2})\b/);
+  if (monthsMatch) {
+    const mo = parseInt(monthsMatch[1]);
+    if (mo >= 1 && mo <= 12) result.months = mo;
+  }
+
+  if (!result.annualGross && !result.annualNet) return null;
+
+  // Calculate monthly averages
+  if (result.annualGross) result.monthlyGross = Math.round(result.annualGross / result.months);
+  if (result.annualNet) result.monthlyNet = Math.round(result.annualNet / result.months);
+
+  return result;
+}
+
+async function extractPDFText(arrayBuffer) {
+  await FTLoad.pdfjs();
+  if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let ltrText = '';
+  let rtlText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const lines = {};
+    content.items.forEach(item => {
+      const y = Math.round(item.transform[5]);
+      if (!lines[y]) lines[y] = [];
+      lines[y].push({ text: item.str, x: item.transform[4] });
+    });
+    Object.keys(lines).map(Number).sort((a,b)=>b-a).forEach(y => {
+      const sorted = lines[y].sort((a,b)=>a.x-b.x);
+      ltrText += sorted.map(i=>i.text).join(' ') + '\n';
+      rtlText += sorted.slice().reverse().map(i=>i.text).join(' ') + '\n';
+    });
+  }
+  // Return both orderings — try LTR first, if parsing fails caller can try RTL
+  return { ltrText, rtlText, hasText: ltrText.replace(/\s/g, '').length > 20 };
+}
+
+// ==================== OCR FALLBACK (Tesseract.js) ====================
+// pdf.js's text layer drops the highlighted summary boxes on some payslips
+// (Michpal's "שכר נטו", "סה"כ ניכויי חובה", and others). Rendering the page to
+// a canvas and OCR'ing it recovers them because OCR reads the pixels, and it
+// preserves visual adjacency so "שכר נטו 5,411" lands together.
+
+let _ocrWorker = null;
+async function getOCRWorker(onStatus) {
+  if (_ocrWorker) return _ocrWorker;
+  if (onStatus) onStatus('טוען ספריית OCR...');
+  await FTLoad.tesseract();
+  if (typeof Tesseract === 'undefined') throw new Error('ספריית OCR לא נטענה');
+  if (onStatus) onStatus('טוען מנוע OCR (פעם ראשונה)...');
+  _ocrWorker = await Tesseract.createWorker('heb+eng');
+  return _ocrWorker;
+}
+
+// Render every PDF page to canvas and OCR it. Returns the concatenated text.
+async function ocrPDF(arrayBuffer, onProgress) {
+  await FTLoad.pdfjs();
+  if (typeof pdfjsLib === 'undefined') throw new Error('ספריית PDF לא נטענה');
+  const worker = await getOCRWorker(onProgress ? (s) => onProgress(0, 0, s) : null);
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let text = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    if (onProgress) onProgress(i, pdf.numPages);
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2.5 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    const { data } = await worker.recognize(canvas);
+    text += data.text + '\n';
+    canvas.width = canvas.height = 0; // free memory
+  }
+  return text;
+}
+
+// OCR a single image file (jpg/png/…). Returns the recognized text.
+async function ocrImage(file, onProgress) {
+  const worker = await getOCRWorker(onProgress ? (s) => onProgress(0, 0, s) : null);
+  const url = URL.createObjectURL(file);
+  try {
+    const { data } = await worker.recognize(url);
+    return data.text;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Pull the net-pay figure out of (OCR'd) text. Net is labelled — never inferred
+// from deductions. Validated against the gross when we have it (net is always
+// a fraction of gross), which also discards OCR noise like a missing decimal.
+function extractNet(text, grossHint) {
+  const N = '([0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+\\.[0-9]{1,2}|[0-9]{3,6})';
+  const labels = [
+    `נטו\\s*לתשלום\\s*[:₪]*\\s*${N}`,
+    `שכר\\s*נטו\\s*[:₪]*\\s*${N}`,
+    `נטו\\s*להעברה\\s*[:₪]*\\s*${N}`,
+    `סכום\\s*לתשלום\\s*[:₪]*\\s*${N}`,
+    `העברה\\s*ל?בנק\\S*\\s*[:₪]*\\s*${N}`,
+    `${N}\\s*נטו\\s*לתשלום`,
+    `${N}\\s*שכר\\s*נטו`,
+  ];
+  const ok = v => v >= 800 && v <= 200000 && (!grossHint || (v <= grossHint * 1.03 && v >= grossHint * 0.30));
+  for (const lab of labels) {
+    const re = new RegExp(lab, 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      const v = parseFloat(m[1].replace(/,/g, ''));
+      if (ok(v)) return v;
+    }
+  }
+  return null;
+}
+
+// ==================== CPI TAX SIMULATOR HELPERS ====================
+
+const CPI_CACHE_KEY = 'cpi_data_v4';
+const CPI_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+const CF_WORKER_BASE = window.FTData.WORKER_BASE;
+
+// שיעורי אינפלציה שנתיים ידועים לישראל (מקור: הלמ"ס / בנק ישראל)
+// ניתן לעדכן את הערכים הבאים מדי שנה
+const IL_ANNUAL_INFLATION = {
+  2008: 3.8, 2009: 3.3, 2010: 2.7, 2011: 3.4, 2012: 1.7,
+  2013: 1.6, 2014: 0.5, 2015: -0.6, 2016: -0.5, 2017: 0.2,
+  2018: 0.9, 2019: 0.8, 2020: 0.5, 2021: 2.0, 2022: 5.3,
+  2023: 3.6, 2024: 3.2, 2025: 3.5
+};
+
+// בונה Map של מדד חודשי מאינטרפולציה ליניארית של שיעורי האינפלציה השנתיים
+// בסיס: ינואר 2010 = 100.00
+function buildStaticCPIMap() {
+  const map = new Map();
+  let value = 100.0;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1; // 1-indexed
+  for (let year = 2010; year <= currentYear; year++) {
+    const rate = IL_ANNUAL_INFLATION[year] ?? 3.0;
+    const monthly = Math.pow(1 + rate / 100, 1 / 12);
+    const maxMonth = (year === currentYear) ? currentMonth : 12;
+    for (let month = 1; month <= maxMonth; month++) {
+      map.set(`${year}-${String(month).padStart(2, '0')}`, parseFloat(value.toFixed(3)));
+      value *= monthly;
+    }
+  }
+  return map;
+}
+
+async function fetchCPIMap() {
+  // 1. בדוק cache ב-localStorage
+  try {
+    const cached = localStorage.getItem(CPI_CACHE_KEY);
+    if (cached) {
+      const { entries, fetchedAt, source } = JSON.parse(cached);
+      if (Date.now() - fetchedAt < CPI_CACHE_TTL) return new Map(entries);
+    }
+  } catch(e) {}
+
+  // 2. נסה ישירות מ-CBS (יש להם CORS פתוח לדפדפן, אבל בלוקקים את ה-Worker)
+  try {
+    const resp = await fetch('https://api.cbs.gov.il/index/data/price?id=120010&format=json&lang=en',
+      { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      const map = parseCBSCPIData(data);
+      if (map.size > 50) {
+        try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'cbs' })); } catch(e) {}
+        return map;
+      }
+    }
+  } catch(e) { /* נפל — נסה דרך Worker */ }
+
+  // 3. גיבוי דרך Worker (ייתכן שייכשל - CBS חוסם את CF)
+  try {
+    const resp = await fetch(`${CF_WORKER_BASE}/cpi`, { signal: AbortSignal.timeout(8000) });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (!data?.error) {
+        const map = parseCBSCPIData(data);
+        if (map.size > 50) {
+          try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'cbs-worker' })); } catch(e) {}
+          return map;
+        }
+      }
+    }
+  } catch(e) {}
+
+  // 4. fallback: נתונים מובנים מאינפלציה שנתית ידועה
+  const map = buildStaticCPIMap();
+  try { localStorage.setItem(CPI_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'static' })); } catch(e) {}
+  return map;
+}
+
+// Parses the actual CBS API response. The API publishes monthly CPI with periodic re-basing
+// (every 2 years CBS rebases to a new "Average YYYY = 100"). To produce a CONSISTENT index,
+// we chain the published monthly percent change (`item.percent`) from the earliest available
+// month forward — this gives a single base regardless of how many re-bases occurred.
+function parseCBSCPIData(data) {
+  const map = new Map();
+  // Modern shape: { month: [{ date: [{year, month, percent, currBase: { value }, ...}, ...] }] }
+  const rawDates = data?.month?.[0]?.date;
+  if (Array.isArray(rawDates) && rawDates.length > 0) {
+    // Sort ascending by year-month
+    const sorted = [...rawDates].sort((a,b) => (a.year - b.year) || (a.month - b.month));
+    let value = 100;  // anchor; actual ratio between dates is what matters for indexation
+    for (const item of sorted) {
+      const pct = Number(item.percent ?? 0);
+      value = value * (1 + pct / 100);
+      const key = `${item.year}-${String(item.month).padStart(2,'0')}`;
+      map.set(key, parseFloat(value.toFixed(4)));
+    }
+    return map;
+  }
+
+  // Legacy shape (X0/X1) — fallback
+  const rows = data?.Data?.Row ?? data?.data?.Row ?? data?.rows ?? data ?? [];
+  const arr = Array.isArray(rows) ? rows : [];
+  for (const item of arr) {
+    const rawPeriod = item.X0 ?? item.period ?? item.Period ?? item.date ?? '';
+    const rawValue  = item.X1 ?? item.value ?? item.Value ?? item.indexValue ?? '';
+    const value = parseFloat(String(rawValue).replace(',', '.'));
+    if (!rawPeriod || isNaN(value)) continue;
+    const p = String(rawPeriod);
+    let key = '';
+    if (p.includes('M')) {
+      const [yr, mo] = p.split('M');
+      key = `${yr}-${String(mo).padStart(2, '0')}`;
+    } else if (/^\d{4}-\d{2}/.test(p)) {
+      key = p.substring(0, 7);
+    }
+    if (key) map.set(key, value);
+  }
+  return map;
+}
+
+function getCPIForDate(isoDateStr, cpiMap) {
+  if (!isoDateStr || !cpiMap) return null;
+  const d = new Date(isoDateStr);
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return cpiMap.get(key) ?? null;
+}
+
+function getLatestCPI(cpiMap) {
+  if (!cpiMap || cpiMap.size === 0) return null;
+  const keys = [...cpiMap.keys()].sort();
+  return { key: keys[keys.length - 1], value: cpiMap.get(keys[keys.length - 1]) };
+}
+
+// ==================== FX (Currency) HISTORY HELPERS ====================
+// Monthly VWAP (volume-weighted average) for USD/ILS and EUR/ILS.
+// Source: Massive Market Data (C:USDILS, C:EURILS) for 2024-04+; BoI yearly avgs for older.
+// Used to compute "real" capital gain on foreign-currency assets per Israeli Tax Ord. §88
+// (the "lower of the two" rule: tax on min(nominal NIS gain, FCY gain × sale-rate)).
+
+const FX_CACHE_KEY = 'fx_data_v1';
+const FX_CACHE_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+const FX_MONTHLY_VWAP = {
+  // === Yearly approximations (BoI averages) for legacy lots pre-Massive data ===
+  '2010-01': { USD: 3.74, EUR: 4.95 }, '2011-01': { USD: 3.58, EUR: 4.98 },
+  '2012-01': { USD: 3.86, EUR: 4.96 }, '2013-01': { USD: 3.61, EUR: 4.79 },
+  '2014-01': { USD: 3.58, EUR: 4.75 }, '2015-01': { USD: 3.89, EUR: 4.32 },
+  '2016-01': { USD: 3.84, EUR: 4.25 }, '2017-01': { USD: 3.59, EUR: 4.05 },
+  '2018-01': { USD: 3.59, EUR: 4.24 }, '2019-01': { USD: 3.56, EUR: 3.99 },
+  '2020-01': { USD: 3.44, EUR: 3.93 }, '2021-01': { USD: 3.23, EUR: 3.83 },
+  '2022-01': { USD: 3.36, EUR: 3.54 }, '2023-01': { USD: 3.69, EUR: 3.99 },
+  '2024-01': { USD: 3.65, EUR: 3.99 }, '2024-02': { USD: 3.62, EUR: 3.91 },
+  '2024-03': { USD: 3.65, EUR: 3.97 },
+  // === Massive Market Data: monthly VWAP, 2024-04 → present ===
+  '2024-04': { USD: 3.7451, EUR: 4.0133 }, '2024-05': { USD: 3.7028, EUR: 3.9985 },
+  '2024-06': { USD: 3.7223, EUR: 4.0032 }, '2024-07': { USD: 3.6768, EUR: 3.9860 },
+  '2024-08': { USD: 3.7296, EUR: 4.1015 }, '2024-09': { USD: 3.7308, EUR: 4.1415 },
+  '2024-10': { USD: 3.7583, EUR: 4.0939 }, '2024-11': { USD: 3.7183, EUR: 3.9500 },
+  '2024-12': { USD: 3.6172, EUR: 3.7858 }, '2025-01': { USD: 3.6135, EUR: 3.7393 },
+  '2025-02': { USD: 3.5673, EUR: 3.7111 }, '2025-03': { USD: 3.6543, EUR: 3.9459 },
+  '2025-04': { USD: 3.6976, EUR: 4.1320 }, '2025-05': { USD: 3.5634, EUR: 4.0096 },
+  '2025-06': { USD: 3.4799, EUR: 3.9935 }, '2025-07': { USD: 3.3508, EUR: 3.9074 },
+  '2025-08': { USD: 3.3753, EUR: 3.9606 }, '2025-09': { USD: 3.3403, EUR: 3.8170 },
+  '2025-10': { USD: 3.2812, EUR: 3.8170 }, '2025-11': { USD: 3.2543, EUR: 3.7609 },
+  '2025-12': { USD: 3.2159, EUR: 3.7652 }, '2026-01': { USD: 3.1434, EUR: 3.6906 },
+  '2026-02': { USD: 3.1014, EUR: 3.6676 }, '2026-03': { USD: 3.1126, EUR: 3.5985 },
+  '2026-04': { USD: 3.0305, EUR: 3.5509 }
+};
+
+function buildStaticFXMap() {
+  return new Map(Object.entries(FX_MONTHLY_VWAP));
+}
+
+async function fetchFXMap() {
+  // Currently returns the embedded static map. Cache layer kept for future API integration.
+  try {
+    const cached = localStorage.getItem(FX_CACHE_KEY);
+    if (cached) {
+      const { entries, fetchedAt } = JSON.parse(cached);
+      if (Date.now() - fetchedAt < FX_CACHE_TTL) return new Map(entries);
+    }
+  } catch (e) {}
+  const map = buildStaticFXMap();
+  try { localStorage.setItem(FX_CACHE_KEY, JSON.stringify({ entries: [...map], fetchedAt: Date.now(), source: 'static-massive' })); } catch (e) {}
+  return map;
+}
+
+// Returns the FX rate (foreign currency → ILS) for a given date and currency.
+// Falls back to closest earlier month, or earliest available month if requested date is too old.
+function getFXForDate(isoDateStr, fxMap, currency) {
+  if (!currency || currency === 'ILS') return 1;
+  if (!isoDateStr || !fxMap) return null;
+  const d = new Date(isoDateStr);
+  const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const exact = fxMap.get(key)?.[currency];
+  if (exact) return exact;
+  const keys = [...fxMap.keys()].sort();
+  if (keys.length === 0) return null;
+  // Latest key ≤ requested
+  for (let i = keys.length - 1; i >= 0; i--) {
+    if (keys[i] <= key) {
+      const v = fxMap.get(keys[i])?.[currency];
+      if (v) return v;
+    }
+  }
+  // Else earliest available (requested date is before our data)
+  for (let i = 0; i < keys.length; i++) {
+    const v = fxMap.get(keys[i])?.[currency];
+    if (v) return v;
+  }
+  return null;
+}
+
+// ====================================================================
+
+function getRemainingLots(purchases, sales, symbol) {
+  const sym = (symbol || '').toUpperCase();
+  const lots = (purchases || [])
+    .filter(p => (p.symbol || '').toUpperCase() === sym)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .map(p => {
+      const shares = Number(p.shares || 0);
+      const fee = Number(p.fee || 0);
+      const lotCurrency = p.currency || 'ILS';
+      // Resolve actual per-share cost IN THE LOT'S NATIVE CURRENCY (including fee — per Israeli
+      // tax law, cost basis includes commissions).
+      //
+      // CRITICAL: for non-ILS lots, `p.amount` is stored in NIS (the actual NIS spent at the
+      // historical FX), NOT in the lot's currency. Must use `originalAmount` (with fee) or
+      // `original_amount` (without fee) for foreign-currency lots.
+      let perShareCost = 0;
+      if (lotCurrency === 'ILS') {
+        if (Number(p.amount) > 0 && shares > 0) {
+          perShareCost = Number(p.amount) / shares;
+        } else if (Number(p.price) > 0 && shares > 0) {
+          perShareCost = Number(p.price) + (fee / shares);
+        } else if (Number(p.original_price) > 0 && shares > 0) {
+          perShareCost = Number(p.original_price) + (fee / shares);
+        }
+      } else {
+        // Foreign currency: prefer originalAmount (FCY total inc. fee) → original_amount + fee → original_price + fee
+        if (Number(p.originalAmount) > 0 && shares > 0) {
+          perShareCost = Number(p.originalAmount) / shares;
+        } else if (Number(p.original_amount) > 0 && shares > 0) {
+          const feeFCY = (p.fee_currency || 'ILS') === lotCurrency ? fee : 0;
+          perShareCost = (Number(p.original_amount) + feeFCY) / shares;
+        } else if (Number(p.original_price) > 0 && shares > 0) {
+          const feeFCY = (p.fee_currency || 'ILS') === lotCurrency ? fee : 0;
+          perShareCost = Number(p.original_price) + (feeFCY / shares);
+        } else if (Number(p.price) > 0 && shares > 0) {
+          perShareCost = Number(p.price);
+        }
+      }
+      return { date: p.date, price: perShareCost, shares, currency: lotCurrency, remaining: shares };
+    });
+
+  for (const sale of (sales || []).filter(s => (s.symbol || '').toUpperCase() === sym).sort((a, b) => new Date(a.date) - new Date(b.date))) {
+    let toSell = Number(sale.shares || 0);
+    for (const lot of lots) {
+      if (toSell <= 0 || lot.remaining <= 0) continue;
+      const used = Math.min(toSell, lot.remaining);
+      lot.remaining -= used;
+      toSell -= used;
+    }
+  }
+  return lots.filter(l => l.remaining > 0.0001);
+}
+
+function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
+  const currentPrice = Number(holding.currentPrice || 0);
+  const currency = holding.currency || 'ILS';
+  const fxSell = currency === 'ILS' ? 1 : (currentRates?.[currency] ?? (currency === 'USD' ? 3.6 : 3.9));
+  const salePriceILS = currentPrice * fxSell;
+  const latest = getLatestCPI(cpiMap);
+
+  let totalGainFlat = 0, totalGainReal = 0, unrealizedGain = 0;
+  let adjustmentType = currency === 'ILS' ? (holding.isCPIIndexed ? 'cpi' : 'none') : 'fx';
+
+  const fallbackCost = Number(holding.costBasis || 0);  // עלות ממוצעת ללוטים חסרי price
+
+  const lotsToUse = remainingLots.length > 0
+    ? remainingLots
+    : [{ date: holding.purchaseDate, price: fallbackCost, shares: Number(holding.shares || 0), currency, remaining: Number(holding.shares || 0) }];
+
+  for (const lot of lotsToUse) {
+    const lotCurrency = lot.currency || currency;
+    const lotPrice = Number(lot.price) > 0 ? Number(lot.price) : fallbackCost;
+    const sharesUsed = lot.remaining;
+    if (lotPrice === 0 || sharesUsed <= 0) continue;
+
+    // Sale rate (today): for foreign currency → use current rate. For ILS → 1.
+    const lotFxSell = lotCurrency === 'ILS' ? 1 : (currentRates?.[lotCurrency] ?? (lotCurrency === 'USD' ? 3.6 : 3.9));
+    // Buy rate (historical): for foreign currency → look up at purchase date. For ILS → 1.
+    const lotFxBuy  = lotCurrency === 'ILS' ? 1 : (getFXForDate(lot.date, fxMap, lotCurrency) ?? lotFxSell);
+
+    // ── Track A: real nominal NIS (legal nominal per §88) — uses HISTORICAL FX for cost ──
+    const costNIS_historical = lotPrice * lotFxBuy * sharesUsed;
+    const proceedsNIS         = currentPrice * lotFxSell * sharesUsed;
+    const realNominalGainNIS  = proceedsNIS - costNIS_historical;
+
+    // ── Track B: "naive" / Excellence-style — uses CURRENT FX for both buy and sell ──
+    // Equivalent to: (currentPrice - lotPrice) × shares × lotFxSell
+    // This matches how the portfolio app displays unrealized P&L.
+    const naiveGainNIS = (currentPrice - lotPrice) * sharesUsed * lotFxSell;
+
+    // The unrealized P&L shown in the portfolio uses current FX (Track B), so we mirror that:
+    unrealizedGain += naiveGainNIS;
+    // The "flat 25%" we compare against is the Excellence-style naive calc (Track B):
+    totalGainFlat += naiveGainNIS;
+
+    let realGainLot;
+    if (lotCurrency === 'ILS') {
+      // === ILS asset: CPI adjustment if marked, otherwise nominal ===
+      // For ILS, Track A === Track B === naive (no FX involved).
+      if (holding.isCPIIndexed) {
+        const cpiPurchase = getCPIForDate(lot.date, cpiMap);
+        if (cpiPurchase && latest?.value) {
+          const adjustedCostNIS = lotPrice * (latest.value / cpiPurchase) * sharesUsed;
+          const cpiAdjGain = proceedsNIS - adjustedCostNIS;
+          // ס' 88: הצמדה לא יוצרת/מגדילה הפסד
+          realGainLot = naiveGainNIS < 0 ? naiveGainNIS : Math.max(0, cpiAdjGain);
+        } else {
+          realGainLot = naiveGainNIS;
+        }
+      } else {
+        realGainLot = naiveGainNIS;
+      }
+    } else {
+      // === Foreign currency: "Lower of the two" rule (§88) ===
+      // Real tax base = min(Track A: real nominal w/ historical FX, Track B: naive at current FX)
+      // - Loss in NIS at historical FX → recognized loss
+      // - "Illusion" gain (positive NIS at current FX but FCY went down) → tax 0, no loss
+      if (realNominalGainNIS <= 0) {
+        realGainLot = realNominalGainNIS;  // loss recognized at historical-FX nominal
+      } else if (naiveGainNIS <= 0) {
+        realGainLot = 0;                   // FCY went down → no taxable gain, no loss
+      } else {
+        realGainLot = Math.min(realNominalGainNIS, naiveGainNIS);
+      }
+    }
+    totalGainReal += realGainLot;
+  }
+
+  // קיזוז רווחים והפסדים בתוך הנייר, ואז max(0, ...) לפני 25%
+  const flatTax = Math.max(0, totalGainFlat) * 0.25;
+  const realTax = Math.max(0, totalGainReal) * 0.25;
+
+  return {
+    flatTax: Math.round(flatTax),
+    cpiAdjTax: Math.round(realTax),  // kept name for backward compat with UI
+    realTax: Math.round(realTax),
+    adjustmentType,                  // 'cpi' | 'fx' | 'none' — for UI badge
+    savings: Math.round(Math.max(0, flatTax - realTax)),
+    unrealizedGain: Math.round(unrealizedGain),
+    lotsFromHistory: remainingLots.length > 0
+  };
+}
+
+// ====================================================================
+
+function TaxBracketWaterfall({ fatherAnnual, motherAnnual, brackets = TAX_BRACKETS }) {
+  const colors = ['#22c55e','#84cc16','#eab308','#f97316','#ef4444','#dc2626','#991b1b'];
+  const labels = ['10%','14%','20%','31%','35%','47%','50%'];
+  const fmNum = v => v.toLocaleString('he-IL');
+
+  function computeBreakdown(annual) {
+    const result = [];
+    let prev = 0;
+    for (let i = 0; i < brackets.length; i++) {
+      const b = brackets[i];
+      const taxable = Math.max(0, Math.min(annual, b.limit) - prev);
+      const tax = Math.round(taxable * b.rate);
+      result.push({ from: prev, to: b.limit === Infinity ? prev + taxable : b.limit, rate: b.rate, taxable, tax, color: colors[i], label: labels[i] });
+      prev = b.limit;
+      if (annual <= b.limit) break;
+    }
+    return result;
+  }
+
+  const fBreak = computeBreakdown(fatherAnnual);
+  const mBreak = computeBreakdown(motherAnnual);
+  const fTotalTax = fBreak.reduce((s, b) => s + b.tax, 0);
+  const mTotalTax = mBreak.reduce((s, b) => s + b.tax, 0);
+  const maxIncome = Math.max(fatherAnnual, motherAnnual, 84120);
+
+  function renderBar(breakdown, annual, totalTax, label, clr) {
+    if (annual <= 0) return null;
+    return (
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: clr }}>{label} — ₪{fmNum(annual)} שנתי</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>מס: ₪{fmNum(totalTax)} ({annual > 0 ? (totalTax / annual * 100).toFixed(1) : 0}%)</span>
+        </div>
+        <div style={{ display: 'flex', height: 36, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          {breakdown.filter(b => b.taxable > 0).map(b => {
+            const widthPct = (b.taxable / maxIncome) * 100;
+            return (
+              <div key={b.label} style={{
+                width: widthPct + '%', minWidth: widthPct > 3 ? '28px' : '0',
+                background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700, color: '#000', transition: 'all 0.3s ease',
+                cursor: 'default', position: 'relative'
+              }} title={`מדרגה ${b.label}: ₪${fmNum(b.taxable)} × ${b.label} = ₪${fmNum(b.tax)} מס`}>
+                {widthPct > 6 ? b.label : ''}
+              </div>);
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+          {breakdown.filter(b => b.taxable > 0).map(b => (
+            <span key={b.label} style={{ fontSize: 10, color: 'hsl(215,12%,52%)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, borderRight: '3px solid ' + b.color }}>
+              {b.label}: ₪{fmNum(b.tax)}
+            </span>
+          ))}
+        </div>
+      </div>);
+  }
+
+  return (
+    <div style={{ background: 'rgba(255,255,255,0.035)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: 18, marginBottom: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, color: 'hsl(142, 60%, 50%)', margin: '0 0 14px' }}>📊 ויזואליזציית מדרגות מס</h2>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+        {colors.map((c, i) => (
+          <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(215,12%,58%)' }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }}></span>
+            {labels[i]}
+          </span>
+        ))}
+      </div>
+      {renderBar(fBreak, fatherAnnual, fTotalTax, '👨 האב', '#7ab8e0')}
+      {renderBar(mBreak, motherAnnual, mTotalTax, '👩 האם', '#d898c8')}
+      <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(76,175,80,0.08)', borderRadius: 10, textAlign: 'center' }}>
+        <div style={{ fontSize: 12, color: 'hsl(215, 12%, 52%)' }}>סה״כ מס הכנסה משק הבית (לפני זיכויים)</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: '#ef4444' }}>₪{fmNum(fTotalTax + mTotalTax)}</div>
+        <div style={{ fontSize: 11, color: 'hsl(215, 12%, 52%)' }}>שיעור מס ממוצע: {(fatherAnnual + motherAnnual) > 0 ? ((fTotalTax + mTotalTax) / (fatherAnnual + motherAnnual) * 100).toFixed(1) : 0}%</div>
+      </div>
+    </div>);
+}
+
+function App() {
+  const taxData = window.__taxData || { loaded: false, years: {}, availableYears: [] };
+  const saved = window.__taxSettings;
+
+  const [selectedYear, setSelectedYear] = useState('');
+  const [autoApplied, setAutoApplied] = useState(!!saved);
+  const [payslips, setPayslips] = useState((window.__payslipData || {}).payslips || []);
+  const [pendingPayslip, setPendingPayslip] = useState(null);
+  const [payslipEarner, setPayslipEarner] = useState('');
+  const [payslipStatus, setPayslipStatus] = useState('');
+  const [fM, setFM] = useState(saved?.fM ?? 6000);
+  const [mM, setMM] = useState(saved?.mM ?? 5000);
+  const [children, setChildren] = useState(saved?.children ?? [
+    { id: 1, age: 3 },
+    { id: 2, age: 2 },
+    { id: 3, age: 0 },
+  ]);
+  const [nextId, setNextId] = useState(saved?.nextId ?? 4);
+  const [stl, setStl] = useState(saved?.stl ?? true);
+  const [jnt, setJnt] = useState(saved?.jnt ?? true);
+  const [cg, setCg] = useState(saved?.cg ?? 80000);
+  const [fRatio, setFRatio] = useState(saved?.fRatio ?? 1.0);
+  const [mRatio, setMRatio] = useState(saved?.mRatio ?? 1.0);
+  const [det, setDet] = useState(false);
+
+  // CPI Tax Simulator state
+  const [cpiSim, setCpiSim] = useState(null);
+  const [cpiLoading, setCpiLoading] = useState(false);
+  const [cpiError, setCpiError] = useState('');
+  const [cpiExpanded, setCpiExpanded] = useState(false);
+
+  const runCPISim = useCallback(async () => {
+    setCpiLoading(true);
+    setCpiError('');
+    try {
+      const [cpiMap, fxMap] = await Promise.all([fetchCPIMap(), fetchFXMap()]);
+
+      // Firebase נטען? אם לא — fallback ל-localStorage (מקור האמת המקומי)
+      let holdings  = window.__portfolioHoldings;
+      let purchases = window.__portfolioPurchases;
+      let sales     = window.__portfolioSales;
+      let rates     = window.__portfolioRates;
+      if (!holdings || holdings.length === 0) {
+        try {
+          const raw = localStorage.getItem('portfolio');
+          if (raw) {
+            const p = JSON.parse(raw);
+            holdings  = p.holdings  || [];
+            purchases = p.purchases || [];
+            sales     = p.sales     || [];
+            rates     = p.rates     || { USD: 3.6, EUR: 3.9 };
+          }
+        } catch(e) {}
+      }
+      holdings  = holdings  || [];
+      purchases = purchases || [];
+      sales     = sales     || [];
+      rates     = rates     || { USD: 3.6, EUR: 3.9 };
+
+      const rows = holdings
+        .map(h => {
+          const lots = getRemainingLots(purchases, sales, h.symbol);
+          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory, adjustmentType } = calcSimulatedTax(h, lots, cpiMap, fxMap, rates);
+          const totalValueILS = Number(h.currentPrice || 0) * Number(h.shares || 0) *
+            (h.currency === 'ILS' ? 1 : (rates[h.currency] ?? 3.6));
+          return { symbol: h.symbol, isCPIIndexed: !!h.isCPIIndexed, currency: h.currency,
+            adjustmentType: adjustmentType || 'none',
+            flatTax, cpiAdjTax, savings, unrealizedGain: unrealizedGain ?? 0, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
+        })
+        .filter(r => r.flatTax > 0 || r.cpiAdjTax > 0);
+
+      const latest = getLatestCPI(cpiMap);
+      // בדוק מקור הנתונים מה-cache
+      let dataSource = 'static';
+      try { dataSource = JSON.parse(localStorage.getItem(CPI_CACHE_KEY) || '{}').source || 'static'; } catch(e) {}
+      // FX latest month
+      const fxKeys = [...fxMap.keys()].sort();
+      const latestFXKey = fxKeys[fxKeys.length - 1] || '';
+      setCpiSim({
+        rows,
+        totalFlat:    rows.reduce((s, r) => s + r.flatTax, 0),
+        totalCPI:     rows.reduce((s, r) => s + r.cpiAdjTax, 0),
+        totalSavings: rows.reduce((s, r) => s + r.savings, 0),
+        latestCPIDate: latest?.key || '',
+        latestFXDate:  latestFXKey,
+        dataSource
+      });
+    } catch(e) {
+      setCpiError(e.message || 'שגיאה לא ידועה');
+    } finally {
+      setCpiLoading(false);
+    }
+  }, []);
+
+  // Sync payslips from Firebase when data loads after component mount
+  useEffect(() => {
+    const handler = () => {
+      const loaded = window.__payslipData?.payslips || [];
+      if (loaded.length > 0) setPayslips([...loaded]);
+    };
+    if (window.__payslipData?.loaded) handler();
+    document.addEventListener('payslipDataLoaded', handler);
+    return () => document.removeEventListener('payslipDataLoaded', handler);
+  }, []);
+
+  // Auto-save settings on change (debounced)
+  const saveTimerRef = React.useRef(null);
+  useEffect(() => {
+    if (!window.__saveTaxSettings) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      window.__saveTaxSettings({ fM, mM, children, nextId, stl, jnt, cg, fRatio, mRatio });
+    }, 1500);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [fM, mM, children, nextId, stl, jnt, cg, fRatio, mRatio]);
+
+  // Auto-select best year on load
+  useEffect(() => {
+    if (taxData.loaded && taxData.availableYears.length > 0 && !selectedYear) {
+      // Prefer most recent complete year, otherwise most recent
+      const complete = taxData.availableYears.find(y => taxData.years[y]?.isComplete);
+      setSelectedYear(complete || taxData.availableYears[0]);
+    }
+  }, [taxData.loaded, taxData.availableYears]);
+
+  // Apply year data to sliders (net from finance × ratio = estimated gross)
+  const applyYearData = useCallback((year) => {
+    const info = taxData.years[year];
+    if (!info) return;
+    const fatherGross = Math.round(info.fatherMonthly * fRatio);
+    const motherGross = Math.round(info.motherMonthly * mRatio);
+
+    // Round to nearest 250 for slider steps
+    if (fatherGross > 0) setFM(Math.round(fatherGross / 250) * 250);
+    if (motherGross > 0) setMM(Math.round(motherGross / 250) * 250);
+    setAutoApplied(true);
+  }, [taxData.years, fRatio, mRatio]);
+
+  // Auto-apply on first year selection
+  useEffect(() => {
+    if (selectedYear && taxData.loaded && !autoApplied) {
+      applyYearData(selectedYear);
+    }
+  }, [selectedYear, taxData.loaded, autoApplied]);
+
+  const yearInfo = selectedYear ? taxData.years[selectedYear] : null;
+
+  // --- Payslip handlers ---
+  const fileInputRef = React.useRef(null);
+
+  const handlePayslipFile = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|heic)$/i.test(file.name);
+
+    if (!isPDF && !isImage) {
+      setPayslipStatus('יש להעלות קובץ PDF או תמונה (JPG/PNG)');
+      setTimeout(() => setPayslipStatus(''), 4000);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (isImage) {
+      // Image payslip — OCR it directly.
+      try {
+        const ocrText = await ocrImage(file, (i, t, s) => setPayslipStatus(s || 'סורק תמונה (OCR)... ⏳'));
+        console.log('OCR text (image):', ocrText);
+        const parsed = parsePayslipPDF(ocrText);            // month / gross / deductions
+        const ocrNet = extractNet(ocrText, parsed.gross);   // validated net
+        if (ocrNet) { parsed.net = ocrNet; }
+        if (parsed.gross && parsed.net) parsed.totalDeductions = Math.round((parsed.gross - parsed.net) * 100) / 100;
+        parsed.deductions = {}; // per-line breakdown from OCR isn't reliable enough to show
+        if (parsed.net || parsed.gross) {
+          parsed.earner = payslipEarner;
+          parsed.fileName = file.name;
+          parsed._netSource = 'ocr';
+          setPendingPayslip(parsed);
+        } else {
+          setPendingPayslip({ _manualEntry: true, fileName: file.name, _parseHint: true });
+        }
+      } catch (err) {
+        console.warn('Image OCR failed:', err);
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _scanned: true });
+      }
+      setPayslipStatus('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setPayslipStatus('קורא תלוש...');
+    try {
+      const ab = await file.arrayBuffer();
+      const extracted = await extractPDFText(ab);
+      console.log('PDF text (LTR):', extracted.ltrText);
+      console.log('PDF text (RTL):', extracted.rtlText);
+
+      if (!extracted.hasText) {
+        // PDF is likely a scanned image — offer manual entry
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _scanned: true });
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      // Try Form 106 detection first (annual tax summary)
+      const form106 = parseForm106(extracted.ltrText) || parseForm106(extracted.rtlText);
+      if (form106 && form106.year) {
+        form106.earner = payslipEarner;
+        form106.fileName = file.name;
+        form106._isForm106 = true;
+        setPendingPayslip(form106);
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+
+      // Try LTR text first, then RTL
+      let parsed = parsePayslipPDF(extracted.ltrText);
+      if (!parsed.net && !parsed.gross) {
+        parsed = parsePayslipPDF(extracted.rtlText);
+      }
+
+      // The net figure is frequently missing from the PDF text layer (Michpal &
+      // co. render it in a box pdf.js can't read). When it's absent — or present
+      // but implausible vs the gross — fall back to OCR'ing the rendered page.
+      const netReliable = parsed.net && (!parsed.gross || (parsed.net <= parsed.gross * 1.03 && parsed.net >= parsed.gross * 0.30));
+      if (!netReliable) {
+        try {
+          const ab2 = await file.arrayBuffer(); // pdf.js detaches the first buffer
+          const ocrText = await ocrPDF(ab2, (i, t, s) => setPayslipStatus(s || `סורק תמונה (OCR)... עמוד ${i}/${t}`));
+          console.log('OCR text:', ocrText);
+          const ocrParsed = parsePayslipPDF(ocrText);
+          if (!parsed.gross && ocrParsed.gross) parsed.gross = ocrParsed.gross;
+          if (!parsed.month && ocrParsed.month) { parsed.month = ocrParsed.month; parsed.year = ocrParsed.year; }
+          const ocrNet = extractNet(ocrText, parsed.gross);
+          if (ocrNet) {
+            parsed.net = ocrNet;
+            parsed._netSource = 'ocr';
+            parsed.deductions = {}; // text-layer per-line breakdown is unreliable on these
+          }
+        } catch (ocrErr) {
+          console.warn('OCR fallback failed:', ocrErr);
+        }
+      }
+      if (parsed.gross && parsed.net) parsed.totalDeductions = Math.round((parsed.gross - parsed.net) * 100) / 100;
+
+      if (!parsed.net && !parsed.gross) {
+        // Couldn't auto-parse — offer manual entry
+        setPendingPayslip({ _manualEntry: true, fileName: file.name, _parseHint: true });
+        setPayslipStatus('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+      parsed.earner = payslipEarner;
+      parsed.fileName = file.name;
+      setPendingPayslip(parsed);
+      setPayslipStatus('');
+    } catch (err) {
+      console.error('PDF error:', err);
+      setPayslipStatus('שגיאה בקריאת הקובץ: ' + err.message);
+      setTimeout(() => setPayslipStatus(''), 4000);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [payslipEarner]);
+
+  const confirmForm106Upload = useCallback(async () => {
+    if (!pendingPayslip || !pendingPayslip._isForm106) return;
+    const earner = pendingPayslip.earner || payslipEarner;
+    if (!earner) { setPayslipStatus('יש לבחור בן זוג'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+    const year = pendingPayslip.year;
+    const months = pendingPayslip.months || 12;
+    const monthlyGross = pendingPayslip.monthlyGross;
+    const monthlyNet = pendingPayslip.monthlyNet;
+    if (!monthlyGross && !monthlyNet) { setPayslipStatus('לא זוהו נתוני הכנסה בטופס'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+
+    setPayslipStatus('שומר נתוני 106...');
+    let savedCount = 0;
+    for (let m = 1; m <= months; m++) {
+      const monthKey = `${year}-${String(m).padStart(2, '0')}`;
+      const payslip = {
+        id: Date.now() + m,
+        month: monthKey,
+        gross: monthlyGross,
+        net: monthlyNet,
+        totalDeductions: monthlyGross && monthlyNet ? Math.round((monthlyGross - monthlyNet) * 100) / 100 : 0,
+        deductions: {},
+        earner,
+        fileName: pendingPayslip.fileName,
+        source: 'form106',
+        time: new Date().toISOString()
+      };
+      const ok = await window.__savePayslip(payslip);
+      if (ok) savedCount++;
+    }
+    if (savedCount > 0) {
+      setPayslips([...window.__payslipData.payslips]);
+      setPendingPayslip(null);
+      setPayslipStatus(`טופס 106 נשמר — ${savedCount} חודשים`);
+      // Auto-update slider: calculate total average across ALL payslips for this earner+year
+      const allSlips = (window.__payslipData.payslips || []).filter(p =>
+        p.earner === earner && p.month && p.month.startsWith(year + '-') && p.gross
+      );
+      if (allSlips.length > 0) {
+        const byMonth = {};
+        for (const p of allSlips) byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+        const monthTotals = Object.values(byMonth);
+        const avgGross = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
+        const rounded = Math.round(avgGross / 250) * 250;
+        if (earner === 'father') setFM(rounded);
+        else if (earner === 'mother') setMM(rounded);
+      }
+      setTimeout(() => setPayslipStatus(''), 3000);
+    } else {
+      setPayslipStatus('שגיאה בשמירה');
+      setTimeout(() => setPayslipStatus(''), 3000);
+    }
+  }, [pendingPayslip, payslipEarner]);
+
+  const confirmPayslipUpload = useCallback(async () => {
+    if (!pendingPayslip) return;
+    if (!pendingPayslip.gross && !pendingPayslip.net) { setPayslipStatus('יש להזין ברוטו או נטו'); return; }
+    const monthKey = pendingPayslip.month && pendingPayslip.year
+      ? `${pendingPayslip.year}-${pendingPayslip.month}`
+      : null;
+    if (!monthKey) { setPayslipStatus('יש לבחור חודש'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+
+    // Compute totalDeductions for manual entries
+    const gross = pendingPayslip.gross || 0;
+    const net = pendingPayslip.net || 0;
+    const totalDed = gross && net ? Math.round((gross - net) * 100) / 100 : (pendingPayslip.totalDeductions || 0);
+
+    const payslip = {
+      id: Date.now(),
+      month: monthKey,
+      gross: pendingPayslip.gross,
+      net: pendingPayslip.net,
+      totalDeductions: totalDed,
+      deductions: pendingPayslip.deductions || {},
+      earner: pendingPayslip.earner || payslipEarner || '',
+      fileName: pendingPayslip.fileName,
+      time: new Date().toISOString()
+    };
+
+    setPayslipStatus('שומר...');
+    const ok = await window.__savePayslip(payslip);
+    if (ok) {
+      setPayslips([...window.__payslipData.payslips]);
+      setPendingPayslip(null);
+      setPayslipStatus('נשמר בהצלחה');
+      // Auto-update gross slider from payslip data
+      if (payslip.gross) {
+        const rounded = Math.round(payslip.gross / 250) * 250;
+        if (payslip.earner === 'father') setFM(rounded);
+        else if (payslip.earner === 'mother') setMM(rounded);
+      }
+      setTimeout(() => setPayslipStatus(''), 2000);
+    } else {
+      setPayslipStatus('שגיאה בשמירה');
+      setTimeout(() => setPayslipStatus(''), 3000);
+    }
+  }, [pendingPayslip]);
+
+  const handleDeletePayslip = useCallback(async (id) => {
+    if (!confirm('למחוק את התלוש?')) return;
+    const ok = await window.__deletePayslip(id);
+    if (ok) setPayslips([...window.__payslipData.payslips]);
+  }, []);
+
+  // Compute average gross from payslips per earner for the selected year
+  // Groups by month first (sums multiple employers per month), then averages across months
+  const payslipAverages = useMemo(() => {
+    const yearPayslips = payslips.filter(p => p.month && p.month.startsWith(selectedYear + '-'));
+
+    const calcAvg = (earner) => {
+      const slips = yearPayslips.filter(p => p.earner === earner && p.gross);
+      if (slips.length === 0) return { avg: null, count: slips.length, months: 0 };
+      // Group by month: sum gross from multiple employers in the same month
+      const byMonth = {};
+      for (const p of slips) {
+        byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+      }
+      const monthTotals = Object.values(byMonth);
+      const avg = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
+      return { avg, count: slips.length, months: monthTotals.length };
+    };
+
+    const f = calcAvg('father'), m = calcAvg('mother');
+    return {
+      fatherAvg: f.avg, motherAvg: m.avg,
+      fatherCount: f.count, motherCount: m.count,
+      fatherMonths: f.months, motherMonths: m.months
+    };
+  }, [payslips, selectedYear]);
+
+  const addChild = () => {
+    setChildren(prev => [...prev, { id: nextId, age: 0 }]);
+    setNextId(prev => prev + 1);
+  };
+  const removeChild = (id) => setChildren(prev => prev.filter(c => c.id !== id));
+  const updateChildAge = (id, age) => setChildren(prev => prev.map(c => c.id === id ? { ...c, age } : c));
+
+  // Tax law follows the selected income year (defaults to the current year).
+  const taxParams = useMemo(() => getTaxParams(selectedYear), [selectedYear]);
+
+  const r = useMemo(() => {
+    const ages = children.map(c => c.age);
+    const nK = ages.length, nT = ages.filter(a => a >= 0 && a < 3).length;
+
+    const calc = (monthly, isMother) => {
+      const annual = monthly * 12;
+      const baseP = isMother ? 2.75 : 2.25;
+      const childP = ages.reduce((s, a) => s + (isMother ? motherChildPoints(a) : fatherChildPoints(a)), 0);
+      const totalP = baseP + childP;
+      // הפרדה לפי החוק:
+      // • נק' תושב/אישה (בסיס) — מקזזות כל הכנסה חייבת, כולל מס רווחי הון (סע' 34, 36א)
+      // • נק' ילדים (סע' 40) + זיכוי יישוב מזכה (סע' 11) — מקזזות רק מס על הכנסה מיגיעה אישית
+      const baseCr = Math.round(baseP * taxParams.creditPoint);      // CG-eligible
+      const childCr = Math.round(childP * taxParams.creditPoint);    // work-only
+      const sCredit = stl ? Math.round(Math.min(annual, SETTLEMENT_CEILING) * SETTLEMENT_RATE) : 0; // work-only
+      const workOnlyCr = childCr + sCredit;
+      const pVal = baseCr + childCr;        // נשמר לתאימות תצוגה
+      const totalCr = pVal + sCredit;       // נשמר לתאימות תצוגה
+      const tax = calcTax(annual, taxParams.brackets);
+      // קיזוז אופטימלי: קודם מנצלים את זיכויי יגיעה-אישית-בלבד מול מס העבודה
+      // (אין להם שימוש אחר), ואז זיכויי הבסיס מכסים את היתרה. הנותר זמין לרווחי הון.
+      const workTaxAfterWorkOnly = Math.max(0, tax - workOnlyCr);
+      const workOnlyLost = Math.max(0, workOnlyCr - tax);  // נקודות ילדים/יישוב שמתאדות
+      const unused = Math.max(0, baseCr - workTaxAfterWorkOnly);  // זמין לקיזוז מס רווח הון
+      const wg = calcGrant(monthly, nK);
+      const tg = calcToddler(monthly, nT, nK);
+      return { annual, baseP, childP, totalP, baseCr, childCr, sCredit, workOnlyCr, workOnlyLost, pVal, totalCr, tax, unused, wg, tg };
+    };
+
+    const f = calc(fM, false), m = calc(mM, true);
+    const fShare = jnt ? cg / 2 : cg, mShare = jnt ? cg / 2 : 0;
+    const fCGTax = Math.round(fShare * CG_TAX_RATE), mCGTax = Math.round(mShare * CG_TAX_RATE);
+    const fSaved = Math.min(fCGTax, f.unused), mSaved = Math.min(mCGTax, m.unused);
+    const fOpt = f.unused > 0 ? Math.round(f.unused / CG_TAX_RATE) : 0;
+    const mOpt = m.unused > 0 ? Math.round(m.unused / CG_TAX_RATE) : 0;
+    const hUnused = f.unused + m.unused;
+    const hGrant = f.wg.grant + m.wg.grant + f.tg + m.tg;
+    const hOpt = jnt ? fOpt + mOpt : fOpt;
+
+    return { f, m, fShare, mShare, fCGTax, mCGTax, fSaved, mSaved, fOpt, mOpt, hUnused, hGrant, hOpt, nK, nT, ages };
+  }, [fM, mM, children, stl, jnt, cg, taxParams]);
+
+  const fm = n => n.toLocaleString("he-IL");
+
+  return (
+    <div style={{ minHeight: "100vh", color: "hsl(210, 20%, 92%)", padding: 0 }}>
+      <div style={{ background: "var(--bg-surface, hsl(220, 18%, 10%))", borderBottom: "1px solid var(--border, rgba(255,255,255,0.1))", padding: "24px 20px 20px", textAlign: "center" }}>
+        <div style={{ fontSize: 12, color: "hsl(142, 60%, 50%)", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>מחשבון אופטימיזציה ביתי</div>
+        <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px", color: "var(--text-primary, hsl(210, 20%, 92%))" }}>
+          נקודות זיכוי × מענק עבודה × רווחי הון
+        </h1>
+        <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
+      </div>
+
+      {/* Tax-params staleness reminder — no official feed exists, so brackets are added manually */}
+      {TAX_PARAMS_STALE && (
+        <div style={{ margin: "12px 14px", padding: "12px 16px", background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.3)", borderRadius: 12, fontSize: 12, color: "#e07070", lineHeight: 1.5 }}>
+          <span style={{ fontSize: 16 }}>⚠️</span> מדרגות המס בטבלה מעודכנות עד שנת {LATEST_TAX_YEAR}. חישובים לשנת {CURRENT_YEAR} משתמשים בנתוני {LATEST_TAX_YEAR} — כדאי לעדכן את <code>TAX_PARAMS</code> מול רשות המסים.
+        </div>
+      )}
+
+      {/* Data Integration Banner */}
+      {taxData.loaded && taxData.availableYears.length > 0 && (
+        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.25)", borderRadius: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 16 }}>📊</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: "#7ab8e0" }}>נתונים מהמערכת הפיננסית</span>
+            </div>
+            <div className="year-selector" style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "4px 10px" }}>
+              <label style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>שנה:</label>
+              <select value={selectedYear} onChange={e => { setSelectedYear(e.target.value); setAutoApplied(false); }}
+                style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 6, padding: "4px 8px", fontSize: 13, fontFamily: "inherit", cursor: "pointer" }}>
+                {taxData.availableYears.map(y => (
+                  <option key={y} value={y} style={{ background: "hsl(220, 18%, 10%)" }}>
+                    {y} {taxData.years[y]?.isComplete ? "(12 חודשים)" : `(${taxData.years[y]?.monthCount} חודשים)`}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => applyYearData(selectedYear)} style={{
+                padding: "4px 10px", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.15)", color: "hsl(142, 60%, 50%)", fontFamily: "inherit"
+              }}>החל</button>
+            </div>
+          </div>
+
+          {yearInfo && (
+            <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 8, fontSize: 11 }}>
+              {yearInfo.fatherMonthly > 0 && (
+                <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.25)", padding: "3px 10px", borderRadius: 6, color: "#7ab8e0" }}>
+                  👨 אב: {fm(yearInfo.fatherMonthly)} נטו
+                  {fRatio > 1.0 && <span style={{ color: "#5ab85a" }}> → {fm(Math.round(yearInfo.fatherMonthly * fRatio))} ברוטו</span>}
+                  {fRatio === 1.0 && " ₪/חודש"}
+                </span>
+              )}
+              {yearInfo.motherMonthly > 0 && (
+                <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.25)", padding: "3px 10px", borderRadius: 6, color: "#d898c8" }}>
+                  👩 אם: {fm(yearInfo.motherMonthly)} נטו
+                  {mRatio > 1.0 && <span style={{ color: "#5ab85a" }}> → {fm(Math.round(yearInfo.motherMonthly * mRatio))} ברוטו</span>}
+                  {mRatio === 1.0 && " ₪/חודש"}
+                </span>
+              )}
+              {yearInfo.untaggedMonthly > 0 && (
+                <span style={{ background: "rgba(76,175,80,0.1)", border: "1px solid rgba(76,175,80,0.25)", padding: "3px 10px", borderRadius: 6, color: "hsl(142, 60%, 50%)" }}>
+                  ⚠️ לא משויך: {fm(yearInfo.untaggedMonthly)} ₪/חודש
+                </span>
+              )}
+              {!yearInfo.isComplete && (
+                <span style={{ background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.25)", padding: "3px 10px", borderRadius: 6, color: "#e07070" }}>
+                  חלקי — {yearInfo.monthCount}/12 חודשים (ממוצע מותאם)
+                </span>
+              )}
+            </div>
+          )}
+
+          {yearInfo && yearInfo.untaggedMonthly > 0 && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "hsl(142, 60%, 50%)", lineHeight: 1.5 }}>
+              💡 יש הכנסות שלא שויכו לאב/אם. <a href="finance.html" style={{ color: "hsl(142, 60%, 50%)", textDecoration: "underline" }}>שייך אותן במערכת הפיננסית</a> לחישוב מדויק יותר.
+            </div>
+          )}
+          <div style={{ marginTop: 8, fontSize: 10, color: "#6a6a8a", lineHeight: 1.5 }}>
+            📅 היסט חודש: המשכורת במעקב (15-15) מוסטת חודש אחורה לשנת מס (למשל: "ינואר" במעקב = דצמבר לצורך מס)
+          </div>
+        </div>
+      )}
+
+      {taxData.loaded && taxData.availableYears.length === 0 && (
+        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", borderRadius: 12, fontSize: 12, color: "hsl(142, 60%, 50%)" }}>
+          <span style={{ fontSize: 16 }}>💡</span> אין נתוני הכנסה במערכת. <a href="finance.html" style={{ color: "hsl(142, 60%, 50%)", textDecoration: "underline" }}>הוסף הכנסות</a> כדי למלא את הסליידרים אוטומטית.
+        </div>
+      )}
+
+      <div style={{ margin: "16px 14px", padding: "14px 16px", background: "rgba(30,120,30,0.1)", border: "1px solid rgba(30,120,30,0.35)", borderRadius: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 20 }}>✅</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#5ab85a" }}>אין קונפליקט — רווחי הון לא פוגעים במענק</span>
+        </div>
+        <p style={{ fontSize: 12, lineHeight: 1.7, margin: 0, color: "#a8cca8" }}>
+          החוק מגדיר "הכנסה חייבת" <strong>למעט רווח הון</strong>. מימוש רווחי הון לא משנה את ההכנסה לצורך זכאות למענק עבודה.
+        </p>
+      </div>
+
+      <div style={{ padding: "0 14px 32px", maxWidth: 720, margin: "0 auto" }}>
+        {/* INPUTS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <Sl label="הכנסת האב (חודשי ברוטו)" value={fM} onChange={v => { setFM(v); }} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
+              {payslipAverages.fatherAvg && fM !== Math.round(payslipAverages.fatherAvg / 250) * 250 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                  <span style={{ fontSize: 10, color: "#c0a0d8" }}>תלושים: ₪{payslipAverages.fatherAvg.toLocaleString()}</span>
+                  <button onClick={() => setFM(Math.round(payslipAverages.fatherAvg / 250) * 250)} style={{
+                    padding: "1px 8px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    border: "1px solid rgba(140,80,200,0.4)", background: "rgba(140,80,200,0.12)", color: "#c0a0d8"
+                  }}>החזר לתלושים</button>
+                </div>
+              )}
+            </div>
+            <div>
+              <Sl label="הכנסת האם (חודשי ברוטו)" value={mM} onChange={v => { setMM(v); }} min={0} max={15000} step={250} suf="₪" />
+              {payslipAverages.motherAvg && mM !== Math.round(payslipAverages.motherAvg / 250) * 250 && (
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                  <span style={{ fontSize: 10, color: "#c0a0d8" }}>תלושים: ₪{payslipAverages.motherAvg.toLocaleString()}</span>
+                  <button onClick={() => setMM(Math.round(payslipAverages.motherAvg / 250) * 250)} style={{
+                    padding: "1px 8px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                    border: "1px solid rgba(140,80,200,0.4)", background: "rgba(140,80,200,0.12)", color: "#c0a0d8"
+                  }}>החזר לתלושים</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Payslip Upload */}
+          <div style={{ marginTop: 10, padding: "12px 14px", background: "rgba(140,80,200,0.08)", borderRadius: 10, border: "1px solid rgba(140,80,200,0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 14 }}>📄</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: "#c0a0d8" }}>העלאת תלוש משכורת</span>
+                <InfoTip text={"העלה תלוש משכורת (PDF או תמונה).\nהמערכת תנסה לחלץ אוטומטית: ברוטו, נטו, ניכויים וחודש.\nאם לא מצליחה — ניתן להזין ידנית.\nהברוטו יעדכן את הסליידר אוטומטית."} />
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <select value={payslipEarner} onChange={e => setPayslipEarner(e.target.value)}
+                  style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 6, padding: "4px 8px", fontSize: 11, fontFamily: "inherit" }}>
+                  <option value="">בעל/ת הכנסה</option>
+                  <option value="father">אב</option>
+                  <option value="mother">אם</option>
+                </select>
+                <label style={{
+                  padding: "5px 14px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: "1px solid rgba(140,80,200,0.4)", background: "rgba(140,80,200,0.2)", color: "#c0a0d8"
+                }}>
+                  העלה קובץ
+                  <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" onChange={handlePayslipFile} style={{ display: "none" }} />
+                </label>
+                <button onClick={() => setPendingPayslip({ _manualEntry: true, fileName: 'הזנה ידנית', deductions: {} })} style={{
+                  padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "hsl(215, 12%, 52%)"
+                }}>הזנה ידנית</button>
+              </div>
+            </div>
+
+            {payslipStatus && (
+              <div style={{ fontSize: 11, color: "#c0a0d8", marginBottom: 8 }}>{payslipStatus}</div>
+            )}
+
+            {/* Preview — auto-parsed or manual entry */}
+            {pendingPayslip && (
+              <div style={{ background: pendingPayslip._isForm106 ? "rgba(76,175,80,0.08)" : "rgba(77,171,247,0.08)", border: `1px solid ${pendingPayslip._isForm106 ? "rgba(76,175,80,0.25)" : "rgba(77,171,247,0.2)"}`, borderRadius: 8, padding: "10px 12px", marginBottom: 8 }}>
+                {pendingPayslip._isForm106 ? (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "hsl(142, 60%, 50%)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>טופס 106 זוהה — סיכום שנתי</span>
+                      <input type="number" min="2020" max="2030" value={pendingPayslip.year || ''}
+                        onChange={e => setPendingPayslip(p => ({...p, year: e.target.value || null}))}
+                        style={{ width: 60, background: "rgba(0,0,0,0.3)", border: "1px solid rgba(76,175,80,0.4)", color: "hsl(142, 60%, 50%)", borderRadius: 4, padding: "2px 4px", fontSize: 12, fontWeight: 700, fontFamily: "inherit", textAlign: "center" }}
+                      />
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11 }}>
+                      <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>נתונים שנתיים</div>
+                        {pendingPayslip.annualGross && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.annualNet && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו שנתי: </span><strong style={{ color: "#5ab85a" }}>₪{pendingPayslip.annualNet.toLocaleString()}</strong></div>}
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginTop: 2 }}>חודשי עבודה: {pendingPayslip.months}</div>
+                      </div>
+                      <div style={{ background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "8px 10px" }}>
+                        <div style={{ color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>ממוצע חודשי (חישוב)</div>
+                        {pendingPayslip.monthlyGross && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "hsl(142, 60%, 50%)" }}>₪{pendingPayslip.monthlyGross.toLocaleString()}</strong></div>}
+                        {pendingPayslip.monthlyNet && <div><span style={{ color: "hsl(215, 12%, 52%)" }}>נטו: </span><strong style={{ color: "hsl(142, 60%, 50%)" }}>₪{pendingPayslip.monthlyNet.toLocaleString()}</strong></div>}
+                      </div>
+                    </div>
+                    {!pendingPayslip.earner && !payslipEarner && (
+                      <div style={{ color: "#e07070", fontSize: 10, marginTop: 6 }}>יש לבחור בן זוג (אב/אם) למעלה לפני האישור</div>
+                    )}
+                    <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 6 }}>
+                      ייווצרו {pendingPayslip.months} רשומות חודשיות עבור שנת {pendingPayslip.year}
+                    </div>
+                    <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                      <button onClick={confirmForm106Upload}
+                        disabled={!pendingPayslip.earner && !payslipEarner}
+                        style={{
+                          padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.earner && !payslipEarner) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                          border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.15)", color: "hsl(142, 60%, 50%)",
+                          opacity: (!pendingPayslip.earner && !payslipEarner) ? 0.4 : 1
+                      }}>אשר טופס 106</button>
+                      <button onClick={() => setPendingPayslip(null)} style={{
+                        padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
+                        border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
+                      }}>בטל</button>
+                    </div>
+                  </>
+                ) : pendingPayslip._manualEntry ? (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>
+                      {pendingPayslip._scanned ? 'התלוש נראה כתמונה סרוקה — יש להזין ידנית:'
+                        : pendingPayslip._parseHint ? 'לא הצלחתי לזהות אוטומטית — הזן ידנית:'
+                        : 'הזנה ידנית:'}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, fontSize: 11 }}>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>חודש</label>
+                        <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                          onChange={e => { const [y,m]=(e.target.value||'').split('-'); setPendingPayslip(p=>({...p,month:m||null,year:y||null})); }}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
+                        <input type="number" placeholder="15,000" value={pendingPayslip.gross||''}
+                          onChange={e => setPendingPayslip(p=>({...p,gross:e.target.value?parseFloat(e.target.value):null}))}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>נטו (₪)</label>
+                        <input type="number" placeholder="11,000" value={pendingPayslip.net||''}
+                          onChange={e => setPendingPayslip(p=>({...p,net:e.target.value?parseFloat(e.target.value):null}))}
+                          style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit",width:"100%" }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>נתונים שחולצו:</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 6, fontSize: 11, alignItems: "center" }}>
+                      <div>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>חודש: </span>
+                        <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                          onChange={e => {
+                            const [y, m] = (e.target.value || '').split('-');
+                            setPendingPayslip(prev => ({ ...prev, month: m || null, year: y || null }));
+                          }}
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "hsl(210, 20%, 92%)", borderRadius: 4, padding: "2px 4px", fontSize: 11, fontFamily: "inherit", width: 110 }}
+                        />
+                        {!pendingPayslip.month && <div style={{ color: "#e07070", fontSize: 10, marginTop: 2 }}>בחר חודש</div>}
+                      </div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>ברוטו (₪)</label>
+                        <input type="number" placeholder="?" value={pendingPayslip.gross || ''}
+                          onChange={e => setPendingPayslip(p => ({ ...p, gross: e.target.value ? parseFloat(e.target.value) : null, totalDeductions: null }))}
+                          style={{ background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.15)", color: "#5ab85a", fontWeight: 700, borderRadius: 4, padding: "3px 6px", fontSize: 11, fontFamily: "inherit", width: "100%" }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ color: "hsl(215, 12%, 52%)", display: "block", marginBottom: 2 }}>
+                          נטו (₪){pendingPayslip._netSource === 'ocr' && <span title="נקרא בסריקת OCR — מומלץ לאמת" style={{ color: "#c0a0d8", marginRight: 3 }}>🔍</span>}
+                        </label>
+                        <input type="number" placeholder="?" value={pendingPayslip.net || ''}
+                          onChange={e => setPendingPayslip(p => ({ ...p, net: e.target.value ? parseFloat(e.target.value) : null, _netSource: 'manual', totalDeductions: null }))}
+                          style={{ background: "rgba(0,0,0,0.3)", border: `1px solid ${pendingPayslip._netSource === 'ocr' ? "rgba(192,160,216,0.5)" : "rgba(255,255,255,0.15)"}`, color: "#5ab85a", fontWeight: 700, borderRadius: 4, padding: "3px 6px", fontSize: 11, fontFamily: "inherit", width: "100%" }}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>ניכויים: </span>
+                        <strong style={{ color: "#e07070" }}>{(pendingPayslip.gross && pendingPayslip.net) ? `₪${(Math.round((pendingPayslip.gross - pendingPayslip.net) * 100) / 100).toLocaleString()}` : '?'}</strong>
+                      </div>
+                    </div>
+                    {pendingPayslip._netSource === 'ocr' && (
+                      <div style={{ fontSize: 10, color: "#c0a0d8", marginTop: 4 }}>🔍 הנטו נקרא בסריקת OCR (לא היה זמין בשכבת הטקסט) — כדאי לאמת מול התלוש.</div>
+                    )}
+                    {Object.keys(pendingPayslip.deductions || {}).length > 0 && (
+                      <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 4 }}>
+                        {Object.values(pendingPayslip.deductions).map(d => `${d.label}: ₪${d.amount.toLocaleString()}`).join(' | ')}
+                      </div>
+                    )}
+                  </>
+                )}
+                {!pendingPayslip._isForm106 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    <button onClick={confirmPayslipUpload}
+                      disabled={!pendingPayslip.gross && !pendingPayslip.net}
+                      style={{
+                        padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.gross && !pendingPayslip.net) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                        border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a",
+                        opacity: (!pendingPayslip.gross && !pendingPayslip.net) ? 0.4 : 1
+                    }}>אשר ושמור</button>
+                    <button onClick={() => setPendingPayslip(null)} style={{
+                      padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
+                      border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
+                    }}>בטל</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Payslip averages for selected year */}
+            {(payslipAverages.fatherAvg || payslipAverages.motherAvg) && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 11, marginBottom: 8 }}>
+                {payslipAverages.fatherAvg && (
+                  <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.2)", padding: "3px 8px", borderRadius: 6, color: "#7ab8e0" }}>
+                    👨 ברוטו ממוצע: ₪{payslipAverages.fatherAvg.toLocaleString()} ({payslipAverages.fatherMonths} חודשים{payslipAverages.fatherCount > payslipAverages.fatherMonths ? `, ${payslipAverages.fatherCount} תלושים` : ''})
+                    <button onClick={() => setFM(Math.round(payslipAverages.fatherAvg / 250) * 250)} style={{
+                      marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
+                    }}>החל</button>
+                  </span>
+                )}
+                {payslipAverages.motherAvg && (
+                  <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.2)", padding: "3px 8px", borderRadius: 6, color: "#d898c8" }}>
+                    👩 ברוטו ממוצע: ₪{payslipAverages.motherAvg.toLocaleString()} ({payslipAverages.motherMonths} חודשים{payslipAverages.motherCount > payslipAverages.motherMonths ? `, ${payslipAverages.motherCount} תלושים` : ''})
+                    <button onClick={() => setMM(Math.round(payslipAverages.motherAvg / 250) * 250)} style={{
+                      marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
+                    }}>החל</button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Payslip History */}
+            {payslips.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>תלושים ({payslips.length}):</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 150, overflowY: "auto" }}>
+                  {payslips.sort((a,b) => (b.month||'').localeCompare(a.month||'')).map(p => (
+                    <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11 }}>
+                      <span style={{ color: "hsl(215, 12%, 52%)" }}>
+                        {p.month} {p.earner === 'father' ? '👨' : p.earner === 'mother' ? '👩' : ''}
+                      </span>
+                      <span>
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>₪{p.gross?.toLocaleString() || '?'}</strong>
+                        <span style={{ color: "hsl(215, 12%, 52%)", marginRight: 8 }}> נטו: </span><strong>₪{p.net?.toLocaleString() || '?'}</strong>
+                      </span>
+                      <button onClick={() => handleDeletePayslip(p.id)} style={{
+                        width: 18, height: 18, borderRadius: "50%", cursor: "pointer", fontSize: 11,
+                        border: "1px solid rgba(224,112,112,0.3)", background: "rgba(224,112,112,0.1)",
+                        color: "#e07070", display: "flex", alignItems: "center", justifyContent: "center",
+                        lineHeight: 1, padding: 0
+                      }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Gross/Net Ratio (fallback when no payslips) */}
+          {payslips.length === 0 && (
+          <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(0,0,0,0.15)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "hsl(215, 12%, 52%)" }}>יחס ברוטו/נטו</span>
+              <InfoTip text={"הנתונים מהמעקב הפיננסי הם נטו (מה שנכנס לחשבון). יחס זה מכפיל את הנטו לברוטו משוער.\n\nלחלופין — העלה תלושי משכורת למעלה לחישוב מדויק.\n\n• 1.00 = כבר ברוטו\n• 1.07 = ללא מס (רק ביטוח לאומי+בריאות)\n• 1.20 = מדרגת 10%\n• 1.26 = מדרגת 14%"} />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, color: "#7ab8e0" }}>👨 אב</label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>×{fRatio.toFixed(2)}</span>
+                </div>
+                <input type="range" min={1.0} max={1.5} step={0.01} value={fRatio} onChange={e => setFRatio(+e.target.value)} />
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                  <label style={{ fontSize: 11, color: "#d898c8" }}>👩 אם</label>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>×{mRatio.toFixed(2)}</span>
+                </div>
+                <input type="range" min={1.0} max={1.5} step={0.01} value={mRatio} onChange={e => setMRatio(+e.target.value)} />
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* CHILDREN */}
+          <div style={{ marginTop: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "hsl(215, 12%, 52%)" }}>👶 ילדים ({children.length})</label>
+              <button onClick={addChild} style={{
+                padding: "5px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 600,
+                border: "1px solid rgba(76,175,80,0.4)", background: "rgba(76,175,80,0.1)", color: "hsl(142, 60%, 50%)"
+              }}>+ הוסף ילד</button>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {children.map((child, i) => (
+                <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: "8px 12px" }}>
+                  <span style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", minWidth: 50 }}>ילד {i + 1}</span>
+                  <input type="range" min={0} max={18} step={1} value={child.age}
+                    onChange={e => updateChildAge(child.id, +e.target.value)}
+                    style={{ flex: 1 }} />
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)", minWidth: 55, textAlign: "center" }}>
+                    {child.age === 0 ? "לידה" : `${child.age} ${child.age === 1 ? "שנה" : "שנים"}`}
+                  </span>
+                  <button onClick={() => removeChild(child.id)} style={{
+                    width: 24, height: 24, borderRadius: "50%", cursor: "pointer", fontSize: 14,
+                    border: "1px solid rgba(224,112,112,0.3)", background: "rgba(224,112,112,0.1)",
+                    color: "#e07070", display: "flex", alignItems: "center", justifyContent: "center",
+                    lineHeight: 1, padding: 0
+                  }}>×</button>
+                </div>
+              ))}
+              {children.length === 0 && (
+                <div style={{ fontSize: 12, color: "#6a6a8a", textAlign: "center", padding: 10 }}>
+                  אין ילדים. לחץ "הוסף ילד" כדי להתחיל.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 12 }}>
+            <Tog label="ישוב מזכה" active={stl} onClick={() => setStl(!stl)} />
+            <Tog label="חשבון משותף" active={jnt} onClick={() => setJnt(!jnt)} />
+          </div>
+          <div style={{ marginTop: 12 }}>
+            <Sl label="רווחי הון צבורים לממש" value={cg} onChange={setCg} min={0} max={500000} step={5000} suf="₪" tip="בחשבון משותף מתחלק 50/50" wide />
+          </div>
+        </div>
+
+        {/* TAX BRACKET WATERFALL */}
+        <TaxBracketWaterfall fatherAnnual={fM * 12} motherAnnual={mM * 12} brackets={taxParams.brackets} />
+
+        {/* CREDIT POINTS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, margin: "0 0 6px" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: 0 }}>📊 נקודות זיכוי</h2>
+            <span title={`מדרגות מס ושווי נק' זיכוי (${taxParams.creditPoint.toLocaleString()} ₪) של שנת ${taxParams.year}`}
+              style={{ fontSize: 11, fontWeight: 600, background: "rgba(122,184,224,0.12)", border: "1px solid rgba(122,184,224,0.3)", color: "#7ab8e0", padding: "3px 10px", borderRadius: 6 }}>
+              🗓️ דיני מס {taxParams.year}{taxParams.approx ? " (הקרובה ביותר)" : ""}
+            </span>
+          </div>
+          <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", marginBottom: 12, lineHeight: 1.5 }}>
+            לפי הפקודה (סע' 11, 40) — נקודות ילדים וזיכוי יישוב מזכה מקזזים <strong>רק מס על הכנסה מיגיעה אישית</strong>. רק נק' תושב/אישה מקזזות גם רווחי הון.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[{ d: r.f, icon: "👨", clr: "#7ab8e0", lbl: "האב", base: "2.25 (תושב)" },
+              { d: r.m, icon: "👩", clr: "#d898c8", lbl: "האם", base: "2.75 (תושבת+אישה)" }].map(({ d, icon, clr, lbl, base }) => (
+              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
+
+                {/* CG-eligible bucket */}
+                <div style={{ fontSize: 10, color: "hsl(142, 60%, 50%)", letterSpacing: 0.5, marginBottom: 4, fontWeight: 600 }}>
+                  ◆ מקזז כל הכנסה (כולל ר״ה)
+                </div>
+                <R label={`בסיס ${base}`} amount={`${fm(d.baseCr)} ₪`} />
+
+                {/* Work-only bucket */}
+                <div style={{ fontSize: 10, color: "#e0a878", letterSpacing: 0.5, margin: "10px 0 4px", fontWeight: 600 }}>
+                  ◆ מקזז רק מס על יגיעה אישית
+                </div>
+                <R label={`ילדים (${d.childP.toFixed(1)} נק')`} amount={`${fm(d.childCr)} ₪`} />
+                {stl && <R label="זיכוי יישוב מזכה" amount={`${fm(d.sCredit)} ₪`} />}
+
+                {/* Cascade */}
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: "1px dashed rgba(255,255,255,0.08)" }}>
+                  <R label="מס על יגיעה אישית" amount={`${fm(d.tax)} ₪`} color="#e07070" />
+                  {d.workOnlyLost > 0 && (
+                    <R label="נק' ילדים/יישוב שמתאדות" amount={`-${fm(d.workOnlyLost)} ₪`} color="#a0808a" />
+                  )}
+                  <R label="זמין לקיזוז ר״ה" amount={`${fm(d.unused)} ₪`} color="hsl(142, 60%, 50%)" bold />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(76,175,80,0.08)", borderRadius: 10, textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>סה״כ זמין לקיזוז מס רווחי הון</div>
+            <div style={{ fontSize: 26, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>{fm(r.hUnused)} ₪</div>
+            <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>הולך לאיבוד — אלא אם מממשים רווחי הון</div>
+          </div>
+        </div>
+
+        {/* WORK GRANT */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            {[{ d: r.f, m: fM, icon: "👨", clr: "#7ab8e0", lbl: "האב" },
+              { d: r.m, m: mM, icon: "👩", clr: "#d898c8", lbl: "האם" }].map(({ d, m: mo, icon, clr, lbl }) => (
+              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
+                {d.wg.ok ? (
+                  <>
+                    <R label="מענק כללי" amount={`${fm(d.wg.grant)} ₪`} />
+                    <R label="מענק פעוטות" amount={`${fm(d.tg)} ₪`} />
+                    <R label="סה״כ" amount={`${fm(d.wg.grant + d.tg)} ₪`} color="#5ab85a" bold />
+                  </>
+                ) : (
+                  <div style={{ fontSize: 12, color: "#c08080" }}>
+                    ⚠️ הכנסה {mo < 2390 ? "מתחת" : "מעל"} לטווח
+                    {d.tg > 0 && <div style={{ color: "#a8cca8", marginTop: 4 }}>✓ מענק פעוטות: {fm(d.tg)} ₪</div>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 10, padding: "8px 14px", background: "rgba(30,120,30,0.08)", borderRadius: 8, fontSize: 12, color: "#a8cca8" }}>
+            סה״כ מענקים: <strong>{fm(r.hGrant)} ₪/שנה</strong> (הערכה. <a href="https://www.misim.gov.il/gmmhszakaut/" target="_blank">סימולטור</a> לחישוב מדויק)
+          </div>
+        </div>
+
+        {/* CAPITAL GAINS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(76,175,80,0.3)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+            {[{ lbl: "👨 חלק האב", sh: r.fShare, tx: r.fCGTax, sv: r.fSaved, clr: "#7ab8e0" },
+              { lbl: "👩 חלק האם", sh: r.mShare, tx: r.mCGTax, sv: r.mSaved, clr: "#d898c8" }].map(x => (
+              <div key={x.lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: x.clr, marginBottom: 8 }}>{x.lbl}</div>
+                <R label="רווח הון" amount={`${fm(x.sh)} ₪`} />
+                <R label="מס 25%" amount={`${fm(x.tx)} ₪`} color="#e07070" />
+                <R label="קיזוז מזיכויים" amount={`-${fm(x.sv)} ₪`} color="#5ab85a" />
+                <R label="מס נותר" amount={`${fm(x.tx - x.sv)} ₪`} bold />
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(76,175,80,0.1),rgba(76,175,80,0.03))", border: "1px solid rgba(76,175,80,0.25)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "hsl(142, 60%, 50%)", marginBottom: 6 }}>💰 סכום מימוש אופטימלי</div>
+            <p style={{ fontSize: 13, lineHeight: 1.7, margin: "0 0 4px" }}>
+              לניצול מלוא הזיכויים ({fm(r.hUnused)} ₪): ממש <strong>{fm(r.hOpt)} ₪</strong>
+              {jnt && ` (${fm(r.fOpt)} אב + ${fm(r.mOpt)} אם)`}
+            </p>
+            <p style={{ fontSize: 13, margin: 0 }}>החזר מס צפוי: <strong>{fm(r.hUnused)} ₪</strong> — מס אפקטיבי 0%.</p>
+          </div>
+        </div>
+
+        {/* BOTTOM LINE */}
+        <div style={{ background: "linear-gradient(135deg,rgba(76,175,80,0.06),rgba(76,175,80,0.02))", borderRadius: 14, border: "1px solid rgba(76,175,80,0.2)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ fontSize: 12, color: "#8a8aaa", marginBottom: 6 }}>ללא מימוש</div>
+              <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
+              <R label="חיסכון מס" amount="0 ₪" />
+              <R label="סה״כ" amount={`${fm(r.hGrant)} ₪`} bold />
+            </div>
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(77,171,247,0.06)", border: "1px solid rgba(77,171,247,0.25)" }}>
+              <div style={{ fontSize: 12, color: "#7ab8e0", marginBottom: 6, fontWeight: 600 }}>📌 מימוש בפועל ({fm(cg)} ₪)</div>
+              <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
+              <R label="חיסכון מס" amount={`${fm(r.fSaved + r.mSaved)} ₪`} color="#5ab85a" />
+              <R label="סה״כ" amount={`${fm(r.hGrant + r.fSaved + r.mSaved)} ₪`} color="#7ab8e0" bold />
+            </div>
+            <div style={{ padding: 14, borderRadius: 10, background: "rgba(30,120,30,0.06)", border: "1px solid rgba(30,120,30,0.25)" }}>
+              <div style={{ fontSize: 12, color: "#5ab85a", marginBottom: 6, fontWeight: 600 }}>✨ מימוש אופטימלי ({fm(r.hOpt)} ₪)</div>
+              <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
+              <R label="חיסכון מס" amount={`${fm(r.hUnused)} ₪`} color="#5ab85a" />
+              <R label="סה״כ" amount={`${fm(r.hGrant + r.hUnused)} ₪`} color="#5ab85a" bold />
+            </div>
+          </div>
+          <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(76,175,80,0.1)", textAlign: "center" }}>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>רווח נוסף ממימוש בפועל</div>
+            <div style={{ fontSize: 30, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>+{fm(r.fSaved + r.mSaved)} ₪</div>
+            <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>
+              {r.fSaved + r.mSaved < r.hUnused
+                ? `ניתן לחסוך עוד ${fm(r.hUnused - r.fSaved - r.mSaved)} ₪ ע״י מימוש ${fm(r.hOpt - cg)} ₪ נוספים`
+                : "ניצול מלוא הזיכויים! 🎯"}
+            </div>
+          </div>
+        </div>
+
+        {/* CPI TAX SIMULATOR */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(100,180,255,0.25)", padding: "18px", marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון ריאלי (מדד / שער חליפין)</h2>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {cpiSim?.latestCPIDate && (
+                <span style={{ fontSize: 11, color: cpiSim.dataSource === 'cbs' ? "#5ab85a" : "hsl(215, 12%, 52%)", title: cpiSim.dataSource === 'cbs' ? 'נתוני הלמ"ס בזמן אמת' : 'הערכה על בסיס אינפלציה שנתית' }}>
+                  {cpiSim.dataSource === 'cbs' ? '✓ מדד הלמ"ס' : '~מדד משוער'} עד {cpiSim.latestCPIDate}
+                </span>
+              )}
+              {cpiSim?.latestFXDate && (
+                <span style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", title: "שערי חליפין מ-Massive Market Data" }}>
+                  💱 FX עד {cpiSim.latestFXDate}
+                </span>
+              )}
+              <button
+                onClick={runCPISim}
+                disabled={cpiLoading}
+                style={{ padding: "7px 14px", borderRadius: 8, cursor: cpiLoading ? "wait" : "pointer", fontSize: 12, fontWeight: 700,
+                  background: cpiLoading ? "rgba(100,150,255,0.1)" : "rgba(100,150,255,0.18)",
+                  border: "1px solid rgba(100,180,255,0.35)", color: "hsl(210, 70%, 72%)" }}>
+                {cpiLoading ? "⏳ טוען מדד..." : cpiSim ? "🔄 חשב מחדש" : "▶ חשב"}
+              </button>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: "0 0 12px", lineHeight: 1.6 }}>
+            מחשב את מס רווחי ההון הריאלי בהשוואה לחישוב הפשוט של 25% (כגון אקסלנס). הסימולציה מבוססת על מכירה היפותטית במחיר הנוכחי.
+            <br/>
+            <span style={{ color: "#5ab85a" }}>● ניירות בש"ח</span> — סמן "מוצמד למדד" <a href="portfolio.html" style={{ color: "hsl(210,70%,65%)" }}>בדף הפורטפוליו</a> כדי להחיל הצמדה ל-CPI (אג"ח צמודות, חלק מהקרנות).
+            <br/>
+            <span style={{ color: "hsl(210,70%,65%)" }}>● ניירות במט"ח (USD/EUR)</span> — מקבלים אוטומטית הצמדה לשער החליפין לפי סעיף 88 לפקודה (כלל "הנמוך מהשניים"). אין צורך בסימון.
+          </p>
+
+          {cpiError && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,80,80,0.1)", border: "1px solid rgba(200,80,80,0.3)", color: "#e07070", fontSize: 12, marginBottom: 12 }}>
+              ❌ {cpiError}
+            </div>
+          )}
+
+          {cpiSim && cpiSim.rows.length === 0 && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,160,80,0.1)", border: "1px solid rgba(200,160,80,0.25)", color: "#c8a060", fontSize: 12 }}>
+              אין רווחים חיוביים להצגה — ייתכן שמחירי הניירות לא עודכנו, או שאין רווחים לא ממומשים.
+            </div>
+          )}
+
+          {cpiSim && cpiSim.rows.length > 0 && (
+            <>
+              {/* Summary cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(200,80,80,0.08)", border: "1px solid rgba(200,80,80,0.2)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס לפי אקסלנס (25%)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#e07070" }}>{fm(cpiSim.totalFlat)} ₪</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(100,180,255,0.06)", border: "1px solid rgba(100,180,255,0.2)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס ריאלי (מדד + FX)</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "hsl(210,70%,65%)" }}>{fm(cpiSim.totalCPI)} ₪</div>
+                </div>
+                <div style={{ padding: 12, borderRadius: 10, background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>חיסכון פוטנציאלי</div>
+                  <div style={{ fontSize: 20, fontWeight: 800, color: "#5ab85a" }}>+{fm(cpiSim.totalSavings)} ₪</div>
+                </div>
+              </div>
+
+              {/* Per-holding table */}
+              <button onClick={() => setCpiExpanded(!cpiExpanded)} style={{ width: "100%", padding: "8px", borderRadius: 8, cursor: "pointer", fontSize: 12, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 10 }}>
+                {cpiExpanded ? "▲ הסתר פירוט" : "▼ הצג פירוט לפי נייר ערך"}
+              </button>
+              {cpiExpanded && (
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+                        {["נייר ערך", "מטבע", "הצמדה", "רווח לא ממומש", "מס 25%", "מס ריאלי", "חיסכון"].map(h => (
+                          <th key={h} style={{ padding: "8px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11, whiteSpace: "nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cpiSim.rows.map(row => (
+                        <tr key={row.symbol} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                          <td style={{ padding: "7px 6px", fontWeight: 700, color: "#c8d8f0", textAlign: "center" }}>{row.symbol}</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(215, 12%, 52%)" }}>{row.currency}</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center" }}>
+                            {row.adjustmentType === 'cpi'
+                              ? <span style={{ color: "#5ab85a", fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(90,184,90,0.12)", fontSize: 10 }}>מדד</span>
+                              : row.adjustmentType === 'fx'
+                                ? <span style={{ color: "hsl(210,70%,65%)", fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "rgba(100,180,255,0.12)", fontSize: 10 }}>FX</span>
+                                : <span style={{ color: "#5a5a7a" }}>—</span>}
+                          </td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: row.unrealizedGain >= 0 ? "#5ab85a" : "#e07070" }}>
+                            {row.unrealizedGain >= 0 ? `+${fm(row.unrealizedGain)}` : fm(row.unrealizedGain)} ₪
+                          </td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "#e07070" }}>{fm(row.flatTax)} ₪</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", color: "hsl(210,70%,65%)" }}>{fm(row.cpiAdjTax)} ₪</td>
+                          <td style={{ padding: "7px 6px", textAlign: "center", fontWeight: row.savings > 0 ? 700 : 400, color: row.savings > 0 ? "#5ab85a" : "hsl(215, 12%, 52%)" }}>
+                            {row.savings > 0 ? `+${fm(row.savings)} ₪` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p style={{ fontSize: 11, color: "#5a5a7a", margin: "10px 0 0", lineHeight: 1.6 }}>
+                    * הסימולציה מניחה מכירה של כל הניירות במחיר הנוכחי. חישוב ה-CPI מבוסס על מדד הלמ"ס 120010. עדכן מחירים בדף הפורטפוליו לפני החישוב.
+                    {cpiSim.rows.some(r => !r.lotsFromHistory) && " חלק מהניירות מחושבים לפי costBasis ממוצע (אין היסטוריית קניות מפורטת)."}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* DETAIL TABLE */}
+        <button onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 16 }}>
+          {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל (רפורמת 2024)
+        </button>
+        {det && (
+          <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16, overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
+                  {["גיל", "אב בסיס", "רפורמה", "אב סה״כ", "אם בסיס", "רפורמה", "אם סה״כ"].map(h => (
+                    <th key={h} style={{ padding: "8px 4px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ["לידה", 1.5, 1, 2.5, 1.5, 1, 2.5],
+                  ["1-2", 2.5, 2, 4.5, 2.5, 2, 4.5],
+                  ["3", 2.5, 1, 3.5, 2.5, 1, 3.5],
+                  ["4-5", 2.5, 0, 2.5, 2.5, 0, 2.5],
+                  ["6-17", 0, 0, 0, 1, 0, 1],
+                  ["18", 0, 0, 0, 0.5, 0, 0.5],
+                ].map(row => (
+                  <tr key={row[0]} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <td style={{ padding: "6px 4px", fontWeight: 600, textAlign: "center" }}>{row[0]}</td>
+                    <td style={{ textAlign: "center", color: "#7ab8e0" }}>{row[1]}</td>
+                    <td style={{ textAlign: "center", color: row[2] ? "#5ab85a" : "#4a4a5a" }}>{row[2] ? `+${row[2]}` : "\u2014"}</td>
+                    <td style={{ textAlign: "center", color: "#7ab8e0", fontWeight: 700 }}>{row[3]}</td>
+                    <td style={{ textAlign: "center", color: "#d898c8" }}>{row[4]}</td>
+                    <td style={{ textAlign: "center", color: row[5] ? "#5ab85a" : "#4a4a5a" }}>{row[5] ? `+${row[5]}` : "\u2014"}</td>
+                    <td style={{ textAlign: "center", color: "#d898c8", fontWeight: 700 }}>{row[6]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p style={{ fontSize: 11, color: "#6a6a8a", marginTop: 10, marginBottom: 0 }}>
+              * עד גיל 5 סה״כ זהה לשני ההורים (מסעיפים שונים). מגיל 6 רק האם מקבלת.
+            </p>
+          </div>
+        )}
+
+        {/* STEPS */}
+        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🗂️ צעדים</h2>
+          {[
+            ["1", "הגשת בקשה למענק עבודה", "שני בני הזוג בנפרד, לשנת 2024 (עד 31.12.26) ו-2025 (עד 31.12.27)"],
+            ["2", "בדיקת רווחים צבורים", "בקש טופס 867 מהבנק/ברוקר"],
+            ["3", `מימוש עד ${fm(r.hOpt)} ₪`, "לפני 30.12 (אירופה) / 31.12 (ארה״ב) — קנה מחדש מיד"],
+            ["4", "הגשת דוח שנתי", "עם רו״ח, כלול 867 + כל ההכנסות → החזר מס"],
+            ["5", "עדכון טופס 101", "פרטי ילדים + ישוב מזכה"],
+          ].map(([n, t, d]) => (
+            <div key={n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "hsl(142, 60%, 50%)", color: "hsl(220, 18%, 10%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
+              <div><div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>{d}</div></div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: "12px", borderRadius: 10, background: "rgba(200,140,80,0.05)", border: "1px solid rgba(200,140,80,0.12)", fontSize: 11, color: "#908070", lineHeight: 1.7 }}>
+          <strong>⚠️</strong> סכומי המענק הם הערכה. הכנסת בן/בת הזוג משפיעה על המענק. נקודות הזיכוי מדויקות לפי רפורמת 2024.
+          מדרגות המס ושווי נקודת זיכוי עשויים להשתנות משנה לשנה — עדכן בהתאם. אין לראות בזה ייעוץ מס — התייעצו עם רו״ח.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Render function that can be called after auth
+window.__renderApp = () => {
+  ReactDOM.render(<App />, document.getElementById('root'));
+};
+
+// No initial render here on purpose: #root is display:none until the auth block
+// unhides it, so mounting now would build the whole component tree into a hidden
+// div and immediately throw it away. Both real branches (demo and authenticated)
+
+// This file is now a deferred external script, where the old inline babel block
+// ran during parse. That reversed the ordering: the auth module can finish and
+// call window.__renderApp() before this file has evaluated, and its
+// `if (window.__renderApp)` guard would swallow the call — a blank page with no
+// console error. So whichever of the two arrives second performs the mount.
+if (window.__appReady) window.__renderApp();

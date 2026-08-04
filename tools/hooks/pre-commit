@@ -1,0 +1,16 @@
+#!/bin/sh
+# Blocks a commit whose generated assets are stale.
+#
+# The app deploys straight from main to GitHub Pages with no build step, so the
+# generated files are committed. Forgetting to rebuild after editing a source
+# would ship the previous version — loudly for tax-optimizer (the page would run
+# old code) and silently for the Tailwind CSS (a new class just wouldn't style).
+#
+# Enable once per clone:  git config core.hooksPath tools/hooks
+node tools/build-assets.mjs --check || {
+  echo ""
+  echo "Commit blocked: a generated file is out of date with its source."
+  echo "Run:  node tools/build-assets.mjs"
+  echo "then stage the rebuilt file and commit again."
+  exit 1
+}

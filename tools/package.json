@@ -1,0 +1,15 @@
+{
+  "name": "finance-tracker-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build helpers for the two generated assets. Self-contained on purpose — the repo root package.json is local dev setup and must never be touched by these.",
+  "scripts": {
+    "build": "node build-assets.mjs",
+    "check": "node build-assets.mjs --check"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-react": "^7.23.3",
+    "tailwindcss": "^3.4.1"
+  }
+}
