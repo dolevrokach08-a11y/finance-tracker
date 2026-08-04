@@ -4110,7 +4110,19 @@
                 // idea what the cloud holds; blindly setDoc-ing there is exactly how a
                 // stale device wipes out another device's newer data.
                 if (!forceOverwrite) {
-                    const cloudDoc = await getDoc(userDocRef);
+                    // MUST be time-boxed. When Firestore's backend is unreachable (the
+                    // Netspark long-polling case) getDoc neither resolves nor rejects —
+                    // it just hangs. With no timeout every save stalls here forever
+                    // before reaching setDoc: syncStatus stays 'syncing', the widget
+                    // sits on 🔄, forceSyncNow() short-circuits on `syncStatus ===
+                    // 'syncing'`, and nothing ever syncs again with no error shown.
+                    // loadFromFirebase() has always raced a timeout for this reason;
+                    // this read needs the same guard.
+                    const cloudDoc = await Promise.race([
+                        getDoc(userDocRef),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('conflict-check timeout')), 8000))
+                    ]);
                     if (cloudDoc.exists()) {
                         const cloudData = cloudDoc.data() || {};
                         const currentCloudModified = cloudData.lastModified;
@@ -4201,8 +4213,17 @@
                 // so there's nothing to re-persist here — just surface the failure.
                 syncStatus = 'error';
                 updateSyncWidget();
-                notify('שגיאה בשמירה בענן, נשמר מקומית');
+                notify(String(e && e.message).includes('timeout')
+                    ? '⚠️ הענן לא מגיב - נשמר מקומית. לחץ על כפתור הסנכרון כדי לנסות שוב'
+                    : 'שגיאה בשמירה בענן, נשמר מקומית');
                 return false;
+            } finally {
+                // Belt and braces: 'syncing' is a latch that disables forceSyncNow() and
+                // the refocus watcher. It must never survive this function.
+                if (syncStatus === 'syncing') {
+                    syncStatus = 'error';
+                    updateSyncWidget();
+                }
             }
         }
 

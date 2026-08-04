@@ -7702,7 +7702,13 @@ function calculateTWRv3(startDate = null) {
                 // cloudLastModified is null when the load fell back to localStorage —
                 // that's precisely when a blind setDoc wipes another device's newer data.
                 if (!skipConflictCheck) {
-                    const cloudDoc = await getDoc(userDocRef);
+                    // Time-boxed: an unreachable Firestore backend makes getDoc hang
+                    // rather than reject, which would stall every save before setDoc.
+                    const cloudDoc = await Promise.race([
+                        getDoc(userDocRef),
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('conflict-check timeout')), 8000))
+                    ]);
                     if (cloudDoc.exists()) {
                         const cloudData = cloudDoc.data() || {};
                         const currentCloudModified = cloudData.lastModified;
