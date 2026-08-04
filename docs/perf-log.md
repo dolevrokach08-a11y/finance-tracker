@@ -96,6 +96,32 @@ Blocking scripts remaining: `finance.html` has Tailwind's CDN (batch 5);
 `tax-optimizer.html` has React, ReactDOM and babel-standalone (batch 4). The
 other three pages are at zero.
 
+## After batch 4 — commit `3940800`, SW cache v33
+
+`tax-optimizer.html`, warm, real account (47 payslips, 3 tax years):
+
+| metric | value |
+|---|---|
+| DCL | **331** |
+| load | **386** |
+| requests | 30 |
+| `Babel` at load | **undefined** |
+
+This is the largest single win in the plan. ~2.7MB of babel-standalone and the
+in-browser transpilation of 2,139 lines of JSX are gone from every visit; the
+compiled `tax-optimizer.app.js` is 148KB.
+
+Two things surfaced during verification, both recorded in the commits:
+
+- The compiled script is deferred where the babel block ran during parse, which
+  reversed an ordering the page relied on — the auth block could call
+  `__renderApp()` before it existed, and the existing guard turned that into a
+  blank page with no error. Fixed with a two-sided `__appReady` handshake.
+- The page rendered blank against the real account because a Firestore read
+  stalled and there was no time limit on it. Pre-existing — the old code awaited
+  at the same point — and unlike the other pages this one has neither a getDoc
+  timeout nor a localStorage fallback. Both reads are now raced against 10s.
+
 ### Two findings that are not about our code
 
 - **An Adobe Acrobat Chrome extension** (`efaidnbmnnnibpcajpcglclefindmkaj`)
