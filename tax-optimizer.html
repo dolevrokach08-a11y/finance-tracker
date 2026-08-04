@@ -355,22 +355,29 @@ a { color: var(--accent); }
       const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
       window.__financeDocRef = userDocRef;
 
-      // Time-boxed, like the getDoc guards in finance.html and portfolio.html.
-      // Firestore under experimentalForceLongPolling does not always reject when
-      // it cannot reach the backend — it retries indefinitely. This page has no
-      // localStorage fallback, so a stalled round trip used to leave #root hidden
-      // forever: a permanently blank page with nothing in the console. Now the
-      // app renders with whatever arrived, and empty data is still a usable
-      // calculator.
+      // Read the two documents ONE AT A TIME, not concurrently.
+      //
+      // These were briefly fired together to save a round trip. That was reverted:
+      // this page has no localStorage fallback, so if the reads fail it renders as
+      // though the user has no payslips and no tax years — which reads as data
+      // loss. Saving one RTT is not worth any added risk to that, and a cold
+      // long-polling connection is more likely to carry a second read once the
+      // first has established it.
+      //
+      // Still time-boxed: Firestore under experimentalForceLongPolling does not
+      // reliably reject when it cannot reach the backend, and an unbounded await
+      // left #root hidden forever.
       const withTimeout = p => Promise.race([
         p,
         new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firestore timeout')), 10000))
+          setTimeout(() => reject(new Error('Firestore timeout')), 15000))
       ]);
-      const [financeResult, settingsResult] = await Promise.allSettled([
-        withTimeout(getDoc(userDocRef)),
-        withTimeout(getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings')))
-      ]);
+      const settle = async p => {
+        try { return { status: 'fulfilled', value: await p }; }
+        catch (reason) { return { status: 'rejected', reason }; }
+      };
+      const financeResult = await settle(withTimeout(getDoc(userDocRef)));
+      const settingsResult = await settle(withTimeout(getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings'))));
 
       // Load finance data from Firebase
       try {
@@ -399,6 +406,23 @@ a { color: var(--accent); }
       } catch (e) {
         console.error('Failed to load finance data:', e);
         if (window.SyncWidget) window.SyncWidget.markError();
+
+        // Say so, loudly. This page reads only from Firestore — there is no local
+        // copy to fall back on — so a failed read renders an empty calculator with
+        // no tax years and no payslips, which looks exactly like the data being
+        // gone. It is not: it is still in Firestore, unread. Never let a load
+        // failure masquerade as an empty account.
+        const banner = document.createElement('div');
+        banner.className = 'data-banner warning';
+        banner.style.cssText = 'margin:12px 14px;justify-content:space-between';
+        const msg = document.createElement('span');
+        msg.textContent = '⚠️ לא הצלחנו לטעון את הנתונים מהענן. התלושים ושנות המס שלך שמורים — הם פשוט לא נקראו. נסה לרענן.';
+        const retry = document.createElement('button');
+        retry.textContent = 'רענן';
+        retry.style.cssText = 'background:var(--accent,#3b82f6);color:#fff;border:0;border-radius:6px;padding:6px 14px;cursor:pointer;font-family:inherit;font-size:12px';
+        retry.addEventListener('click', () => location.reload());
+        banner.append(msg, retry);
+        document.getElementById('root').before(banner);
       }
 
       // Load saved tax optimizer settings
