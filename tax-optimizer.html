@@ -136,7 +136,8 @@ a { color: var(--accent); }
       onForceSync: async () => {
         // Re-save current finance data + tax settings to push any pending writes
         if (window.__financeDocRef && window.__financeData) {
-          await setDoc(window.__financeDocRef, { ...window.__financeData, lastModified: new Date().toISOString() });
+          await setDoc(window.__financeDocRef, { ...window.__financeData, lastModified: new Date().toISOString(),
+            ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
         }
         if (window.__pendingTaxSettings) {
           await window.__saveTaxSettings(window.__pendingTaxSettings);
@@ -199,7 +200,8 @@ a { color: var(--accent); }
     _markSyncing();
     try {
       const ts = new Date().toISOString();
-      await setDoc(window.__financeDocRef, { ...data, lastModified: ts });
+      await setDoc(window.__financeDocRef, { ...data, lastModified: ts,
+        ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
       window.__financeData = data;
       window.__payslipData = { payslips: data.payslips, loaded: true };
       _markSynced(ts);
@@ -228,7 +230,8 @@ a { color: var(--accent); }
     _markSyncing();
     try {
       const ts = new Date().toISOString();
-      await setDoc(window.__financeDocRef, { ...data, lastModified: ts });
+      await setDoc(window.__financeDocRef, { ...data, lastModified: ts,
+        ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
       window.__financeData = data;
       window.__payslipData = { payslips: data.payslips, loaded: true };
       _markSynced(ts);

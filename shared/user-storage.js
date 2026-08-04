@@ -132,4 +132,88 @@
         activeUid: activeUid,
         USER_KEYS: USER_KEYS
     };
+
+    // ── Per-browser writer identity (window.FTDevice) ────────────────────
+    //
+    // Conflict detection used to ask "did the cloud doc change since I loaded
+    // it?" and report any change as "another device". That question is wrong:
+    // it is also true when THIS browser wrote the doc — from a second tab,
+    // from tax-optimizer.html (which writes finance/data), or when a write
+    // reached the server but the ack never came back before a refresh. Every
+    // one of those produced a scary "another device updated your data" prompt
+    // for a write the user made himself.
+    //
+    // Stamping each cloud write with the writer's id lets the check ask what
+    // it actually means: "did a DIFFERENT device write this?".
+    //
+    // Deliberately NOT in USER_KEYS — identity belongs to the browser, not to
+    // the account, and must survive a user swap. Clearing site data mints a
+    // new id, which is harmless (worst case: one extra conflict prompt).
+    var DEVICE_KEY = 'ft_device_id';
+    var _deviceId = null;
+
+    function deviceId() {
+        if (_deviceId) return _deviceId;
+        try {
+            _deviceId = localStorage.getItem(DEVICE_KEY);
+            if (!_deviceId) {
+                _deviceId = 'd_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+                localStorage.setItem(DEVICE_KEY, _deviceId);
+            }
+        } catch (e) {
+            // Private mode / storage blocked: a per-session id still stops the
+            // same page from flagging its own writes as foreign.
+            _deviceId = _deviceId || 'd_mem_' + Math.random().toString(36).slice(2, 10);
+        }
+        return _deviceId;
+    }
+
+    /** Short Hebrew description of this browser, shown in conflict prompts. */
+    function deviceLabel() {
+        var ua = (navigator && navigator.userAgent) || '';
+        var isMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua);
+        var os = /iPhone|iPad|iPod/i.test(ua) ? 'iOS'
+               : /Android/i.test(ua) ? 'Android'
+               : /Windows/i.test(ua) ? 'Windows'
+               : /Mac OS X|Macintosh/i.test(ua) ? 'Mac'
+               : /Linux/i.test(ua) ? 'Linux' : '';
+        return (isMobile ? 'פלאפון' : 'מחשב') + (os ? ' (' + os + ')' : '');
+    }
+
+    /** The fields to merge into every cloud write. */
+    function stamp() {
+        return { lastWriterId: deviceId(), lastWriterLabel: deviceLabel() };
+    }
+
+    /**
+     * True when this browser wrote the given cloud document.
+     * Unstamped docs (written before this version shipped) return false, so
+     * they keep the old, more cautious behaviour until the next write.
+     */
+    function wroteIt(docData) {
+        return !!(docData && docData.lastWriterId && docData.lastWriterId === deviceId());
+    }
+
+    /** Human-readable writer name for prompts, e.g. "פלאפון (Android)". */
+    function writerLabel(docData) {
+        return (docData && docData.lastWriterLabel) || 'מכשיר אחר';
+    }
+
+    /** Field names to strip from a loaded doc before treating it as app data. */
+    var STAMP_FIELDS = ['lastWriterId', 'lastWriterLabel'];
+
+    function stripStamp(obj) {
+        if (obj) STAMP_FIELDS.forEach(function (f) { delete obj[f]; });
+        return obj;
+    }
+
+    window.FTDevice = {
+        id: deviceId,
+        label: deviceLabel,
+        stamp: stamp,
+        wroteIt: wroteIt,
+        writerLabel: writerLabel,
+        stripStamp: stripStamp,
+        STAMP_FIELDS: STAMP_FIELDS
+    };
 })();

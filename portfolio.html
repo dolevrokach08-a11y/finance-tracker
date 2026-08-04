@@ -7704,19 +7704,28 @@ function calculateTWRv3(startDate = null) {
                 if (!skipConflictCheck) {
                     const cloudDoc = await getDoc(userDocRef);
                     if (cloudDoc.exists()) {
-                        const currentCloudModified = cloudDoc.data()?.lastModified;
+                        const cloudData = cloudDoc.data() || {};
+                        const currentCloudModified = cloudData.lastModified;
                         const neverLoaded = !cloudLastModified;
                         const cloudIsNewer = currentCloudModified && cloudLastModified &&
                                              currentCloudModified > cloudLastModified;
-                        if (neverLoaded || cloudIsNewer) {
+                        // A cloud copy this browser wrote (second tab, or a write of
+                        // ours whose ack was lost) is not another device's work.
+                        const writtenByMe = window.FTDevice && window.FTDevice.wroteIt(cloudData);
+                        if ((neverLoaded || cloudIsNewer) && writtenByMe) {
+                            console.log('ℹ️ Cloud moved, but this device wrote it — no conflict', {
+                                cloudLastModified, currentCloudModified
+                            });
+                        } else if (neverLoaded || cloudIsNewer) {
                             const when = currentCloudModified
                                 ? new Date(currentCloudModified).toLocaleString('he-IL')
                                 : 'לא ידוע';
+                            const who = window.FTDevice ? window.FTDevice.writerLabel(cloudData) : 'מכשיר אחר';
                             const overwrite = confirm(
                                 (neverLoaded
                                     ? '⚠️ לא נטענו נתונים מהענן בפתיחת הדף (עובד על עותק מקומי).\n\n'
-                                    : '⚠️ הנתונים בענן עודכנו ממכשיר אחר מאז שטענת את הדף.\n\n') +
-                                `עדכון אחרון בענן: ${when}\n\n` +
+                                    : `⚠️ הנתונים בענן עודכנו מ-${who} מאז שטענת את הדף.\n\n`) +
+                                `עדכון אחרון בענן: ${when} (מ-${who})\n\n` +
                                 '• OK = לדרוס את הענן בנתונים של המכשיר הזה\n' +
                                 '• Cancel = לרענן ולטעון את הנתונים מהענן\n\n' +
                                 '💡 אם עדכנת מהפלאפון - לחץ Cancel, אחרת העדכון מהפלאפון יימחק'
@@ -7743,7 +7752,10 @@ function calculateTWRv3(startDate = null) {
                     }
                 }
 
-                await setDoc(userDocRef, dataToSave);
+                await setDoc(userDocRef, {
+                    ...dataToSave,
+                    ...(window.FTDevice ? window.FTDevice.stamp() : {})
+                });
                 cloudLastModified = newLastModified;
                 console.log('✅ Data saved to Firebase');
                 if (window.SyncWidget) window.SyncWidget.markSynced(newLastModified);
@@ -7789,18 +7801,25 @@ function calculateTWRv3(startDate = null) {
             try {
                 const snap = await getDoc(doc(db, 'users', currentUser.uid, 'portfolio', 'data'));
                 if (!snap.exists()) return;
-                const cloudMod = snap.data()?.lastModified || null;
+                const cloudData = snap.data() || {};
+                const cloudMod = cloudData.lastModified || null;
                 if (!cloudMod || cloudMod === cloudLastModified) return;
+                // A write from another tab of this same browser is not another device.
+                if (window.FTDevice && window.FTDevice.wroteIt(cloudData)) {
+                    cloudLastModified = cloudMod; // adopt it so we stop re-checking
+                    return;
+                }
+                const who = window.FTDevice ? window.FTDevice.writerLabel(cloudData) : 'מכשיר אחר';
 
                 const meta = window.SyncWidget ? window.SyncWidget.getMeta() : null;
                 if (meta && meta.hasUnsyncedChanges) {
                     // Both sides moved — reloading would silently drop the local edits.
-                    notify('⚠️ מכשיר אחר עדכן את הנתונים ויש כאן שינויים שלא סונכרנו - לחץ על כפתור הסנכרון', 'warning');
+                    notify(`⚠️ ${who} עדכן את הנתונים ויש כאן שינויים שלא סונכרנו - לחץ על כפתור הסנכרון`, 'warning');
                     if (window.SyncWidget) window.SyncWidget.markPending();
                     return;
                 }
-                console.log('🔄 Cloud changed on another device - reloading', { cloudLastModified, cloudMod });
-                notify('🔄 הנתונים עודכנו במכשיר אחר - טוען מחדש...', 'info');
+                console.log('🔄 Cloud changed on another device - reloading', { cloudLastModified, cloudMod, who });
+                notify(`🔄 הנתונים עודכנו ב-${who} - טוען מחדש...`, 'info');
                 setTimeout(() => location.reload(), 900);
             } catch (e) {
                 console.warn('visibility sync check failed', e);
@@ -15311,9 +15330,14 @@ ${msg}`, 'warning');
             console.log('✅ To view advanced charts, click on "גרפים" tab');
             console.log('✅ To toggle dark mode, click the moon/sun icon');
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-            
-            // שמור את הנתונים אחרי טעינה
-            saveData();
+
+            // Deliberately NO saveData() here.
+            // This used to write the whole portfolio doc to Firestore on every page
+            // load, so merely OPENING the app — on the phone, just to look at it —
+            // bumped lastModified and made the other device report "another device
+            // updated your data". Opening a page is not a change. loadData() already
+            // mirrors the loaded doc into localStorage, and migrateOldData() saves
+            // when it genuinely migrates something; a real edit saves on its own.
         };
         
         // Expose functions to window for HTML onclick handlers

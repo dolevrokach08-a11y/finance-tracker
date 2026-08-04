@@ -2930,19 +2930,27 @@
             try {
                 const snap = await getDoc(doc(db, 'users', currentUser.uid, 'finance', 'data'));
                 if (!snap.exists()) return;
-                const cloudMod = snap.data()?.lastModified || null;
+                const cloudData = snap.data() || {};
+                const cloudMod = cloudData.lastModified || null;
                 if (!cloudMod || cloudMod === cloudLastModified) return;
+                // Another tab of this browser (or tax-optimizer.html) writing the same
+                // doc is not "another device" — reloading on it would be pure noise.
+                if (window.FTDevice && window.FTDevice.wroteIt(cloudData)) {
+                    cloudLastModified = cloudMod; // adopt it so we stop re-checking
+                    return;
+                }
+                const who = window.FTDevice ? window.FTDevice.writerLabel(cloudData) : 'מכשיר אחר';
 
                 const meta = getSyncMeta();
                 if (meta && meta.hasUnsyncedChanges) {
                     // Both sides moved — reloading here would silently drop local edits.
-                    notify('⚠️ מכשיר אחר עדכן את הנתונים ויש כאן שינויים שלא סונכרנו - לחץ על כפתור הסנכרון');
+                    notify(`⚠️ ${who} עדכן את הנתונים ויש כאן שינויים שלא סונכרנו - לחץ על כפתור הסנכרון`);
                     syncStatus = 'pending';
                     updateSyncWidget();
                     return;
                 }
-                console.log('🔄 Cloud changed on another device - reloading', { cloudLastModified, cloudMod });
-                notify('🔄 הנתונים עודכנו במכשיר אחר - טוען מחדש...');
+                console.log('🔄 Cloud changed on another device - reloading', { cloudLastModified, cloudMod, who });
+                notify(`🔄 הנתונים עודכנו ב-${who} - טוען מחדש...`);
                 setTimeout(() => location.reload(), 900);
             } catch (e) {
                 console.warn('visibility sync check failed', e);
@@ -4101,26 +4109,38 @@
                 if (!forceOverwrite) {
                     const cloudDoc = await getDoc(userDocRef);
                     if (cloudDoc.exists()) {
-                        const currentCloudModified = cloudDoc.data()?.lastModified;
+                        const cloudData = cloudDoc.data() || {};
+                        const currentCloudModified = cloudData.lastModified;
                         const neverLoaded = !cloudLastModified;
                         const cloudIsNewer = currentCloudModified && cloudLastModified &&
                                              currentCloudModified > cloudLastModified;
+                        // Only a write from a DIFFERENT device is a conflict. This
+                        // browser writing from another tab, from tax-optimizer.html,
+                        // or a write of ours whose ack got lost is our own data —
+                        // prompting there just trains the user to click OK blindly.
+                        const writtenByMe = window.FTDevice && window.FTDevice.wroteIt(cloudData);
 
-                        if (neverLoaded || cloudIsNewer) {
+                        if ((neverLoaded || cloudIsNewer) && writtenByMe) {
+                            console.log('ℹ️ Cloud moved, but this device wrote it — no conflict', {
+                                cloudLastModified, currentCloudModified
+                            });
+                        } else if (neverLoaded || cloudIsNewer) {
                             console.warn('⚠️ Conflict detected!', {
                                 cloudLastModified: cloudLastModified,
                                 currentCloudModified: currentCloudModified,
-                                neverLoaded
+                                neverLoaded,
+                                writer: cloudData.lastWriterLabel || 'unknown'
                             });
 
                             const when = currentCloudModified
                                 ? new Date(currentCloudModified).toLocaleString('he-IL')
                                 : 'לא ידוע';
+                            const who = window.FTDevice ? window.FTDevice.writerLabel(cloudData) : 'מכשיר אחר';
                             const userChoice = confirm(
                                 (neverLoaded
                                     ? '⚠️ לא הצלחתי לטעון את הנתונים מהענן בפתיחת הדף, ולכן אני עובד על עותק מקומי.\n\n'
-                                    : '⚠️ זוהה קונפליקט!\n\nהנתונים בענן עודכנו ממכשיר אחר מאז שטענת את הדף.\n\n') +
-                                `עדכון אחרון בענן: ${when}\n\n` +
+                                    : `⚠️ זוהה קונפליקט!\n\nהנתונים בענן עודכנו מ-${who} מאז שטענת את הדף.\n\n`) +
+                                `עדכון אחרון בענן: ${when} (מ-${who})\n\n` +
                                 '• לחץ OK כדי לדרוס את הנתונים בענן עם הנתונים המקומיים\n' +
                                 '• לחץ Cancel כדי לרענן ולטעון את הנתונים מהענן\n\n' +
                                 '💡 אם עדכנת מהפלאפון - לחץ Cancel, אחרת העדכון מהפלאפון יימחק'
@@ -4149,7 +4169,8 @@
                 const newLastModified = new Date().toISOString();
                 await setDoc(userDocRef, {
                     ...data,
-                    lastModified: newLastModified
+                    lastModified: newLastModified,
+                    ...(window.FTDevice ? window.FTDevice.stamp() : {})
                 });
 
                 // Update our tracking
@@ -4221,7 +4242,14 @@
                     //       cloud would erase this device's — so ask, and back up first.
                     const meta = getSyncMeta();
                     const localDirty = !!(meta && meta.hasUnsyncedChanges && meta.localLastModified);
-                    const cloudMovedElsewhere = localDirty && !!cloudMod && cloudMod !== meta.cloudLastModified;
+                    // "elsewhere" means a different device. A cloud copy this browser
+                    // wrote itself is not a conflict — the common case is a save whose
+                    // server ack never came back before a refresh: the data DID land,
+                    // but the dirty flag survived, and comparing timestamps alone made
+                    // our own write look like the phone's.
+                    const cloudWrittenByMe = !!(window.FTDevice && window.FTDevice.wroteIt(firebaseData));
+                    const cloudMovedElsewhere = localDirty && !!cloudMod &&
+                                                cloudMod !== meta.cloudLastModified && !cloudWrittenByMe;
 
                     if (localDirty && !cloudMovedElsewhere) {
                         console.warn('⚠️ Local has unsynced changes, cloud unchanged - preserving local', {
@@ -4250,10 +4278,11 @@
                         backupLocalSnapshot();
                         const localCount = countLocalTransactions();
                         const cloudCount = Array.isArray(firebaseData.transactions) ? firebaseData.transactions.length : 0;
+                        const who = window.FTDevice ? window.FTDevice.writerLabel(firebaseData) : 'מכשיר אחר';
                         const keepLocal = confirm(
-                            '⚠️ גם המכשיר הזה וגם מכשיר אחר עדכנו נתונים.\n\n' +
+                            `⚠️ גם המכשיר הזה וגם ${who} עדכנו נתונים.\n\n` +
                             `• במכשיר הזה: ${localCount} עסקאות (שינויים שלא סונכרנו)\n` +
-                            `• בענן: ${cloudCount} עסקאות (עודכן ב-${new Date(cloudMod).toLocaleString('he-IL')})\n\n` +
+                            `• בענן: ${cloudCount} עסקאות (עודכן ב-${new Date(cloudMod).toLocaleString('he-IL')} מ-${who})\n\n` +
                             '• OK = להשאיר את הנתונים של המכשיר הזה (ידרוס את הענן)\n' +
                             '• Cancel = לקחת את הנתונים מהענן\n\n' +
                             'בכל מקרה שמרתי גיבוי של העותק המקומי (localStorage: financeTrackerData_conflictBackup).'
@@ -4276,6 +4305,7 @@
                     lastSyncTime = cloudMod;
 
                     delete firebaseData.lastModified; // Remove metadata from data object
+                    if (window.FTDevice) window.FTDevice.stripStamp(firebaseData); // writer id is metadata too
                     data = firebaseData;
 
                     // Ensure all required fields exist

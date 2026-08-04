@@ -1060,7 +1060,8 @@ window._saveToFirebase = async function(state) {
         const userDocRef = doc(db, 'users', currentUser.uid, 'mortgage', 'data');
         await setDoc(userDocRef, {
             ...state,
-            lastModified: newLastModified
+            lastModified: newLastModified,
+            ...(window.FTDevice ? window.FTDevice.stamp() : {})
         });
         console.log('✅ Mortgage saved to Firebase');
         if (window.SyncWidget) window.SyncWidget.markSynced(newLastModified);
