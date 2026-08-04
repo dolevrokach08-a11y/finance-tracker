@@ -32,6 +32,10 @@ const NAV_CSS = `
   z-index: 100;
   backdrop-filter: blur(10px);
   direction: rtl;
+  /* Same name on every page, so a cross-document view transition treats this as
+     one continuous element and skips it entirely instead of cross-fading it.
+     This is what keeps the chrome still while the content changes. */
+  view-transition-name: app-nav;
 }
 .shared-nav-right {
   display: flex;

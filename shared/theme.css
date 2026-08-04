@@ -139,3 +139,38 @@
   --shadow-color: rgba(0, 0, 0, 0.06);
   --shadow-accent: 0 4px 20px hsla(142, 55%, 40%, 0.15);
 }
+
+/* ============================================================================
+   Cross-document view transitions
+   ----------------------------------------------------------------------------
+   The app is five separate HTML documents, and every nav click was a full
+   reload with a white flash — which is precisely what made it read as a website
+   rather than an app. This hands the browser the job a SPA router would
+   otherwise be rewritten to do, in CSS, with no architecture change.
+
+   Deliberately restrained: a 150ms cross-fade of the content only. The nav is
+   given a stable view-transition-name below so the browser treats it as the
+   same element across documents and leaves it alone — it does not fade, move,
+   or re-render. The effect should read as the content being replaced under a
+   fixed chrome, not as a page animating.
+
+   Progressive enhancement: browsers without support just navigate normally.
+   ========================================================================== */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 150ms;
+  animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Someone who has asked the OS for less motion gets an instant swap, not a
+   slower one. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 1ms;
+  }
+}
