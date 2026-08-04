@@ -74,3 +74,31 @@ after every block in the head, so Tailwind's preflight won over the page's own
 rules — `body { line-height: 1.6 }` was being overridden to `inherit` (24px, not
 25.6px). Linking it in the script's old position silently changed line-height on
 every element. Don't move it.
+
+## vendor/ — self-hosted libraries
+
+Every third-party library except tesseract.js is served from `vendor/` with the
+version in the filename. That naming is load-bearing: the service worker serves
+everything under `vendor/` **cache-first with no revalidation**, which is only
+safe because a new version is a new URL.
+
+```sh
+node tools/update-vendor.mjs --dry-run   # what's out of date
+node tools/update-vendor.mjs             # apply, rewrite refs, bump sw.js
+```
+
+`vendor/manifest.json` is the source of truth — npm package, version, path in
+the package, output filename, and every file that references it. The updater
+rewrites all of them and bumps `SHELL_CACHE`.
+
+`.github/workflows/vendor-update.yml` runs this weekly and **opens a PR**. It
+never merges. There are no tests here, so the only thing that verifies a bump is
+a person loading the page with real data — and the very first dry run offered
+React 19, which removes the `ReactDOM.render` call the tax page is built on.
+
+Two pins that must not drift:
+- **chart.js 3.9.1** for finance.html — 18 chart configs written against the v3
+  API. `pinMajor: 3` in the manifest keeps the updater on that line.
+- **tesseract.js stays on the CDN.** Its entry point pulls a ~4MB wasm core and a
+  ~10MB+ Hebrew model at runtime; hosting it means ~15MB of binaries in git and
+  hand-maintained `corePath`/`langPath`. It loads on demand, so it costs nothing.

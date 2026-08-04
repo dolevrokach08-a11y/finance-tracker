@@ -96,8 +96,8 @@ a { color: var(--accent); }
      ahead of time now, so it is gone. These two keep the UMD globals the
      compiled output calls (React.createElement / ReactDOM.render); defer holds
      document order, so they are ready before the app script runs. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" defer></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" defer></script>
+<script src="vendor/react-18.2.0.production.min.js" defer></script>
+<script src="vendor/react-dom-18.2.0.production.min.js" defer></script>
 <!-- pdf.js and Tesseract are reachable only from the payslip file input, so they
      are fetched on first scan instead of on every page load. The old comment here
      claimed Tesseract was "loaded lazily" while it was in fact a blocking tag;

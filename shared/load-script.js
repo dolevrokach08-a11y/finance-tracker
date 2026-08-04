@@ -16,16 +16,27 @@
 (function (w) {
   'use strict';
 
+  // Self-hosted under vendor/, with the version in each filename — that is what
+  // lets the service worker treat them as cache-first with no revalidation: a
+  // different version is a different URL, so a cache hit can never be stale.
+  // Keeps every library on one origin instead of five, which matters most behind
+  // a TLS-intercepting filter where each extra host is another handshake.
+  // vendor/manifest.json drives the weekly update workflow that bumps these.
+  //
+  // tesseract.js deliberately stays on the CDN: its entry point is a thin loader
+  // that fetches a ~4MB wasm core and a ~10MB+ Hebrew language model at runtime.
+  // Self-hosting means committing ~15MB of binaries and hand-maintaining
+  // workerPath/corePath/langPath — and since batch 3 it costs nothing on load.
   var V = {
-    xlsx:      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-    chart3:    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js',
-    chart4:    'https://cdn.jsdelivr.net/npm/chart.js@4.5.1',
-    d3:        'https://d3js.org/d3.v7.min.js',
-    d3sankey:  'https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js',
-    pdfjs:     'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-    pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-    tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
-    lucide:    'https://unpkg.com/lucide@1.17.0'
+    xlsx:      'vendor/xlsx-0.18.5.full.min.js',
+    chart3:    'vendor/chart.js-3.9.1.min.js',
+    chart4:    'vendor/chart.js-4.5.1.min.js',
+    d3:        'vendor/d3-7.9.0.min.js',
+    d3sankey:  'vendor/d3-sankey-0.12.3.min.js',
+    pdfjs:     'vendor/pdfjs-3.11.174/pdf.min.js',
+    pdfWorker: 'vendor/pdfjs-3.11.174/pdf.worker.min.js',
+    lucide:    'vendor/lucide-1.17.0.min.js',
+    tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'
   };
 
   var cache = Object.create(null);

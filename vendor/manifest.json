@@ -1,0 +1,86 @@
+{
+  "_comment": [
+    "Drives tools/update-vendor.mjs and the weekly vendor-update workflow.",
+    "The version is part of every filename on purpose: the service worker serves",
+    "everything under vendor/ cache-first with no revalidation, which is only safe",
+    "because a new version is a new URL. Update this file only via the tool.",
+    "",
+    "tesseract.js is intentionally absent. Its entry point is a thin loader that",
+    "pulls a ~4MB wasm core and a ~10MB+ Hebrew traineddata at runtime, so hosting",
+    "it means committing ~15MB of binaries and maintaining corePath/langPath by",
+    "hand. It loads on demand only, so it costs nothing on page load."
+  ],
+  "libraries": [
+    {
+      "npm": "chart.js",
+      "version": "4.5.1",
+      "path": "dist/chart.umd.min.js",
+      "file": "chart.js-4.5.1.min.js",
+      "refs": ["portfolio.html", "mortgage.html", "shared/load-script.js"],
+      "note": "mortgage was on 4.4.1 and was unified to this build"
+    },
+    {
+      "npm": "chart.js",
+      "version": "3.9.1",
+      "path": "dist/chart.min.js",
+      "file": "chart.js-3.9.1.min.js",
+      "refs": ["shared/load-script.js"],
+      "pinMajor": 3,
+      "note": "finance.html has 18 chart configurations written against the v3 API. Do NOT let this follow v4 — that is a breaking upgrade and belongs in its own piece of work."
+    },
+    {
+      "npm": "lucide",
+      "version": "1.17.0",
+      "path": "dist/umd/lucide.min.js",
+      "file": "lucide-1.17.0.min.js",
+      "refs": ["portfolio.html", "shared/load-script.js"]
+    },
+    {
+      "npm": "xlsx",
+      "version": "0.18.5",
+      "path": "dist/xlsx.full.min.js",
+      "file": "xlsx-0.18.5.full.min.js",
+      "refs": ["shared/load-script.js"],
+      "note": "Parses the owner's specific broker and bank export formats. A bump needs a real import run against a real file before merging."
+    },
+    {
+      "npm": "d3",
+      "version": "7.9.0",
+      "path": "dist/d3.min.js",
+      "file": "d3-7.9.0.min.js",
+      "refs": ["shared/load-script.js"],
+      "note": "was loaded unpinned from d3js.org/d3.v7.min.js; self-hosting fixed that"
+    },
+    {
+      "npm": "d3-sankey",
+      "version": "0.12.3",
+      "path": "dist/d3-sankey.min.js",
+      "file": "d3-sankey-0.12.3.min.js",
+      "refs": ["shared/load-script.js"]
+    },
+    {
+      "npm": "react",
+      "version": "18.2.0",
+      "path": "umd/react.production.min.js",
+      "file": "react-18.2.0.production.min.js",
+      "refs": ["tax-optimizer.html"]
+    },
+    {
+      "npm": "react-dom",
+      "version": "18.2.0",
+      "path": "umd/react-dom.production.min.js",
+      "file": "react-dom-18.2.0.production.min.js",
+      "refs": ["tax-optimizer.html"],
+      "note": "tax-optimizer.src.jsx uses the React 17 ReactDOM.render API. React 19 removes it."
+    },
+    {
+      "npm": "pdfjs-dist",
+      "version": "3.11.174",
+      "path": "build/pdf.min.js",
+      "file": "pdfjs-3.11.174/pdf.min.js",
+      "refs": ["shared/load-script.js"],
+      "sibling": { "path": "build/pdf.worker.min.js", "file": "pdfjs-3.11.174/pdf.worker.min.js" },
+      "note": "worker must stay a sibling of pdf.min.js — FTLoad.pdfjs() sets workerSrc to the path next to it"
+    }
+  ]
+}

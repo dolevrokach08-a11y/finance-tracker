@@ -1,0 +1,4 @@
+# Vendored third-party builds are byte-exact artifacts downloaded from npm.
+# Never let git rewrite their line endings — checksums and diffs should reflect
+# what was published, not what this machine would have written.
+vendor/** -text

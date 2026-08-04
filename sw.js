@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v35';
+const SHELL_CACHE = 'finance-tracker-v36';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -52,14 +52,13 @@ const NEVER_INTERCEPT = [
 ];
 
 // Cross-origin hosts whose URLs carry a version, so cache-first is safe.
+// Everything else now lives under vendor/ on our own origin. jsdelivr stays for
+// tesseract.js, which is loaded on demand and deliberately not self-hosted.
 const CACHEABLE_HOSTS = [
   'fonts.googleapis.com',
   'fonts.gstatic.com',
-  'www.gstatic.com',
-  'cdn.jsdelivr.net',
-  'cdnjs.cloudflare.com',
-  'unpkg.com',
-  'd3js.org'
+  'www.gstatic.com',   // firebasejs/10.7.1/* — version is in the path
+  'cdn.jsdelivr.net'   // tesseract.js only
 ];
 
 // Install - cache the shell

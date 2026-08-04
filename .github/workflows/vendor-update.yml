@@ -1,0 +1,76 @@
+# Weekly check for newer versions of the self-hosted libraries in vendor/.
+#
+# It opens a PR. It does not merge, and it must not be given the ability to.
+#
+# Why: there is no automated test suite here. The only thing that verifies a
+# Chart.js bump still draws, or that a SheetJS bump still parses the owner's
+# specific broker and bank Excel exports, is a person loading the page with real
+# data. GitHub Pages deploys straight from main, so an auto-merge is a direct
+# push to production with no staging and no rollback short of a revert someone
+# has to notice is needed. The repo pins versions deliberately — portfolio.html
+# used to carry the note "unpinned = silent breakage on next major release".
+#
+# The first dry run of the updater found react and react-dom offering 19.x. That
+# would have removed ReactDOM.render, which tax-optimizer.src.jsx calls, and
+# broken the page on the next deploy. A PR turns that into a reviewable diff.
+name: Vendor update
+
+on:
+  schedule:
+    - cron: '0 6 * * 1' # Mondays, 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for updates and download
+        run: node tools/update-vendor.mjs
+
+      - name: Build the PR body
+        id: body
+        run: |
+          if [ -f vendor-update-summary.md ]; then
+            {
+              echo 'summary<<PRBODY'
+              echo 'Weekly vendor check found newer versions.'
+              echo ''
+              cat vendor-update-summary.md
+              echo ''
+              echo '### Before merging'
+              echo ''
+              echo 'There are no tests. Load the affected pages against real data and check by hand:'
+              echo ''
+              echo '- **chart.js** — open every chart tab on finance, portfolio and mortgage'
+              echo '- **xlsx** — run a real Excel import in finance *and* the holdings wizard'
+              echo '- **react / react-dom** — the tax page renders and its inputs still drive state'
+              echo '- **pdfjs** — scan a real payslip, both the text-layer and OCR paths'
+              echo ''
+              echo 'A major bump is a breaking change until proven otherwise.'
+              echo 'PRBODY
+            } >> "$GITHUB_OUTPUT"
+          fi
+          rm -f vendor-update-summary.md
+
+      - name: Open a pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: vendor-update
+          title: 'Vendor: weekly dependency update'
+          body: ${{ steps.body.outputs.summary }}
+          commit-message: |
+            Vendor: weekly dependency update
+
+            Opened automatically by .github/workflows/vendor-update.yml.
+            Verify by hand before merging — see the PR body.
+          delete-branch: true
