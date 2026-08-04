@@ -122,6 +122,25 @@ Two things surfaced during verification, both recorded in the commits:
   at the same point — and unlike the other pages this one has neither a getDoc
   timeout nor a localStorage fallback. Both reads are now raced against 10s.
 
+## After batch 5 — commit `b3fda6f`, SW cache v35
+
+`finance.html`, warm — the page the owner reported as slowest to open:
+
+| metric | after batch 3 | after batch 5 |
+|---|---|---|
+| DCL | 1345 | **961** |
+| load | 1617 | **1087** |
+| requests | 24 | 27 |
+| blocking scripts | 2 | **1** (the 1KB loader) |
+
+The Play CDN is gone; `finance.tailwind.css` (198KB) is built ahead of time.
+`body` line-height is 24px, matching the CDN exactly — see the commit for why
+cascade position decided that, and `tools/README.md` for why the link must stay
+at the end of `<head>`.
+
+Coverage check: 0 of the 160 Tailwind utilities used in the page are missing from
+the generated stylesheet (`node tools/check-tailwind-coverage.mjs`).
+
 ### Two findings that are not about our code
 
 - **An Adobe Acrobat Chrome extension** (`efaidnbmnnnibpcajpcglclefindmkaj`)
