@@ -6,6 +6,7 @@ worker/.wrangler/
 
 # Node / Vite — dependencies are installed locally, not committed
 node_modules/
+dist/
 
 # Local backup files — git history is the source of truth
 *.backup

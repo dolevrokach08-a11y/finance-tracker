@@ -1,12 +1,12 @@
 {
-  "name": "ניהול פיננסי אישי",
-  "short_name": "Finance",
-  "description": "מעקב כספי ותיק השקעות",
-  "start_url": "/finance-tracker/index.html",
+  "name": "המעקב — מרכז שליטה פיננסי",
+  "short_name": "המעקב",
+  "description": "תיק השקעות, תזרים, משכנתא ומס במרחב עבודה אחד",
+  "start_url": "/finance-tracker/app.html#/home",
   "scope": "/finance-tracker/",
   "display": "standalone",
-  "background_color": "#0a0a0f",
-  "theme_color": "#00f5d4",
+  "background_color": "#08090c",
+  "theme_color": "#08090c",
   "orientation": "portrait-primary",
   "icons": [
     {

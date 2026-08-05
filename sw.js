@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v39';
+const SHELL_CACHE = 'finance-tracker-v40';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -20,6 +20,16 @@ const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 const SCOPE = new URL('./', self.registration.scope).pathname;
 const PRECACHE = [
   '',
+  'app.html',
+  'app/shell.css',
+  'app/main.js',
+  'app/core/store.js',
+  'app/core/router.js',
+  'app/core/firebase-session.js',
+  'app/modules/home/home.html',
+  'app/modules/home/home.css',
+  'app/modules/home/home.js',
+  'app/modules/home/metrics.js',
   'index.html',
   'login.html',
   'mortgage.html',

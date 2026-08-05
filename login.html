@@ -7,7 +7,7 @@
     <script src="shared/user-storage.js"></script>
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#0f1419">
+    <meta name="theme-color" content="#08090c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Finance">
@@ -180,9 +180,31 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="app/login.css">
 </head>
 <body>
+    <section class="login-story" aria-labelledby="loginStoryTitle">
+        <div class="story-brand">
+            <span class="story-mark">F</span>
+            <span><strong>המעקב</strong><small>FINANCIAL OS</small></span>
+        </div>
+        <div class="story-copy">
+            <p>כל ההחלטות. מרחב אחד.</p>
+            <h2 id="loginStoryTitle">לראות את הכסף שלך<br><em>כתמונה שלמה.</em></h2>
+            <span>תיק השקעות, תזרים, משכנתא ומס — מחוברים למערכת אחת שעוזרת להבין מה קורה עכשיו ומה הצעד הבא.</span>
+        </div>
+        <div class="story-visual" aria-hidden="true">
+            <div class="story-orbit orbit-a"></div>
+            <div class="story-orbit orbit-b"></div>
+            <div class="story-center"><small>NET POSITION</small><strong>CONNECTED</strong></div>
+            <span class="story-node node-a">תיק</span>
+            <span class="story-node node-b">תזרים</span>
+            <span class="story-node node-c">מס</span>
+        </div>
+        <footer><span>PRIVATE BY DESIGN</span><span>01 / 05</span></footer>
+    </section>
     <div class="login-container">
+        <span class="login-kicker">כניסה למרחב האישי</span>
         <h1 class="brand">המעקב הפיננסי</h1>
         <p class="subtitle">תיק השקעות, תשואות והשוואה למדדים — התחבר כדי לגשת למערכת שלך</p>
 
@@ -237,7 +259,7 @@
         // Demo mode button
         document.getElementById('demoBtn').addEventListener('click', () => {
             enterDemoMode();
-            window.location.href = 'index.html';
+            window.location.href = 'app.html#/home';
         });
 
         // תמיד להציג בחירת חשבון (כולל אפשרות להוסיף חשבון אחר)
@@ -259,7 +281,7 @@
                 console.log('User signed in:', user.email);
                 // Bind the plain localStorage keys to this uid BEFORE any page reads them
                 if (window.UserStorage) window.UserStorage.syncToUser(user.uid);
-                window.location.href = 'index.html';
+                window.location.href = 'app.html#/home';
 
             } catch (error) {
                 console.error('Sign in error:', error);

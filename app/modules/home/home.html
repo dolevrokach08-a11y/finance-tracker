@@ -1,0 +1,125 @@
+<div class="home-module">
+    <div class="demo-ribbon" id="demoRibbon" hidden>
+        <i data-lucide="eye"></i>
+        <span>מצב הדגמה פעיל — הנתונים במסך פיקטיביים ולקריאה בלבד</span>
+    </div>
+
+    <section class="home-hero" aria-labelledby="homeHeroTitle">
+        <div class="hero-copy">
+            <p class="hero-eyebrow"><span id="greetingText">ערב טוב</span><i></i><span id="heroSyncLabel">מכין נתונים</span></p>
+            <h2 id="homeHeroTitle">כל הכסף שלך.<br><em>קו אחד ברור.</em></h2>
+            <p class="hero-intro">תיק ההשקעות, התזרים וההתחייבויות מתחברים כאן לתמונה שאפשר להבין — ולפעול לפיה.</p>
+
+            <div class="hero-number-block">
+                <span>הון נטו משוער</span>
+                <div class="hero-number-row">
+                    <strong id="heroNetWorth">—</strong>
+                    <span class="trend-pill" id="heroReturn" hidden><i data-lucide="trending-up"></i><b></b></span>
+                </div>
+            </div>
+
+            <div class="hero-actions">
+                <a href="portfolio.html" data-route="portfolio" class="primary-action">לתיק ההשקעות <i data-lucide="arrow-left"></i></a>
+                <a href="finance.html" data-route="finance" class="text-action">עדכון תזרים</a>
+            </div>
+        </div>
+
+        <div class="wealth-orbit" aria-label="מפת המערכת הפיננסית">
+            <span class="orbit orbit-one" aria-hidden="true"></span>
+            <span class="orbit orbit-two" aria-hidden="true"></span>
+            <span class="orbit orbit-three" aria-hidden="true"></span>
+            <span class="orbit-scan" aria-hidden="true"></span>
+
+            <div class="orbit-core">
+                <small>CONNECTED</small>
+                <strong id="orbitScore">0%</strong>
+                <span>מהתמונה זמינה</span>
+            </div>
+
+            <a class="orbit-node node-portfolio" href="portfolio.html" data-route="portfolio">
+                <i data-lucide="line-chart"></i><span>השקעות</span><strong id="orbitPortfolio">—</strong>
+            </a>
+            <a class="orbit-node node-cashflow" href="finance.html" data-route="finance">
+                <i data-lucide="waves"></i><span>תזרים</span><strong id="orbitCashflow">—</strong>
+            </a>
+            <a class="orbit-node node-mortgage" href="mortgage.html" data-route="mortgage">
+                <i data-lucide="landmark"></i><span>התחייבויות</span><strong id="orbitDebt">—</strong>
+            </a>
+            <a class="orbit-node node-tax" href="tax-optimizer.html" data-route="tax">
+                <i data-lucide="calculator"></i><span>מס</span><strong>READY</strong>
+            </a>
+        </div>
+    </section>
+
+    <section class="pulse-grid" aria-label="מדדים מרכזיים">
+        <article class="pulse-card pulse-featured">
+            <div class="pulse-card-head"><span>תיק השקעות</span><i data-lucide="activity"></i></div>
+            <strong id="portfolioValue">—</strong>
+            <div class="mini-chart-wrap"><canvas id="portfolioSparkline" aria-label="מגמת שווי תיק"></canvas><span id="chartEmpty">היסטוריה תופיע לאחר שתי נקודות שווי</span></div>
+            <footer><span>תשואה כוללת</span><b id="portfolioReturn">—</b></footer>
+        </article>
+
+        <article class="pulse-card">
+            <div class="pulse-card-head"><span>מרווח חודשי</span><i data-lucide="between-horizontal-start"></i></div>
+            <strong id="monthlyMargin">—</strong>
+            <div class="metric-scale"><span id="marginScale"></span></div>
+            <footer><span>הכנסה קבועה</span><b id="monthlyIncome">—</b></footer>
+        </article>
+
+        <article class="pulse-card">
+            <div class="pulse-card-head"><span>מזומן בתיק</span><i data-lucide="circle-dollar-sign"></i></div>
+            <strong id="cashValue">—</strong>
+            <p id="cashShare">אין מספיק נתונים לחישוב</p>
+            <footer><span>נזילות מתוך התיק</span><b id="cashShareValue">—</b></footer>
+        </article>
+
+        <article class="pulse-card">
+            <div class="pulse-card-head"><span>יחס החזר</span><i data-lucide="gauge"></i></div>
+            <strong id="debtRatio">—</strong>
+            <p>תשלום משכנתא מתוך ההכנסה הקבועה</p>
+            <footer><span>החזר חודשי</span><b id="mortgagePayment">—</b></footer>
+        </article>
+    </section>
+
+    <section class="home-lower-grid">
+        <article class="insight-card" id="insightCard">
+            <div class="section-heading">
+                <div><span>THE NEXT MOVE</span><h3>המהלך הבא שלך</h3></div>
+                <span class="insight-spark"><i data-lucide="sparkles"></i></span>
+            </div>
+            <div class="insight-body">
+                <span class="insight-eyebrow" id="insightEyebrow">טוען תמונה</span>
+                <h4 id="insightTitle">מחשב את נקודת המיקוד</h4>
+                <p id="insightBody">מיד נחבר בין המדדים ונציג פעולה אפשרית להמשך.</p>
+                <a href="portfolio.html" data-route="portfolio" id="insightAction">לפתיחת הכלי <i data-lucide="arrow-left"></i></a>
+            </div>
+        </article>
+
+        <article class="activity-card">
+            <div class="section-heading">
+                <div><span>RECENT SIGNALS</span><h3>פעילות אחרונה</h3></div>
+                <a href="portfolio.html" data-route="portfolio">הכל</a>
+            </div>
+            <div class="activity-list" id="activityList">
+                <div class="empty-list"><i data-lucide="radio"></i><span>פעילות בתיק תופיע כאן</span></div>
+            </div>
+        </article>
+
+        <article class="allocation-card">
+            <div class="section-heading">
+                <div><span>CAPITAL MIX</span><h3>הרכב ההון</h3></div>
+                <span class="allocation-total" id="allocationTotal">100%</span>
+            </div>
+            <div class="allocation-bar" id="allocationBar" aria-label="התפלגות התיק"></div>
+            <div class="allocation-list" id="allocationList">
+                <div class="empty-list"><span>הקצאה תופיע לאחר הוספת נכסים</span></div>
+            </div>
+        </article>
+    </section>
+
+    <footer class="home-footer">
+        <span><i></i> נתונים פרטיים ומבודדים לפי משתמש</span>
+        <span id="lastCloudUpdate">המערכת מכינה את סביבת העבודה</span>
+    </footer>
+</div>
+

@@ -1,0 +1,167 @@
+function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sum(items, selector) {
+    return Array.isArray(items) ? items.reduce((total, item) => total + number(selector(item)), 0) : 0;
+}
+
+function rateFor(currency, rates) {
+    if (currency === 'USD') return number(rates?.USD) || 3.7;
+    if (currency === 'EUR') return number(rates?.EUR) || 4.1;
+    return 1;
+}
+
+function portfolioMetrics(portfolio, cachedTwr) {
+    if (!portfolio) return { total: 0, invested: 0, cash: 0, cost: 0, returnPct: null, history: [], allocation: [] };
+    const rates = portfolio.rates || {};
+    let stocks = 0;
+    let bonds = 0;
+    let cost = 0;
+
+    (portfolio.holdings || []).forEach(holding => {
+        const rate = rateFor(holding.currency, rates);
+        const units = number(holding.shares);
+        stocks += units * number(holding.currentPrice) * rate;
+        cost += units * number(holding.costBasis) * rate;
+    });
+    (portfolio.bonds || []).forEach(bond => {
+        const rate = rateFor(bond.currency, rates);
+        const units = number(bond.units);
+        bonds += units * number(bond.currentPrice) * rate;
+        cost += units * number(bond.costBasis) * rate;
+    });
+
+    const cash = number(portfolio.cash?.ILS)
+        + number(portfolio.cash?.USD) * rateFor('USD', rates)
+        + number(portfolio.cash?.EUR) * rateFor('EUR', rates);
+    const invested = stocks + bonds;
+    const total = invested + cash;
+
+    let returnPct = cost > 0 ? ((invested - cost) / cost) * 100 : null;
+    if (cachedTwr && typeof cachedTwr.total === 'number' && Date.now() - number(cachedTwr.timestamp) < 86_400_000) {
+        returnPct = cachedTwr.total;
+    }
+
+    const snapshots = Array.isArray(portfolio.snapshots) ? portfolio.snapshots : [];
+    const history = snapshots
+        .filter(item => item?.date)
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map(item => number(item.totalValue ?? item.value ?? (number(item.value_before_flow) + number(item.cash_flow))))
+        .filter(value => value > 0)
+        .slice(-60);
+
+    const allocation = [
+        { id: 'stocks', label: 'מניות וקרנות', value: stocks, color: '#c9ff47' },
+        { id: 'bonds', label: 'אג״ח', value: bonds, color: '#6c8cff' },
+        { id: 'cash', label: 'מזומן', value: cash, color: '#ad85ff' },
+    ].filter(item => item.value > 0);
+
+    return { total, invested, cash, cost, returnPct, history, allocation };
+}
+
+function financeMetrics(finance) {
+    if (!finance) return { income: 0, expenses: 0, freeCash: 0, assets: 0, liabilities: 0, netWorth: 0 };
+    const income = sum(finance.fixedIncomes, item => item.amount);
+    const expenses = sum(finance.fixedExpenses, item => item.amount);
+    const assets = sum(finance.netWorthAssets, item => item.value);
+    const liabilities = sum(finance.netWorthLiabilities, item => item.value);
+    return { income, expenses, freeCash: income - expenses, assets, liabilities, netWorth: assets - liabilities };
+}
+
+function mortgageMetrics(mortgage) {
+    if (!mortgage) return { balance: 0, monthlyPayment: 0 };
+    const routes = Array.isArray(mortgage.routes) ? mortgage.routes : Array.isArray(mortgage.tracks) ? mortgage.tracks : [];
+    const balance = sum(routes, item => item.balance ?? item.amount ?? item.principal);
+    const monthlyPayment = number(mortgage.monthlyPayment ?? mortgage.monthly_payment ?? mortgage.summary?.monthlyPayment)
+        || sum(routes, item => item.monthlyPayment ?? item.payment);
+    return { balance, monthlyPayment };
+}
+
+function recentActivity(portfolio) {
+    if (!portfolio) return [];
+    const rates = portfolio.rates || {};
+    const toIls = item => number(item.amount) * rateFor(item.currency || 'ILS', rates);
+    return [
+        ...(portfolio.purchases || []).map(item => ({ type: 'buy', date: item.date, label: `קנייה · ${item.symbol || 'נייר ערך'}`, amount: -toIls(item) })),
+        ...(portfolio.sales || []).map(item => ({ type: 'sell', date: item.date, label: `מכירה · ${item.symbol || 'נייר ערך'}`, amount: toIls(item) })),
+        ...(portfolio.deposits || []).map(item => ({ type: 'deposit', date: item.date, label: 'הפקדה לתיק', amount: toIls(item) })),
+        ...(portfolio.withdrawals || []).map(item => ({ type: 'withdraw', date: item.date, label: 'משיכה מהתיק', amount: -toIls(item) })),
+    ]
+        .filter(item => item.date && Number.isFinite(item.amount))
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 5);
+}
+
+function buildInsight({ finance, portfolio, mortgage }) {
+    if (!finance.income && !portfolio.total) {
+        return {
+            tone: 'neutral',
+            eyebrow: 'הצעד הראשון',
+            title: 'בנה תמונה פיננסית אמיתית',
+            body: 'הוסף תיק השקעות או חודש ראשון של הכנסות והוצאות — מכאן המערכת תחבר את כל המדדים עבורך.',
+            route: 'portfolio',
+            action: 'להתחלת התיק',
+        };
+    }
+    if (finance.freeCash < 0) {
+        return {
+            tone: 'warning',
+            eyebrow: 'דורש תשומת לב',
+            title: 'ההוצאות הקבועות גבוהות מההכנסה',
+            body: 'כדאי לפתוח את מסך התזרים ולזהות אילו התחייבויות אפשר לצמצם לפני החלטת השקעה נוספת.',
+            route: 'finance',
+            action: 'לניתוח התזרים',
+        };
+    }
+    if (finance.income && mortgage.monthlyPayment / finance.income > .35) {
+        return {
+            tone: 'warning',
+            eyebrow: 'יחס החזר',
+            title: 'המשכנתא תופסת חלק משמעותי מההכנסה',
+            body: 'הרץ מבחן לחץ על התמהיל ובדוק איך שינוי ריבית משפיע על מרווח הביטחון החודשי.',
+            route: 'mortgage',
+            action: 'לבדיקת תרחיש',
+        };
+    }
+    if (portfolio.total && portfolio.cash / portfolio.total > .2) {
+        return {
+            tone: 'opportunity',
+            eyebrow: 'הזדמנות',
+            title: 'חלק גדול מהתיק נמצא במזומן',
+            body: 'ייתכן שזה מכוון. אם לא, בדוק את ההקצאה מול יעדי התיק וראה היכן נוצר הפער.',
+            route: 'portfolio',
+            action: 'לבדיקת ההקצאה',
+        };
+    }
+    return {
+        tone: 'positive',
+        eyebrow: 'התמונה יציבה',
+        title: 'יש לך מרווח חיובי להחלטה הבאה',
+        body: 'התזרים הקבוע חיובי. עכשיו אפשר לבחון אם להפנות את העודף ליעד, לחוב או להגדלת ההשקעה.',
+        route: 'finance',
+        action: 'לתכנון העודף',
+    };
+}
+
+export function deriveMetrics(data = {}) {
+    const portfolio = portfolioMetrics(data.portfolio, data.cachedTwr);
+    const finance = financeMetrics(data.finance);
+    const mortgage = mortgageMetrics(data.mortgage);
+    const combinedNetWorth = finance.netWorth + portfolio.total;
+    const debtRatio = finance.income > 0 ? (mortgage.monthlyPayment / finance.income) * 100 : null;
+    const hasData = Boolean(data.finance || data.portfolio || data.mortgage);
+
+    const result = {
+        hasData,
+        portfolio,
+        finance,
+        mortgage,
+        combinedNetWorth,
+        debtRatio,
+        recent: recentActivity(data.portfolio),
+    };
+    result.insight = buildInsight(result);
+    return result;
+}
