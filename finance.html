@@ -1272,11 +1272,19 @@
                                 <option value="dupes">כפילויות בלבד</option>
                                 <option value="included">מסומנים בלבד</option>
                                 <option value="excluded">לא מסומנים בלבד</option>
+                                <option value="othermonth">חודש חיוב אחר בלבד</option>
                             </select>
                             <button onclick="ipvBulkAction('selectAll')" class="btn bg-gray-600 text-white py-1 px-3 rounded text-sm">סמן הכל</button>
                             <button onclick="ipvBulkAction('deselectAll')" class="btn bg-gray-600 text-white py-1 px-3 rounded text-sm">נקה הכל</button>
                             <button onclick="ipvBulkAction('skipDupes')" class="btn bg-yellow-600 text-white py-1 px-3 rounded text-sm">דלג על כפילויות</button>
+                            <!-- Deliberately inline, matching the amber used to flag an
+                                 off-cycle row: the button clears exactly that flag. -->
+                            <button onclick="ipvBulkAction('monthByDate')" class="btn text-white py-1 px-3 rounded text-sm" style="background: hsl(28,80%,45%);" title="מציב לכל שורה מוצגת את חודש החיוב שנגזר מתאריך העסקה (מחזור 10 ל-10)">📅 שייך לפי תאריך</button>
                         </div>
+
+                        <!-- Shown when a scan straddles the 10th: part of the batch belongs to
+                             the next cycle, and used to require a second manual entry pass. -->
+                        <div id="ipv-month-note" class="text-sm mb-3" style="display: none; padding: 8px 10px; border-radius: 8px; background: hsla(28,90%,55%,0.12); color: hsl(28,90%,60%);"></div>
 
                         <div style="overflow-x: auto; max-height: 60vh; overflow-y: auto; border: 1px solid hsla(0,0%,100%,0.1); border-radius: 8px;">
                             <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
@@ -1288,6 +1296,7 @@
                                         <th style="padding: 8px; text-align: right; width: 100px;">סכום</th>
                                         <th style="padding: 8px; text-align: right; width: 150px;">קטגוריה</th>
                                         <th style="padding: 8px; text-align: right; width: 140px;">תאריך עסקה</th>
+                                        <th style="padding: 8px; text-align: right; width: 150px;" title="לאיזה חודש תזרים (מחזור 10 ל-10) תיכנס השורה. ברירת המחדל היא חודש הייבוא; שורות שהתאריך שלהן שייך למחזור אחר מסומנות בכתום">חודש חיוב</th>
                                         <th style="padding: 8px; text-align: center; width: 130px;" title="הכנסה: שייך לחודש הקבלה • הוצאה: בדיעבד לחודש קודם">שיוך צבירה</th>
                                         <th style="padding: 8px; text-align: right; width: 90px;">סטטוס</th>
                                     </tr>
@@ -3175,6 +3184,20 @@
             return dateStr.slice(0, 7);
         }
 
+        // Cash-flow months are 10th→10th cycles, labelled by the month the cycle ENDS
+        // in: a charge on the 5th belongs to the cycle closing this month, one on the
+        // 12th already rolled into next month's. So every scan taken around the 10th
+        // straddles two months — which is why the import preview lets each row carry
+        // its own billing month instead of filing the whole batch into one.
+        const CYCLE_CUTOFF_DAY = 10;
+
+        function cycleMonthFromDate(dateStr) {
+            const base = monthFromDate(dateStr);
+            if (!base) return null;
+            const day = Number(dateStr.slice(8, 10));
+            return day <= CYCLE_CUTOFF_DAY ? base : monthPlusOne(base);
+        }
+
         // Resolves whether an income transaction is flagged "current month" (vs. default previous month).
         // Priority:
         //   1) own explicit flag wins
@@ -4501,17 +4524,36 @@
         // Candidate shape: { type, desc, amt, cat, transactionDate?, earner?, titheExempt?, _included, _isDuplicate, _dupReason? }
         let importPreviewState = null; // { candidates, selectedMonth, onConfirmed, fileLabel }
 
+        // Duplicate check is per row, against the month that row is actually filed
+        // into — moving a row to another billing month has to re-run it, otherwise a
+        // charge that is a duplicate in August looks like one in September too.
+        function markImportPreviewDuplicate(c) {
+            const wasDuplicate = c._isDuplicate;
+            c._isDuplicate = data.transactions.some(t =>
+                t.month === c.month &&
+                t.type === c.type &&
+                t.desc === c.desc &&
+                Math.abs((t.amt || 0) - (c.amt || 0)) < 0.01
+            );
+            // A row that newly becomes a duplicate — typically one just moved into the
+            // month where that charge already sits — falls under the same "don't
+            // re-import duplicates" default as on first load, otherwise moving rows by
+            // date quietly re-enters charges that are already there. Deliberately not
+            // symmetric: a row that stops being a duplicate is left unchecked, since
+            // nothing should get selected for import behind the user's back.
+            if (c._isDuplicate && !wasDuplicate) c._included = false;
+        }
+
         function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll }) {
-            // Mark duplicates against existing transactions in same month
-            const existingInMonth = data.transactions.filter(t => t.month === selectedMonth);
             for (const c of candidates) {
+                // Every row carries its own billing month. It defaults to the month
+                // picked for the import, so a batch sitting well inside one cycle
+                // behaves exactly as before; rows whose transaction date falls on the
+                // far side of the 10th are flagged and can be moved in one click.
+                if (!c.month) c.month = selectedMonth;
+                c._dateMonth = cycleMonthFromDate(c.transactionDate);
                 c._included = true;
-                c._isDuplicate = existingInMonth.some(t =>
-                    t.type === c.type &&
-                    t.desc === c.desc &&
-                    Math.abs((t.amt || 0) - (c.amt || 0)) < 0.01
-                );
-                if (c._isDuplicate) c._included = false; // default: don't re-import dupes
+                markImportPreviewDuplicate(c); // owns the "don't re-import dupes" default
             }
             importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll };
             const titleEl = document.getElementById('import-preview-title');
@@ -4561,6 +4603,7 @@
                 if (filter === 'dupes' && !c._isDuplicate) return false;
                 if (filter === 'included' && !c._included) return false;
                 if (filter === 'excluded' && c._included) return false;
+                if (filter === 'othermonth' && c.month === importPreviewState.selectedMonth) return false;
                 return true;
             });
         }
@@ -4581,10 +4624,24 @@
             document.getElementById('ipv-stat-expense').textContent = expense;
             document.getElementById('ipv-confirm-btn').textContent = `אישור והכנס ${included} עסקאות`;
 
+            // Nudge about rows the transaction date says belong to the other cycle —
+            // the whole point of the per-row month, and easy to miss in a long list.
+            const note = document.getElementById('ipv-month-note');
+            if (note) {
+                const offCycle = candidates.filter(c => c._dateMonth && c._dateMonth !== c.month);
+                const otherMonths = [...new Set(candidates.map(c => c.month))].filter(m => m !== importPreviewState.selectedMonth);
+                const parts = [];
+                if (offCycle.length) parts.push(`⚠️ ${offCycle.length} שורות משויכות לחודש שלא תואם את תאריך העסקה שלהן (מחזור 10 ל-10). "📅 שייך לפי תאריך" יתקן אותן.`);
+                if (otherMonths.length) parts.push(`השורות מפוצלות בין ${otherMonths.length + 1} חודשי חיוב: ${[importPreviewState.selectedMonth, ...otherMonths].map(getMonthName).join(' · ')}.`);
+                note.innerHTML = parts.join('<br>');
+                note.style.display = parts.length ? '' : 'none';
+            }
+
             const filtered = getFilteredImportPreviewCandidates();
             const tbody = document.getElementById('ipv-tbody');
             const expenseCats = data.expenseCategories || [];
             const incomeCats = data.incomeCategories || [];
+            const monthChoices = getMonths();
 
             const rows = filtered.map(({ c, i }) => {
                 const cats = c.type === 'income' ? incomeCats : expenseCats;
@@ -4594,6 +4651,18 @@
                     : `<span style="background: hsla(142,60%,50%,0.15); color: hsl(142,60%,50%); padding: 2px 6px; border-radius: 4px; font-size: 11px;">חדש</span>`;
                 const typeIcon = c.type === 'income' ? '💚' : '🔴';
                 const rowOpacity = c._included ? '1' : '0.5';
+                const rowMonth = c.month || importPreviewState.selectedMonth;
+                const monthList = monthChoices.some(m => m.val === rowMonth)
+                    ? monthChoices
+                    : [{ val: rowMonth, txt: getMonthName(rowMonth) }, ...monthChoices];
+                const monthOpts = monthList.map(m => `<option value="${m.val}" ${m.val === rowMonth ? 'selected' : ''}>${escapeHtml(m.txt)}</option>`).join('');
+                const monthMismatch = c._dateMonth && c._dateMonth !== rowMonth;
+                const monthStyle = monthMismatch
+                    ? 'border: 1px solid hsl(28,90%,55%); background: hsla(28,90%,55%,0.12);'
+                    : 'border: 1px solid hsla(0,0%,100%,0.1); background: hsla(0,0%,100%,0.05);';
+                const monthTitle = monthMismatch
+                    ? `לפי תאריך העסקה השורה שייכת ל${getMonthName(c._dateMonth)}`
+                    : 'חודש התזרים שאליו תיכנס השורה';
                 return `<tr data-i="${i}" style="opacity: ${rowOpacity}; border-bottom: 1px solid hsla(0,0%,100%,0.06);">
                     <td style="text-align: center; padding: 6px;"><input type="checkbox" data-i="${i}" data-f="_included" ${c._included ? 'checked' : ''} onchange="ipvFieldChange(event)"></td>
                     <td style="text-align: center;">${typeIcon}</td>
@@ -4601,6 +4670,7 @@
                     <td style="padding: 4px;"><input type="number" step="0.01" data-i="${i}" data-f="amt" value="${c.amt}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
                     <td style="padding: 4px;"><select data-i="${i}" data-f="cat" onchange="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;">${catOpts}</select></td>
                     <td style="padding: 4px;"><input type="date" data-i="${i}" data-f="transactionDate" value="${c.transactionDate || ''}" oninput="ipvFieldChange(event)" style="width: 100%; padding: 4px 6px; background: hsla(0,0%,100%,0.05); border: 1px solid hsla(0,0%,100%,0.1); border-radius: 4px; color: inherit;"></td>
+                    <td style="padding: 4px;"><select data-i="${i}" data-f="month" onchange="ipvFieldChange(event)" title="${escapeHtml(monthTitle)}" style="width: 100%; padding: 4px 6px; border-radius: 4px; color: inherit; ${monthStyle}">${monthOpts}</select></td>
                     <td style="padding: 4px; text-align: center;">${
                         c.type === 'income'
                         ? `<label style="display:flex;align-items:center;gap:4px;justify-content:center;cursor:pointer;font-size:11px;" title="ההכנסה שייכת לחודש שבו התקבלה (ברירת מחדל: חודש קודם)"><input type="checkbox" data-i="${i}" data-f="assignToCurrentMonth" ${c.assignToCurrentMonth ? 'checked' : ''} onchange="ipvFieldChange(event)"><span>חודש הקבלה</span></label>`
@@ -4611,7 +4681,7 @@
             });
             tbody.innerHTML = rows.length
                 ? rows.join('')
-                : '<tr><td colspan="8" style="padding: 20px; text-align: center; color: var(--text-muted);">אין שורות שתואמות לפילטר</td></tr>';
+                : '<tr><td colspan="9" style="padding: 20px; text-align: center; color: var(--text-muted);">אין שורות שתואמות לפילטר</td></tr>';
         }
 
         function ipvFieldChange(event) {
@@ -4634,6 +4704,14 @@
                 c.amt = parseFloat(el.value) || 0;
             } else if (f === 'transactionDate') {
                 c.transactionDate = el.value || null;
+                // A corrected date can move the row to the other side of the 10th.
+                c._dateMonth = cycleMonthFromDate(c.transactionDate);
+            } else if (f === 'month') {
+                c.month = el.value;
+                markImportPreviewDuplicate(c);
+                // Both the row's duplicate badge and the split-months note depend on
+                // the new month, so re-render rather than patching cells by hand.
+                renderImportPreviewTable();
             } else if (f === 'assignToCurrentMonth' || f === 'assignToPreviousMonth') {
                 c[f] = el.checked;
             } else {
@@ -4650,6 +4728,20 @@
                 filtered.forEach(({ c }) => { c._included = false; });
             } else if (action === 'skipDupes') {
                 importPreviewState.candidates.forEach(c => { if (c._isDuplicate) c._included = false; });
+            } else if (action === 'monthByDate') {
+                // File each visible row into the cycle its transaction date falls in.
+                // Applies to the filtered rows only, so "חודש חיוב אחר בלבד" + this
+                // button fixes exactly the spillover without touching the rest.
+                let moved = 0;
+                filtered.forEach(({ c }) => {
+                    if (!c._dateMonth || c._dateMonth === c.month) return;
+                    c.month = c._dateMonth;
+                    markImportPreviewDuplicate(c);
+                    moved++;
+                });
+                notify(moved
+                    ? `📅 ${moved} שורות שויכו לחודש החיוב לפי תאריך העסקה`
+                    : 'כל השורות המוצגות כבר משויכות לפי תאריך העסקה');
             }
             renderImportPreviewTable();
         }
@@ -4687,7 +4779,9 @@
                     desc: (c.desc || '').trim(),
                     amt: c.amt,
                     cat: c.cat,
-                    month: selectedMonth,
+                    // Per-row, not the batch month: a scan taken around the 10th is
+                    // split across two 10th→10th cycles and both halves go in at once.
+                    month: c.month || selectedMonth,
                     time: new Date().toISOString()
                 };
                 if (c.transactionDate) tx.transactionDate = c.transactionDate;
@@ -5239,14 +5333,24 @@
             updateTithe();
 
             if (incomeCount > 0) {
+                // Both follow-up dialogs are scoped to a single month, and rows can now
+                // be filed into more than one. Drive them from a month that actually
+                // received income (the batch month when it did), and say so when income
+                // landed elsewhere too — those rows are tagged from the month view.
+                const incomeMonths = [...new Set(txs.filter(t => t.type === 'income').map(t => t.month))];
+                const dialogMonth = incomeMonths.includes(selectedMonth) ? selectedMonth : incomeMonths[0];
+                const spillMonths = incomeMonths.filter(m => m !== dialogMonth);
                 setTimeout(() => {
                     if (isTitheEnabled() && confirm(`נוספו ${incomeCount} הכנסות.\n\nהאם יש ביניהן הכנסות שפטורות ממעשר?\nלחץ OK כדי לסמן חלק מההכנסות כפטורות.`)) {
-                        showTitheExemptDialog(selectedMonth);
+                        showTitheExemptDialog(dialogMonth);
                     }
                     setTimeout(() => {
-                        const untagged = data.transactions.filter(t => t.month === selectedMonth && t.type === 'income' && !t.earner);
-                        if (untagged.length > 0) showEarnerDialog(selectedMonth);
+                        const untagged = data.transactions.filter(t => t.month === dialogMonth && t.type === 'income' && !t.earner);
+                        if (untagged.length > 0) showEarnerDialog(dialogMonth);
                         else notify(`✅ נוספו ${txs.length} תנועות (${incomeCount} הכנסות, ${expenseCount} הוצאות)${skippedCount > 0 ? `, ${skippedCount} דולגו` : ''}`);
+                        if (spillMonths.length) {
+                            setTimeout(() => notify(`ℹ️ יש גם הכנסות ב-${spillMonths.map(getMonthName).join(', ')} — סמן שם מעשר/משתכר מתוך מסך החודש`), 3200);
+                        }
                     }, 300);
                 }, 500);
             } else {
