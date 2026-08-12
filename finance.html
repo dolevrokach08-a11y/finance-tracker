@@ -141,6 +141,15 @@
          replaced it is at the END of <head> on purpose — see the note there. -->
     <style>
         /* ==================== LOVABLE BLOOMBERG DARK THEME ==================== */
+
+        /* Tells the browser which palette to render native controls in. Without it
+           the UA assumes light: a <select> dropdown opens as a white popup while its
+           options inherit the page's light-on-dark text, leaving the list unreadable
+           until you highlight a row. Styling `option` would only patch selects — this
+           covers the date picker, checkboxes and scrollbars in the same stroke. */
+        :root, [data-theme="dark"] { color-scheme: dark; }
+        [data-theme="light"] { color-scheme: light; }
+
         :root {
             /* Dark backgrounds — Bloomberg/Terminal inspired */
             --bg-base: hsl(220, 20%, 7%);
