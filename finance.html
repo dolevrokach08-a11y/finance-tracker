@@ -4097,6 +4097,35 @@
 
         
         // ========== Firebase Save/Load Functionality ==========
+        const FIREBASE_PROJECT_ID = 'finance-tracker-21e18';
+
+        // Reads only the bookkeeping fields of the cloud doc, over the Firestore REST
+        // API instead of the SDK. The two fail independently: when the SDK's stream is
+        // wedged getDoc never settles, while plain HTTPS to the same backend keeps
+        // working — which is why writes still succeed while the conflict check hangs.
+        // Returns the meta fields, or null when the document doesn't exist yet.
+        async function readCloudMetaViaRest(user) {
+            const token = await user.getIdToken();
+            const fields = ['lastModified', 'lastWriterId', 'lastWriterLabel'];
+            const mask = fields.map(f => `mask.fieldPaths=${f}`).join('&');
+            const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}` +
+                        `/databases/(default)/documents/users/${user.uid}/finance/data?${mask}`;
+            const res = await Promise.race([
+                fetch(url, { headers: { Authorization: `Bearer ${token}` } }),
+                new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('rest conflict-check timeout')), 8000))
+            ]);
+            if (res.status === 404) return null; // nothing in the cloud yet
+            if (!res.ok) throw new Error('REST ' + res.status);
+            const body = await res.json();
+            const out = {};
+            for (const f of fields) {
+                const v = body.fields && body.fields[f];
+                if (v && typeof v.stringValue === 'string') out[f] = v.stringValue;
+            }
+            return out;
+        }
+
         async function saveToFirebase(forceOverwrite = false, allowEmptyOverwrite = false) {
             if (_isDemoMode) {
                 notify('מצב הדגמה - השינויים לא נשמרים');
@@ -4168,13 +4197,47 @@
                     // 'syncing'`, and nothing ever syncs again with no error shown.
                     // loadFromFirebase() has always raced a timeout for this reason;
                     // this read needs the same guard.
-                    const cloudDoc = await Promise.race([
-                        getDoc(userDocRef),
-                        new Promise((_, reject) =>
-                            setTimeout(() => reject(new Error('conflict-check timeout')), 8000))
-                    ]);
-                    if (cloudDoc.exists()) {
-                        const cloudData = cloudDoc.data() || {};
+                    let cloudData = null;   // the cloud doc's fields, null when it has none
+                    let cloudKnown = true;  // false once every way of reading it has failed
+
+                    try {
+                        const cloudDoc = await Promise.race([
+                            getDoc(userDocRef),
+                            new Promise((_, reject) =>
+                                setTimeout(() => reject(new Error('conflict-check timeout')), 8000))
+                        ]);
+                        cloudData = cloudDoc.exists() ? (cloudDoc.data() || {}) : null;
+                    } catch (readErr) {
+                        // Letting this throw was a dead end: it skipped setDoc entirely,
+                        // so once the SDK read started hanging EVERY save failed on this
+                        // line, the data piled up in localStorage, and the sync button
+                        // just re-entered the same stall — no way out from the UI. The
+                        // REST read doesn't share the stuck stream, so try it first.
+                        console.warn('conflict check via SDK failed, trying REST:', readErr && readErr.message);
+                        try {
+                            cloudData = await readCloudMetaViaRest(currentUser);
+                        } catch (restErr) {
+                            console.warn('REST conflict check failed too:', restErr && restErr.message);
+                            cloudKnown = false;
+                        }
+                    }
+
+                    if (!cloudKnown) {
+                        // Refusing to save is not the cautious choice here — it
+                        // guarantees the change exists in one browser only. Ask instead.
+                        const saveAnyway = confirm(
+                            '⚠️ לא הצלחתי לקרוא את מצב הנתונים בענן.\n\n' +
+                            'השמירה עצמה כנראה תעבוד, אבל אי אפשר לוודא שמכשיר אחר לא עדכן בינתיים.\n\n' +
+                            '• לחץ OK כדי לשמור לענן בכל זאת\n' +
+                            '• לחץ Cancel כדי להישאר עם שמירה מקומית בלבד'
+                        );
+                        if (!saveAnyway) {
+                            syncStatus = 'error';
+                            updateSyncWidget();
+                            notify('⚠️ לא נשמר בענן - הנתונים שמורים מקומית');
+                            return false;
+                        }
+                    } else if (cloudData) {
                         const currentCloudModified = cloudData.lastModified;
                         const neverLoaded = !cloudLastModified;
                         const cloudIsNewer = currentCloudModified && cloudLastModified &&
