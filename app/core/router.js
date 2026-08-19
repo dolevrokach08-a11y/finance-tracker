@@ -54,7 +54,7 @@ export class HtmlModuleRouter {
             document.body.classList.add('is-leaving');
             document.querySelectorAll(`[data-route="${name}"]`).forEach(node => node.classList.add('is-leaving'));
             this.onRouteChange?.(route, { leaving: true });
-            window.setTimeout(() => window.location.assign(route.legacyUrl), 140);
+            window.location.assign(route.legacyUrl);
             return;
         }
 

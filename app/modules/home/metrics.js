@@ -70,12 +70,37 @@ function financeMetrics(finance) {
     return { income, expenses, freeCash: income - expenses, assets, liabilities, netWorth: assets - liabilities };
 }
 
+// Standard annuity payment — mirrors pmt() in mortgage.html so the home card
+// and the mortgage page cannot disagree about the same tranche.
+function tranchePayment(tranche) {
+    const principal = number(tranche.principal ?? tranche.balance ?? tranche.amount);
+    const months = number(tranche.months);
+    if (!(principal > 0) || !(months > 0)) return 0;
+    const monthlyRate = number(tranche.rate) / 12 / 100;
+    if (!(monthlyRate > 0)) return principal / months;
+    const growth = Math.pow(1 + monthlyRate, months);
+    return principal * monthlyRate * growth / (growth - 1);
+}
+
 function mortgageMetrics(mortgage) {
     if (!mortgage) return { balance: 0, monthlyPayment: 0 };
-    const routes = Array.isArray(mortgage.routes) ? mortgage.routes : Array.isArray(mortgage.tracks) ? mortgage.tracks : [];
-    const balance = sum(routes, item => item.balance ?? item.amount ?? item.principal);
-    const monthlyPayment = number(mortgage.monthlyPayment ?? mortgage.monthly_payment ?? mortgage.summary?.monthlyPayment)
-        || sum(routes, item => item.monthlyPayment ?? item.payment);
+
+    // Two different shapes arrive here. mortgage.html publishes a flat summary
+    // under localStorage 'mortgageData' (remainingBalance / loanAmount /
+    // monthlyPayment), while 'mortgageState' and the demo generator carry the
+    // tranche list instead. Reading only routes/tracks — which neither shape
+    // has — is why this card reported a zero balance for every account.
+    const tranches = Array.isArray(mortgage.tranches) ? mortgage.tranches
+        : Array.isArray(mortgage.routes) ? mortgage.routes
+        : Array.isArray(mortgage.tracks) ? mortgage.tracks
+        : [];
+
+    const balance = number(mortgage.remainingBalance ?? mortgage.loanAmount)
+        || sum(tranches, item => item.balance ?? item.principal ?? item.amount);
+
+    const monthlyPayment = number(mortgage.monthlyPayment ?? mortgage.summary?.monthlyPayment)
+        || sum(tranches, tranchePayment);
+
     return { balance, monthlyPayment };
 }
 

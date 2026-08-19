@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v40';
+const SHELL_CACHE = 'finance-tracker-v41';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -183,6 +183,7 @@ self.addEventListener('fetch', event => {
   if (request.method !== 'GET') return; // never mediate writes
 
   const url = new URL(request.url);
+  if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return;
   if (NEVER_INTERCEPT.some(host => url.hostname.includes(host))) return;
 
   // HTML navigations stay network-first on purpose. All of this app's logic

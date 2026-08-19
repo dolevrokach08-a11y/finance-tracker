@@ -236,15 +236,6 @@
             border-color: var(--loss);
         }
 
-        .loading-screen {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            color: var(--accent);
-            font-size: 1.2rem;
-        }
-
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -634,6 +625,8 @@
             .feature-badges { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
+    <link rel="stylesheet" href="shared/product-loader.css">
+    <script src="shared/product-loader.js" defer></script>
 </head>
 <body>
     <script>
@@ -662,8 +655,21 @@
             if (btn && document.documentElement.getAttribute('data-theme') === 'light') btn.textContent = '☀️';
         });
     </script>
-    <div class="loading-screen" id="loadingScreen">
-        טוען... 🔄
+    <div class="loading-screen product-boot-screen" id="loadingScreen" data-boot-module="home">
+        <div class="product-boot-grid" aria-hidden="true"></div>
+        <div class="product-boot-frame" role="status" aria-live="polite">
+            <header class="product-boot-header">
+                <div class="product-boot-brand"><span>F</span><div><strong>המעקב</strong><small>FINANCIAL OS</small></div></div>
+                <div class="product-boot-module"><span>CORE 00</span><strong>HOME</strong></div>
+            </header>
+            <section class="product-boot-stage">
+                <div class="product-boot-orbit" aria-hidden="true"><i></i><i></i><i></i><b>00</b></div>
+                <div class="product-boot-copy"><span>FINANCIAL OS / CONNECT</span><strong>מחבר את מרחב ההחלטות</strong><small>מכין תמונת מצב מאוחדת מכל המודולים שלך.</small></div>
+            </section>
+            <div class="product-boot-progress" aria-hidden="true"><i></i></div>
+            <footer class="product-boot-signals" aria-label="שלבי טעינה"><span>IDENTITY <i></i></span><span>MODULES <i></i></span><span>OVERVIEW <i></i></span></footer>
+        </div>
+        <div class="product-boot-footnote"><span>ONE FINANCIAL SYSTEM</span><span>SECURE MODULE TRANSITION</span></div>
     </div>
 
     <div class="container" id="mainContainer" style="display: none;">
@@ -868,7 +874,7 @@
 
     <script type="module">
         import { auth, signOut, onAuthStateChanged, db, doc, getDoc } from './firebase-config.js';
-        import { isDemoMode, enterDemoMode, exitDemoMode, getDemoUser } from './demo-data.js';
+        import { isDemoMode, enterDemoMode, exitDemoMode, ensureDemoStorageSandbox, getDemoUser } from './demo-data.js';
         import { SyncBus } from './shared/sync-bus.js';
         import { injectNav, injectDemoBanner } from './shared/nav.js';
         injectNav('index');
@@ -1374,6 +1380,7 @@
 
         // Check demo mode first
         if (isDemoMode()) {
+            ensureDemoStorageSandbox();
             const demoUser = getDemoUser();
             showUI(demoUser);
 
@@ -1510,7 +1517,7 @@
         });
 
         // Register Service Worker
-        if ('serviceWorker' in navigator) {
+        if ('serviceWorker' in navigator && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
                     .then(registration => {

@@ -164,6 +164,16 @@
 .orbit-scan { position: absolute; inset: 2%; border-radius: 50%; background: conic-gradient(from 30deg, transparent 0 81%, rgba(201,255,71,.11) 88%, transparent 95%); animation: home-scan 12s linear infinite; }
 @keyframes home-scan { to { transform: rotate(360deg); } }
 
+[data-theme="light"] .wealth-orbit::before { background: radial-gradient(circle, rgba(111,158,0,.12), transparent 62%); }
+[data-theme="light"] .wealth-orbit::after { border-top-color: rgba(32,42,26,.14); }
+[data-theme="light"] .orbit { border-color: rgba(32,42,26,.17); }
+[data-theme="light"] .orbit-two { border-color: rgba(32,42,26,.14); opacity: .9; }
+[data-theme="light"] .orbit-three { border-color: rgba(111,158,0,.24); opacity: .78; }
+[data-theme="light"] .orbit-scan {
+    background: conic-gradient(from 30deg, transparent 0 76%, rgba(111,158,0,.06) 80%, rgba(111,158,0,.28) 87%, transparent 94%);
+    filter: drop-shadow(0 0 12px rgba(111,158,0,.16));
+}
+
 .orbit-core {
     position: absolute;
     top: 50%;
@@ -343,4 +353,3 @@
 @media (prefers-reduced-motion: reduce) {
     .orbit-scan { animation: none; }
 }
-

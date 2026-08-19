@@ -100,20 +100,20 @@ function calcToddler(monthly, nToddlers, nKids) {
 function InfoTip({ text }) {
   const [s, setS] = useState(false);
   return (
-    <span style={{ position: "relative", display: "inline-block", marginRight: 4, cursor: "pointer" }}
+    <span className="tax-info-tip" style={{ position: "relative", display: "inline-block", marginRight: 4, cursor: "pointer" }}
       onMouseEnter={() => setS(true)} onMouseLeave={() => setS(false)} onClick={() => setS(!s)}>
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "hsl(220, 18%, 10%)", fontSize: 10, fontWeight: 700 }}>?</span>
-      {s && <span style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "hsl(210, 20%, 92%)", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
+      <span className="tax-info-tip__icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 16, height: 16, borderRadius: "50%", backgroundColor: "rgba(180,140,60,0.6)", color: "hsl(220, 18%, 10%)", fontSize: 10, fontWeight: 700 }}>?</span>
+      {s && <span className="tax-info-tip__bubble" style={{ position: "absolute", bottom: "130%", right: "50%", transform: "translateX(50%)", backgroundColor: "#2a2a4a", color: "hsl(210, 20%, 92%)", padding: "10px 14px", borderRadius: 10, fontSize: 12, lineHeight: 1.6, width: 270, zIndex: 999, boxShadow: "0 6px 24px rgba(0,0,0,0.5)", border: "1px solid #3a3a5a" }}>{text}</span>}
     </span>
   );
 }
 
 function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
   return (
-    <div style={{ gridColumn: wide ? "1 / -1" : undefined }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-        <label style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
+    <div className={`tax-slider${wide ? ' tax-slider--wide' : ''}`} style={{ gridColumn: wide ? "1 / -1" : undefined }}>
+      <div className="tax-slider__head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <label className="tax-slider__label" style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
+        <span className="tax-slider__value" style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
     </div>
@@ -122,7 +122,7 @@ function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
 
 function Tog({ label, active, onClick }) {
   return (
-    <button onClick={onClick} style={{
+    <button className={`tax-toggle${active ? ' is-active' : ''}`} aria-pressed={active} onClick={onClick} style={{
       padding: "6px 14px", borderRadius: 20, cursor: "pointer", fontSize: 12,
       border: `1px solid ${active ? "hsl(142, 60%, 50%)" : "rgba(255,255,255,0.1)"}`,
       background: active ? "rgba(76,175,80,0.15)" : "transparent",
@@ -133,8 +133,9 @@ function Tog({ label, active, onClick }) {
 
 function R({ label, amount, color, bold }) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: bold ? 14 : 12, fontWeight: bold ? 700 : 400, marginBottom: bold ? 0 : 4, paddingTop: bold ? 6 : 0, borderTop: bold ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
-      <span>{label}</span><span style={{ color: color || "hsl(210, 20%, 92%)" }}>{amount}</span>
+    <div className={`tax-data-row${bold ? ' tax-data-row--total' : ''}`} style={{ display: "flex", justifyContent: "space-between", fontSize: bold ? 14 : 12, fontWeight: bold ? 700 : 400, marginBottom: bold ? 0 : 4, paddingTop: bold ? 6 : 0, borderTop: bold ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
+      <span className="tax-data-row__label"><i aria-hidden="true"></i>{label}</span>
+      <span className="tax-data-row__amount" style={{ color: color || "hsl(210, 20%, 92%)" }}>{amount}</span>
     </div>
   );
 }
@@ -887,16 +888,16 @@ function TaxBracketWaterfall({ fatherAnnual, motherAnnual, brackets = TAX_BRACKE
   function renderBar(breakdown, annual, totalTax, label, clr) {
     if (annual <= 0) return null;
     return (
-      <div style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <span style={{ fontSize: 13, fontWeight: 600, color: clr }}>{label} — ₪{fmNum(annual)} שנתי</span>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>מס: ₪{fmNum(totalTax)} ({annual > 0 ? (totalTax / annual * 100).toFixed(1) : 0}%)</span>
+      <div className="tax-waterfall__person" style={{ marginBottom: 16 }}>
+        <div className="tax-waterfall__person-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span className="tax-waterfall__person-label" style={{ fontSize: 13, fontWeight: 600, color: clr }}>{label} — ₪{fmNum(annual)} שנתי</span>
+          <span className="tax-waterfall__tax" style={{ fontSize: 13, fontWeight: 700, color: '#ef4444' }}>מס: ₪{fmNum(totalTax)} ({annual > 0 ? (totalTax / annual * 100).toFixed(1) : 0}%)</span>
         </div>
-        <div style={{ display: 'flex', height: 36, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
+        <div className="tax-waterfall__track" style={{ display: 'flex', height: 36, borderRadius: 8, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>
           {breakdown.filter(b => b.taxable > 0).map(b => {
             const widthPct = (b.taxable / maxIncome) * 100;
             return (
-              <div key={b.label} style={{
+              <div className="tax-waterfall__segment" key={b.label} style={{
                 width: widthPct + '%', minWidth: widthPct > 3 ? '28px' : '0',
                 background: b.color, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 10, fontWeight: 700, color: '#000', transition: 'all 0.3s ease',
@@ -906,9 +907,9 @@ function TaxBracketWaterfall({ fatherAnnual, motherAnnual, brackets = TAX_BRACKE
               </div>);
           })}
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+        <div className="tax-waterfall__chips" style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
           {breakdown.filter(b => b.taxable > 0).map(b => (
-            <span key={b.label} style={{ fontSize: 10, color: 'hsl(215,12%,52%)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, borderRight: '3px solid ' + b.color }}>
+            <span className="tax-waterfall__chip" key={b.label} style={{ fontSize: 10, color: 'hsl(215,12%,52%)', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: 4, borderRight: '3px solid ' + b.color }}>
               {b.label}: ₪{fmNum(b.tax)}
             </span>
           ))}
@@ -917,19 +918,19 @@ function TaxBracketWaterfall({ fatherAnnual, motherAnnual, brackets = TAX_BRACKE
   }
 
   return (
-    <div style={{ background: 'rgba(255,255,255,0.035)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: 18, marginBottom: 16 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: 'hsl(142, 60%, 50%)', margin: '0 0 14px' }}>📊 ויזואליזציית מדרגות מס</h2>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+    <div className="tax-panel tax-view tax-view--credits tax-waterfall" style={{ background: 'rgba(255,255,255,0.035)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)', padding: 18, marginBottom: 16 }}>
+      <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: 'hsl(142, 60%, 50%)', margin: '0 0 14px' }}>📊 ויזואליזציית מדרגות מס</h2>
+      <div className="tax-waterfall__legend" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
         {colors.map((c, i) => (
           <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'hsl(215,12%,58%)' }}>
-            <span style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }}></span>
+            <span className="tax-waterfall__swatch" style={{ width: 12, height: 12, borderRadius: 3, background: c, display: 'inline-block' }}></span>
             {labels[i]}
           </span>
         ))}
       </div>
       {renderBar(fBreak, fatherAnnual, fTotalTax, '👨 האב', '#7ab8e0')}
       {renderBar(mBreak, motherAnnual, mTotalTax, '👩 האם', '#d898c8')}
-      <div style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(76,175,80,0.08)', borderRadius: 10, textAlign: 'center' }}>
+      <div className="tax-waterfall__total" style={{ marginTop: 12, padding: '12px 16px', background: 'rgba(76,175,80,0.08)', borderRadius: 10, textAlign: 'center' }}>
         <div style={{ fontSize: 12, color: 'hsl(215, 12%, 52%)' }}>סה״כ מס הכנסה משק הבית (לפני זיכויים)</div>
         <div style={{ fontSize: 26, fontWeight: 800, color: '#ef4444' }}>₪{fmNum(fTotalTax + mTotalTax)}</div>
         <div style={{ fontSize: 11, color: 'hsl(215, 12%, 52%)' }}>שיעור מס ממוצע: {(fatherAnnual + motherAnnual) > 0 ? ((fTotalTax + mTotalTax) / (fatherAnnual + motherAnnual) * 100).toFixed(1) : 0}%</div>
@@ -961,6 +962,7 @@ function App() {
   const [fRatio, setFRatio] = useState(saved?.fRatio ?? 1.0);
   const [mRatio, setMRatio] = useState(saved?.mRatio ?? 1.0);
   const [det, setDet] = useState(false);
+  const [workspace, setWorkspace] = useState('household');
 
   // CPI Tax Simulator state
   const [cpiSim, setCpiSim] = useState(null);
@@ -1388,25 +1390,47 @@ function App() {
   const fm = n => n.toLocaleString("he-IL");
 
   return (
-    <div style={{ minHeight: "100vh", color: "hsl(210, 20%, 92%)", padding: 0 }}>
-      <div style={{ background: "var(--bg-surface, hsl(220, 18%, 10%))", borderBottom: "1px solid var(--border, rgba(255,255,255,0.1))", padding: "24px 20px 20px", textAlign: "center" }}>
-        <div style={{ fontSize: 12, color: "hsl(142, 60%, 50%)", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>מחשבון אופטימיזציה ביתי</div>
+    <div className="tax-os" data-tax-workspace={workspace} style={{ minHeight: "100vh", color: "hsl(210, 20%, 92%)", padding: 0 }}>
+      <header className="tax-hero" style={{ background: "var(--bg-surface, hsl(220, 18%, 10%))", borderBottom: "1px solid var(--border, rgba(255,255,255,0.1))", padding: "24px 20px 20px", textAlign: "center" }}>
+        <div className="tax-hero__signal" aria-hidden="true"><i></i><i></i><i></i><b>25%</b></div>
+        <div className="tax-hero__eyebrow" style={{ fontSize: 12, color: "hsl(142, 60%, 50%)", letterSpacing: 3, marginBottom: 4, fontWeight: 600 }}>TAX OPTIMIZATION / LIVE MODEL</div>
         <h1 style={{ fontSize: 22, fontWeight: 800, margin: "0 0 6px", color: "var(--text-primary, hsl(210, 20%, 92%))" }}>
-          נקודות זיכוי × מענק עבודה × רווחי הון
+          מעבדת המס של משק הבית
         </h1>
-        <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: 0 }}>חישוב משולב לשני בני הזוג — כולל רפורמת 2024 ומענק פעוטות 2025</p>
-      </div>
+        <p style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", margin: 0 }}>נקודות זיכוי, מענקי עבודה ורווחי הון מתחברים לתוכנית פעולה אחת — לשני בני הזוג.</p>
+        <span className="tax-hero__code">MODULE 03 / TAX LAB</span>
+      </header>
+
+      <nav className="tax-workspace-tabs" aria-label="אזורי מחשבון המס">
+        {[
+          ['household', '01', 'משק הבית', 'הכנסות, תלושים וילדים'],
+          ['credits', '02', 'מס וזיכויים', 'מדרגות, נקודות ומענקים'],
+          ['capital', '03', 'רווחי הון', 'מימוש, קיזוז ומדד'],
+          ['plan', '04', 'פירוט ותוכנית', 'טבלאות וצעדים לביצוע']
+        ].map(([id, n, title, sub]) => (
+          <button key={id} className={workspace === id ? 'is-active' : ''} aria-current={workspace === id ? 'page' : undefined} onClick={() => setWorkspace(id)}>
+            <span>{n}</span><strong>{title}</strong><small>{sub}</small>
+          </button>
+        ))}
+      </nav>
+
+      <section className="tax-kpi-strip" aria-label="תמונת מצב שנתית">
+        <article><span>הכנסה שנתית</span><strong>{fm((fM + mM) * 12)} ₪</strong><small>שני בני הזוג</small></article>
+        <article><span>זיכוי זמין</span><strong>{fm(r.hUnused)} ₪</strong><small>לקיזוז רווחי הון</small></article>
+        <article><span>מענקים משוערים</span><strong>{fm(r.hGrant)} ₪</strong><small>לשנה</small></article>
+        <article><span>מימוש אופטימלי</span><strong>{fm(r.hOpt)} ₪</strong><small>לניצול מלוא הזיכוי</small></article>
+      </section>
 
       {/* Tax-params staleness reminder — no official feed exists, so brackets are added manually */}
       {TAX_PARAMS_STALE && (
-        <div style={{ margin: "12px 14px", padding: "12px 16px", background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.3)", borderRadius: 12, fontSize: 12, color: "#e07070", lineHeight: 1.5 }}>
+        <div className="tax-system-alert tax-system-alert--danger" style={{ margin: "12px 14px", padding: "12px 16px", background: "rgba(224,112,112,0.1)", border: "1px solid rgba(224,112,112,0.3)", borderRadius: 12, fontSize: 12, color: "#e07070", lineHeight: 1.5 }}>
           <span style={{ fontSize: 16 }}>⚠️</span> מדרגות המס בטבלה מעודכנות עד שנת {LATEST_TAX_YEAR}. חישובים לשנת {CURRENT_YEAR} משתמשים בנתוני {LATEST_TAX_YEAR} — כדאי לעדכן את <code>TAX_PARAMS</code> מול רשות המסים.
         </div>
       )}
 
       {/* Data Integration Banner */}
       {taxData.loaded && taxData.availableYears.length > 0 && (
-        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.25)", borderRadius: 12 }}>
+        <div className="tax-system-alert tax-system-alert--data" style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(77,171,247,0.08)", border: "1px solid rgba(77,171,247,0.25)", borderRadius: 12 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 16 }}>📊</span>
@@ -1470,12 +1494,12 @@ function App() {
       )}
 
       {taxData.loaded && taxData.availableYears.length === 0 && (
-        <div style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", borderRadius: 12, fontSize: 12, color: "hsl(142, 60%, 50%)" }}>
+        <div className="tax-system-alert tax-system-alert--empty" style={{ margin: "12px 14px", padding: "14px 16px", background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", borderRadius: 12, fontSize: 12, color: "hsl(142, 60%, 50%)" }}>
           <span style={{ fontSize: 16 }}>💡</span> אין נתוני הכנסה במערכת. <a href="finance.html" style={{ color: "hsl(142, 60%, 50%)", textDecoration: "underline" }}>הוסף הכנסות</a> כדי למלא את הסליידרים אוטומטית.
         </div>
       )}
 
-      <div style={{ margin: "16px 14px", padding: "14px 16px", background: "rgba(30,120,30,0.1)", border: "1px solid rgba(30,120,30,0.35)", borderRadius: 12 }}>
+      <div className="tax-system-alert tax-system-alert--insight tax-view tax-view--capital" style={{ margin: "16px 14px", padding: "14px 16px", background: "rgba(30,120,30,0.1)", border: "1px solid rgba(30,120,30,0.35)", borderRadius: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 20 }}>✅</span>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#5ab85a" }}>אין קונפליקט — רווחי הון לא פוגעים במענק</span>
@@ -1485,11 +1509,11 @@ function App() {
         </p>
       </div>
 
-      <div style={{ padding: "0 14px 32px", maxWidth: 720, margin: "0 auto" }}>
+      <main className="tax-workspace" style={{ padding: "0 14px 32px", maxWidth: 720, margin: "0 auto" }}>
         {/* INPUTS */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <section className="tax-panel tax-view tax-view--household tax-household" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚙️ נתוני משק הבית</h2>
+          <div className="tax-person-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
               <Sl label="הכנסת האב (חודשי ברוטו)" value={fM} onChange={v => { setFM(v); }} min={0} max={15000} step={250} suf="₪" tip="הכנסת עבודה ברוטו בלבד" />
               {payslipAverages.fatherAvg && fM !== Math.round(payslipAverages.fatherAvg / 250) * 250 && (
@@ -1517,7 +1541,7 @@ function App() {
           </div>
 
           {/* Payslip Upload */}
-          <div style={{ marginTop: 10, padding: "12px 14px", background: "rgba(140,80,200,0.08)", borderRadius: 10, border: "1px solid rgba(140,80,200,0.2)" }}>
+          <div className="tax-subpanel tax-payslip-uploader" style={{ marginTop: 10, padding: "12px 14px", background: "rgba(140,80,200,0.08)", borderRadius: 10, border: "1px solid rgba(140,80,200,0.2)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 14 }}>📄</span>
@@ -1715,11 +1739,11 @@ function App() {
 
             {/* Payslip History */}
             {payslips.length > 0 && (
-              <div>
+              <div className="tax-payslip-history">
                 <div style={{ fontSize: 11, fontWeight: 600, color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>תלושים ({payslips.length}):</div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 150, overflowY: "auto" }}>
+                <div className="tax-payslip-list" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 150, overflowY: "auto" }}>
                   {payslips.sort((a,b) => (b.month||'').localeCompare(a.month||'')).map(p => (
-                    <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11 }}>
+                    <div className="tax-payslip-row" key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11 }}>
                       <span style={{ color: "hsl(215, 12%, 52%)" }}>
                         {p.month} {p.earner === 'father' ? '👨' : p.earner === 'mother' ? '👩' : ''}
                       </span>
@@ -1767,7 +1791,7 @@ function App() {
           )}
 
           {/* CHILDREN */}
-          <div style={{ marginTop: 14 }}>
+          <div className="tax-children" style={{ marginTop: 14 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: "hsl(215, 12%, 52%)" }}>👶 ילדים ({children.length})</label>
               <button onClick={addChild} style={{
@@ -1777,7 +1801,7 @@ function App() {
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {children.map((child, i) => (
-                <div key={child.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: "8px 12px" }}>
+                <div className="tax-child-row" key={child.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(0,0,0,0.15)", borderRadius: 10, padding: "8px 12px" }}>
                   <span style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", minWidth: 50 }}>ילד {i + 1}</span>
                   <input type="range" min={0} max={18} step={1} value={child.age}
                     onChange={e => updateChildAge(child.id, +e.target.value)}
@@ -1808,15 +1832,15 @@ function App() {
           <div style={{ marginTop: 12 }}>
             <Sl label="רווחי הון צבורים לממש" value={cg} onChange={setCg} min={0} max={500000} step={5000} suf="₪" tip="בחשבון משותף מתחלק 50/50" wide />
           </div>
-        </div>
+        </section>
 
         {/* TAX BRACKET WATERFALL */}
         <TaxBracketWaterfall fatherAnnual={fM * 12} motherAnnual={mM * 12} brackets={taxParams.brackets} />
 
         {/* CREDIT POINTS */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+        <section className="tax-panel tax-view tax-view--credits tax-credits" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, margin: "0 0 6px" }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: 0 }}>📊 נקודות זיכוי</h2>
+            <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: 0 }}>📊 נקודות זיכוי</h2>
             <span title={`מדרגות מס ושווי נק' זיכוי (${taxParams.creditPoint.toLocaleString()} ₪) של שנת ${taxParams.year}`}
               style={{ fontSize: 11, fontWeight: 600, background: "rgba(122,184,224,0.12)", border: "1px solid rgba(122,184,224,0.3)", color: "#7ab8e0", padding: "3px 10px", borderRadius: 6 }}>
               🗓️ דיני מס {taxParams.year}{taxParams.approx ? " (הקרובה ביותר)" : ""}
@@ -1825,10 +1849,10 @@ function App() {
           <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)", marginBottom: 12, lineHeight: 1.5 }}>
             לפי הפקודה (סע' 11, 40) — נקודות ילדים וזיכוי יישוב מזכה מקזזים <strong>רק מס על הכנסה מיגיעה אישית</strong>. רק נק' תושב/אישה מקזזות גם רווחי הון.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="tax-person-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[{ d: r.f, icon: "👨", clr: "#7ab8e0", lbl: "האב", base: "2.25 (תושב)" },
               { d: r.m, icon: "👩", clr: "#d898c8", lbl: "האם", base: "2.75 (תושבת+אישה)" }].map(({ d, icon, clr, lbl, base }) => (
-              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+              <div className="tax-person-card" key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
 
                 {/* CG-eligible bucket */}
@@ -1855,20 +1879,20 @@ function App() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 12, padding: "12px 16px", background: "rgba(76,175,80,0.08)", borderRadius: 10, textAlign: "center" }}>
+          <div className="tax-result-callout tax-result-callout--credit" style={{ marginTop: 12, padding: "12px 16px", background: "rgba(76,175,80,0.08)", borderRadius: 10, textAlign: "center" }}>
             <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>סה״כ זמין לקיזוז מס רווחי הון</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>{fm(r.hUnused)} ₪</div>
             <div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>הולך לאיבוד — אלא אם מממשים רווחי הון</div>
           </div>
-        </div>
+        </section>
 
         {/* WORK GRANT */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <section className="tax-panel tax-view tax-view--credits tax-grants" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎁 מענק עבודה</h2>
+          <div className="tax-person-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[{ d: r.f, m: fM, icon: "👨", clr: "#7ab8e0", lbl: "האב" },
               { d: r.m, m: mM, icon: "👩", clr: "#d898c8", lbl: "האם" }].map(({ d, m: mo, icon, clr, lbl }) => (
-              <div key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+              <div className="tax-person-card" key={lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: clr, marginBottom: 8 }}>{icon} {lbl}</div>
                 {d.wg.ok ? (
                   <>
@@ -1885,60 +1909,65 @@ function App() {
               </div>
             ))}
           </div>
-          <div style={{ marginTop: 10, padding: "8px 14px", background: "rgba(30,120,30,0.08)", borderRadius: 8, fontSize: 12, color: "#a8cca8" }}>
+          <div className="tax-result-callout tax-result-callout--grant" style={{ marginTop: 10, padding: "8px 14px", background: "rgba(30,120,30,0.08)", borderRadius: 8, fontSize: 12, color: "#a8cca8" }}>
             סה״כ מענקים: <strong>{fm(r.hGrant)} ₪/שנה</strong> (הערכה. <a href="https://www.misim.gov.il/gmmhszakaut/" target="_blank">סימולטור</a> לחישוב מדויק)
           </div>
-        </div>
+        </section>
 
         {/* CAPITAL GAINS */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(76,175,80,0.3)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+        <section className="tax-panel tax-view tax-view--capital tax-capital-gains" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(76,175,80,0.3)", padding: "18px", marginBottom: 16 }}>
+          <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🎯 מימוש רווחי הון</h2>
+          <div className="tax-person-grid tax-capital-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
             {[{ lbl: "👨 חלק האב", sh: r.fShare, tx: r.fCGTax, sv: r.fSaved, clr: "#7ab8e0" },
               { lbl: "👩 חלק האם", sh: r.mShare, tx: r.mCGTax, sv: r.mSaved, clr: "#d898c8" }].map(x => (
-              <div key={x.lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
+              <div className="tax-person-card" key={x.lbl} style={{ background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: 14 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: x.clr, marginBottom: 8 }}>{x.lbl}</div>
                 <R label="רווח הון" amount={`${fm(x.sh)} ₪`} />
                 <R label="מס 25%" amount={`${fm(x.tx)} ₪`} color="#e07070" />
                 <R label="קיזוז מזיכויים" amount={`-${fm(x.sv)} ₪`} color="#5ab85a" />
                 <R label="מס נותר" amount={`${fm(x.tx - x.sv)} ₪`} bold />
+                <div className="tax-offset-meter" title={`נוצלו ${x.tx > 0 ? Math.min(100, x.sv / x.tx * 100).toFixed(0) : 0}% מהמס באמצעות זיכויים`}>
+                  <span><i style={{ width: `${x.tx > 0 ? Math.min(100, x.sv / x.tx * 100) : 0}%` }}></i></span>
+                  <small>קיזוז אפקטיבי <b>{x.tx > 0 ? Math.min(100, x.sv / x.tx * 100).toFixed(0) : 0}%</b></small>
+                </div>
               </div>
             ))}
           </div>
-          <div style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(76,175,80,0.1),rgba(76,175,80,0.03))", border: "1px solid rgba(76,175,80,0.25)" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "hsl(142, 60%, 50%)", marginBottom: 6 }}>💰 סכום מימוש אופטימלי</div>
-            <p style={{ fontSize: 13, lineHeight: 1.7, margin: "0 0 4px" }}>
-              לניצול מלוא הזיכויים ({fm(r.hUnused)} ₪): ממש <strong>{fm(r.hOpt)} ₪</strong>
-              {jnt && ` (${fm(r.fOpt)} אב + ${fm(r.mOpt)} אם)`}
-            </p>
-            <p style={{ fontSize: 13, margin: 0 }}>החזר מס צפוי: <strong>{fm(r.hUnused)} ₪</strong> — מס אפקטיבי 0%.</p>
+          <div className="tax-optimal-callout" style={{ padding: "14px 16px", borderRadius: 10, background: "linear-gradient(135deg,rgba(76,175,80,0.1),rgba(76,175,80,0.03))", border: "1px solid rgba(76,175,80,0.25)" }}>
+            <div className="tax-optimal-callout__orbit" aria-hidden="true"><i></i><i></i></div>
+            <div className="tax-optimal-callout__copy">
+              <span>סכום מימוש אופטימלי</span>
+              <strong>{fm(r.hOpt)} ₪</strong>
+              <small>{jnt ? `${fm(r.fOpt)} ₪ אב + ${fm(r.mOpt)} ₪ אם` : `מיוחס לאב`} · מס אפקטיבי 0%</small>
+            </div>
+            <div className="tax-optimal-callout__refund"><span>החזר מס צפוי</span><strong>{fm(r.hUnused)} ₪</strong></div>
           </div>
-        </div>
+        </section>
 
         {/* BOTTOM LINE */}
-        <div style={{ background: "linear-gradient(135deg,rgba(76,175,80,0.06),rgba(76,175,80,0.02))", borderRadius: 14, border: "1px solid rgba(76,175,80,0.2)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-            <div style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
+        <section className="tax-panel tax-view tax-view--capital tax-bottom-line" style={{ background: "linear-gradient(135deg,rgba(76,175,80,0.06),rgba(76,175,80,0.02))", borderRadius: 14, border: "1px solid rgba(76,175,80,0.2)", padding: "18px", marginBottom: 16 }}>
+          <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 14px" }}>⚖️ שורה תחתונה — שנתי</h2>
+          <div className="tax-scenario-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="tax-scenario-card" style={{ padding: 14, borderRadius: 10, background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.05)" }}>
               <div style={{ fontSize: 12, color: "#8a8aaa", marginBottom: 6 }}>ללא מימוש</div>
               <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
               <R label="חיסכון מס" amount="0 ₪" />
               <R label="סה״כ" amount={`${fm(r.hGrant)} ₪`} bold />
             </div>
-            <div style={{ padding: 14, borderRadius: 10, background: "rgba(77,171,247,0.06)", border: "1px solid rgba(77,171,247,0.25)" }}>
+            <div className="tax-scenario-card tax-scenario-card--actual" style={{ padding: 14, borderRadius: 10, background: "rgba(77,171,247,0.06)", border: "1px solid rgba(77,171,247,0.25)" }}>
               <div style={{ fontSize: 12, color: "#7ab8e0", marginBottom: 6, fontWeight: 600 }}>📌 מימוש בפועל ({fm(cg)} ₪)</div>
               <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
               <R label="חיסכון מס" amount={`${fm(r.fSaved + r.mSaved)} ₪`} color="#5ab85a" />
               <R label="סה״כ" amount={`${fm(r.hGrant + r.fSaved + r.mSaved)} ₪`} color="#7ab8e0" bold />
             </div>
-            <div style={{ padding: 14, borderRadius: 10, background: "rgba(30,120,30,0.06)", border: "1px solid rgba(30,120,30,0.25)" }}>
+            <div className="tax-scenario-card tax-scenario-card--optimal" style={{ padding: 14, borderRadius: 10, background: "rgba(30,120,30,0.06)", border: "1px solid rgba(30,120,30,0.25)" }}>
               <div style={{ fontSize: 12, color: "#5ab85a", marginBottom: 6, fontWeight: 600 }}>✨ מימוש אופטימלי ({fm(r.hOpt)} ₪)</div>
               <R label="מענקים" amount={`${fm(r.hGrant)} ₪`} />
               <R label="חיסכון מס" amount={`${fm(r.hUnused)} ₪`} color="#5ab85a" />
               <R label="סה״כ" amount={`${fm(r.hGrant + r.hUnused)} ₪`} color="#5ab85a" bold />
             </div>
           </div>
-          <div style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(76,175,80,0.1)", textAlign: "center" }}>
+          <div className="tax-result-callout tax-result-callout--saving" style={{ marginTop: 14, padding: "14px", borderRadius: 10, background: "rgba(76,175,80,0.1)", textAlign: "center" }}>
             <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>רווח נוסף ממימוש בפועל</div>
             <div style={{ fontSize: 30, fontWeight: 800, color: "hsl(142, 60%, 50%)" }}>+{fm(r.fSaved + r.mSaved)} ₪</div>
             <div style={{ fontSize: 12, color: "hsl(215, 12%, 52%)" }}>
@@ -1947,12 +1976,12 @@ function App() {
                 : "ניצול מלוא הזיכויים! 🎯"}
             </div>
           </div>
-        </div>
+        </section>
 
         {/* CPI TAX SIMULATOR */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(100,180,255,0.25)", padding: "18px", marginBottom: 16 }}>
+        <section className="tax-panel tax-view tax-view--capital tax-cpi-simulator" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(100,180,255,0.25)", padding: "18px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
-            <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון ריאלי (מדד / שער חליפין)</h2>
+            <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(210, 70%, 65%)", margin: 0 }}>📊 מס רווחי הון ריאלי (מדד / שער חליפין)</h2>
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               {cpiSim?.latestCPIDate && (
                 <span style={{ fontSize: 11, color: cpiSim.dataSource === 'cbs' ? "#5ab85a" : "hsl(215, 12%, 52%)", title: cpiSim.dataSource === 'cbs' ? 'נתוני הלמ"ס בזמן אמת' : 'הערכה על בסיס אינפלציה שנתית' }}>
@@ -1998,16 +2027,16 @@ function App() {
           {cpiSim && cpiSim.rows.length > 0 && (
             <>
               {/* Summary cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-                <div style={{ padding: 12, borderRadius: 10, background: "rgba(200,80,80,0.08)", border: "1px solid rgba(200,80,80,0.2)", textAlign: "center" }}>
+              <div className="tax-cpi-summary" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+                <div className="tax-cpi-metric tax-cpi-metric--flat" style={{ padding: 12, borderRadius: 10, background: "rgba(200,80,80,0.08)", border: "1px solid rgba(200,80,80,0.2)", textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס לפי אקסלנס (25%)</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "#e07070" }}>{fm(cpiSim.totalFlat)} ₪</div>
                 </div>
-                <div style={{ padding: 12, borderRadius: 10, background: "rgba(100,180,255,0.06)", border: "1px solid rgba(100,180,255,0.2)", textAlign: "center" }}>
+                <div className="tax-cpi-metric tax-cpi-metric--real" style={{ padding: 12, borderRadius: 10, background: "rgba(100,180,255,0.06)", border: "1px solid rgba(100,180,255,0.2)", textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>מס ריאלי (מדד + FX)</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "hsl(210,70%,65%)" }}>{fm(cpiSim.totalCPI)} ₪</div>
                 </div>
-                <div style={{ padding: 12, borderRadius: 10, background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", textAlign: "center" }}>
+                <div className="tax-cpi-metric tax-cpi-metric--saving" style={{ padding: 12, borderRadius: 10, background: "rgba(76,175,80,0.08)", border: "1px solid rgba(76,175,80,0.25)", textAlign: "center" }}>
                   <div style={{ fontSize: 11, color: "#8a8aaa", marginBottom: 4 }}>חיסכון פוטנציאלי</div>
                   <div style={{ fontSize: 20, fontWeight: 800, color: "#5ab85a" }}>+{fm(cpiSim.totalSavings)} ₪</div>
                 </div>
@@ -2018,8 +2047,8 @@ function App() {
                 {cpiExpanded ? "▲ הסתר פירוט" : "▼ הצג פירוט לפי נייר ערך"}
               </button>
               {cpiExpanded && (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                <div className="tax-table-wrap" style={{ overflowX: "auto" }}>
+                  <table className="tax-data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
                         {["נייר ערך", "מטבע", "הצמדה", "רווח לא ממומש", "מס 25%", "מס ריאלי", "חיסכון"].map(h => (
@@ -2059,15 +2088,15 @@ function App() {
               )}
             </>
           )}
-        </div>
+        </section>
 
         {/* DETAIL TABLE */}
-        <button onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 16 }}>
+        <button className="tax-view tax-view--plan tax-detail-toggle" onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 16 }}>
           {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל (רפורמת 2024)
         </button>
         {det && (
-          <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16, overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+          <div className="tax-panel tax-view tax-view--plan tax-table-wrap" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16, overflowX: "auto" }}>
+            <table className="tax-data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
                   {["גיל", "אב בסיס", "רפורמה", "אב סה״כ", "אם בסיס", "רפורמה", "אם סה״כ"].map(h => (
@@ -2103,8 +2132,8 @@ function App() {
         )}
 
         {/* STEPS */}
-        <div style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🗂️ צעדים</h2>
+        <section className="tax-panel tax-view tax-view--plan tax-steps" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
+          <h2 className="tax-panel__title" style={{ fontSize: 15, fontWeight: 700, color: "hsl(142, 60%, 50%)", margin: "0 0 12px" }}>🗂️ צעדים</h2>
           {[
             ["1", "הגשת בקשה למענק עבודה", "שני בני הזוג בנפרד, לשנת 2024 (עד 31.12.26) ו-2025 (עד 31.12.27)"],
             ["2", "בדיקת רווחים צבורים", "בקש טופס 867 מהבנק/ברוקר"],
@@ -2112,18 +2141,18 @@ function App() {
             ["4", "הגשת דוח שנתי", "עם רו״ח, כלול 867 + כל ההכנסות → החזר מס"],
             ["5", "עדכון טופס 101", "פרטי ילדים + ישוב מזכה"],
           ].map(([n, t, d]) => (
-            <div key={n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 24, height: 24, borderRadius: "50%", background: "hsl(142, 60%, 50%)", color: "hsl(220, 18%, 10%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
+            <div className="tax-step-row" key={n} style={{ display: "flex", gap: 10, marginBottom: 10 }}>
+              <div className="tax-step-row__index" style={{ width: 24, height: 24, borderRadius: "50%", background: "hsl(142, 60%, 50%)", color: "hsl(220, 18%, 10%)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>{n}</div>
               <div><div style={{ fontSize: 13, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 11, color: "hsl(215, 12%, 52%)" }}>{d}</div></div>
             </div>
           ))}
-        </div>
+        </section>
 
-        <div style={{ padding: "12px", borderRadius: 10, background: "rgba(200,140,80,0.05)", border: "1px solid rgba(200,140,80,0.12)", fontSize: 11, color: "#908070", lineHeight: 1.7 }}>
+        <div className="tax-view tax-view--plan tax-disclaimer" style={{ padding: "12px", borderRadius: 10, background: "rgba(200,140,80,0.05)", border: "1px solid rgba(200,140,80,0.12)", fontSize: 11, color: "#908070", lineHeight: 1.7 }}>
           <strong>⚠️</strong> סכומי המענק הם הערכה. הכנסת בן/בת הזוג משפיעה על המענק. נקודות הזיכוי מדויקות לפי רפורמת 2024.
           מדרגות המס ושווי נקודת זיכוי עשויים להשתנות משנה לשנה — עדכן בהתאם. אין לראות בזה ייעוץ מס — התייעצו עם רו״ח.
         </div>
-      </div>
+      </main>
     </div>
   );
 }

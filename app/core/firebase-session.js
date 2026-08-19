@@ -1,4 +1,12 @@
-import { isDemoMode, exitDemoMode, getDemoUser, generateDemoFinanceData, generateDemoPortfolioData } from '../../demo-data.js';
+import {
+    isDemoMode,
+    exitDemoMode,
+    ensureDemoStorageSandbox,
+    getDemoUser,
+    generateDemoFinanceData,
+    generateDemoPortfolioData,
+    generateDemoMortgageData,
+} from '../../demo-data.js';
 import { SyncBus } from '../../shared/sync-bus.js';
 
 const DATASETS = [
@@ -17,6 +25,14 @@ function readJSON(key, fallback = null) {
 }
 
 function readLocalData(demo = false) {
+    if (demo) {
+        return {
+            finance: generateDemoFinanceData(),
+            portfolio: generateDemoPortfolioData(),
+            mortgage: generateDemoMortgageData(),
+            cachedTwr: null,
+        };
+    }
     const finance = readJSON('financeTrackerData', demo ? generateDemoFinanceData() : null);
     const portfolio = readJSON('portfolio', demo ? generateDemoPortfolioData() : null);
     const mortgage = readJSON('mortgageData', readJSON('mortgage', null));
@@ -45,6 +61,7 @@ export async function createFirebaseSession(store) {
     let currentUser = null;
     let unsubscribeSync = null;
     const demo = isDemoMode();
+    if (demo) ensureDemoStorageSandbox();
 
     store.setState({
         session: { status: 'connecting', user: null, isDemo: demo },

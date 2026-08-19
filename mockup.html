@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מוקאפ — בורר מיילסטון</title>
+<style>
+  :root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --bg-tertiary: #2d3f55;
+    --border-color: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --accent: #3b82f6;
+    --profit: #10b981;
+    --loss: #ef4444;
+    --gold: #f59e0b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    padding: 32px 24px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 1.4rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+  }
+
+  .subtitle {
+    font-size: 0.85rem;
+    color: #475569;
+    margin-bottom: 48px;
+  }
+
+  /* ——— Shared chart shell ——— */
+  .chart-shell {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-bottom: 48px;
+  }
+
+  .variant-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    color: #475569;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .variant-label span {
+    background: #1e293b;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+  }
+
+  .chart-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .chart-title-text {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .chart-title-text svg {
+    color: var(--accent);
+    opacity: 0.8;
+  }
+
+  /* Fake chart bars */
+  .fake-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 140px;
+    padding: 0 4px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .bar-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+  }
+
+  .bar {
+    border-radius: 4px 4px 0 0;
+    width: 100%;
+    max-width: 60px;
+    transition: height 0.4s cubic-bezier(.4,0,.2,1);
+  }
+
+  .bar-label {
+    font-size: 0.62rem;
+    color: var(--text-secondary);
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .bar-val {
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+
+  /* ═══════════════════════════════════════════
+     VARIANT 1 — Current flat segmented
+  ═══════════════════════════════════════════ */
+
+  .v1-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  .v1-milestone-group {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .v1-btn {
+    font-size: 0.78rem;
+    padding: 5px 12px;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    border-left: 1px solid var(--border-color);
+  }
+  .v1-btn:first-child { border-left: none; }
+  .v1-btn:hover { background: #364d65; color: var(--text-primary); }
+  .v1-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+  .fx-btn {
+    font-size: 0.78rem;
+    padding: 5px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    transition: all .2s;
+    white-space: nowrap;
+  }
+  .fx-btn:hover { border-color: #64748b; color: var(--text-primary); }
+  .fx-btn.active { background: var(--profit); color: #fff; border-color: var(--profit); font-weight: 600; }
+
+
+  /* ═══════════════════════════════════════════
+     VARIANT 2 — Slider pill with moving indicator
+  ═══════════════════════════════════════════ */
+
+  .v2-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .v2-slider-track {
+    position: relative;
+    display: inline-flex;
+    background: #131c2d;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 0;
+  }
+
+  .v2-indicator {
+    position: absolute;
+    top: 3px;
+    height: calc(100% - 6px);
+    background: var(--accent);
+    border-radius: 5px;
+    transition: left 0.28s cubic-bezier(.4,0,.2,1), width 0.28s cubic-bezier(.4,0,.2,1);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .v2-btn {
+    position: relative;
+    z-index: 1;
+    font-size: 0.78rem;
+    padding: 5px 13px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 5px;
+    transition: color 0.2s;
+    user-select: none;
+  }
+  .v2-btn.active { color: #fff; font-weight: 600; }
+  .v2-btn:not(.active):hover { color: var(--text-primary); }
+
+
+  /* ═══════════════════════════════════════════
+     VARIANT 3 — Segmented with date sub-labels
+  ═══════════════════════════════════════════ */
+
+  .v3-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  .v3-milestone-group {
+    display: inline-flex;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .v3-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 5px 12px 4px;
+    border: none;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+    border-left: 1px solid var(--border-color);
+    gap: 1px;
+  }
+  .v3-btn:first-child { border-left: none; }
+  .v3-btn:hover { background: #364d65; }
+  .v3-btn.active { background: var(--accent); color: #fff; }
+  .v3-btn.active .v3-date { color: rgba(255,255,255,0.65); }
+
+  .v3-name { font-size: 0.78rem; font-weight: 500; }
+  .v3-date { font-size: 0.6rem; color: #475569; margin-top: 1px; }
+
+
+  /* ═══════════════════════════════════════════
+     VARIANT 4 — Minimalist dropdown
+  ═══════════════════════════════════════════ */
+
+  .v4-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .v4-select-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .v4-select-wrap svg {
+    position: absolute;
+    left: 8px;
+    pointer-events: none;
+    color: var(--text-secondary);
+    width: 13px;
+    height: 13px;
+  }
+
+  .v4-select {
+    appearance: none;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.78rem;
+    padding: 5px 28px 5px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    font-family: inherit;
+    direction: rtl;
+  }
+  .v4-select:hover { border-color: #64748b; }
+  .v4-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(59,130,246,.2); }
+
+  .v4-period-display {
+    font-size: 0.72rem;
+    color: #475569;
+    border-right: 1px solid var(--border-color);
+    padding-right: 10px;
+    margin-right: 2px;
+  }
+  .v4-period-display strong { color: var(--text-secondary); }
+
+
+  /* ═══════════════════════════════════════════
+     VARIANT 5 — Pill chips with dot indicators
+  ═══════════════════════════════════════════ */
+
+  .v5-controls { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+  .v5-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+
+  .v5-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.78rem;
+    padding: 4px 11px 4px 9px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.18s;
+    white-space: nowrap;
+  }
+  .v5-chip:hover { border-color: #64748b; color: var(--text-primary); background: #1e293b; }
+  .v5-chip.active { background: #1d3a5f; border-color: var(--accent); color: #93c5fd; }
+
+  .v5-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--border-color);
+    flex-shrink: 0;
+    transition: background 0.18s;
+  }
+  .v5-chip.active .v5-dot { background: var(--accent); }
+
+  .v5-divider {
+    width: 1px; height: 20px;
+    background: var(--border-color);
+    margin: 0 2px;
+  }
+
+
+  /* ——— Separator ——— */
+  .section-sep {
+    border: none;
+    border-top: 1px dashed #1e293b;
+    margin: 0 0 48px 0;
+  }
+
+  /* ——— Footer note ——— */
+  .footer-note {
+    font-size: 0.8rem;
+    color: #334155;
+    text-align: center;
+    margin-top: 16px;
+  }
+</style>
+</head>
+<body>
+
+<h1>MILESTONE SELECTOR · DESIGN VARIANTS</h1>
+<p class="subtitle">לחץ על הכפתורים כדי לראות hover / active states. הגרף הוא דמה.</p>
+
+<!-- ═══ SHARED FAKE CHART DATA ═══ -->
+
+<!-- ════════════════════════════════════
+     VARIANT 1 — Flat segmented (current)
+════════════════════════════════════ -->
+<div class="chart-shell">
+  <div class="variant-label">
+    גרסה 1
+    <span>נוכחי · Flat segmented</span>
+  </div>
+  <div class="chart-title-row">
+    <div class="chart-title-text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ביצועים יחסית לאינדקס (TWR)
+    </div>
+    <div class="v1-controls">
+      <div class="v1-milestone-group" id="v1-group">
+        <button class="v1-btn active" data-v="v1" data-val="inception">התחלה</button>
+        <button class="v1-btn" data-v="v1" data-val="core">Core</button>
+        <button class="v1-btn" data-v="v1" data-val="risky">+ סיכוני</button>
+        <button class="v1-btn" data-v="v1" data-val="ta125">+ ת"א 125</button>
+      </div>
+      <button class="fx-btn" data-fx="v1">נרמל שקל</button>
+    </div>
+  </div>
+  <div class="fake-chart" id="v1-chart">
+    <!-- bars injected by JS -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════
+     VARIANT 2 — Animated slider
+════════════════════════════════════ -->
+<div class="chart-shell">
+  <div class="variant-label">
+    גרסה 2
+    <span>Animated slider indicator</span>
+  </div>
+  <div class="chart-title-row">
+    <div class="chart-title-text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ביצועים יחסית לאינדקס (TWR)
+    </div>
+    <div class="v2-controls">
+      <div class="v2-slider-track" id="v2-track">
+        <div class="v2-indicator" id="v2-indicator"></div>
+        <button class="v2-btn active" data-v="v2" data-val="inception">התחלה</button>
+        <button class="v2-btn" data-v="v2" data-val="core">Core</button>
+        <button class="v2-btn" data-v="v2" data-val="risky">+ סיכוני</button>
+        <button class="v2-btn" data-v="v2" data-val="ta125">+ ת"א 125</button>
+      </div>
+      <button class="fx-btn" data-fx="v2">נרמל שקל</button>
+    </div>
+  </div>
+  <div class="fake-chart" id="v2-chart"></div>
+</div>
+
+<!-- ════════════════════════════════════
+     VARIANT 3 — With date sub-labels
+════════════════════════════════════ -->
+<div class="chart-shell">
+  <div class="variant-label">
+    גרסה 3
+    <span>עם תאריך מתחת לשם</span>
+  </div>
+  <div class="chart-title-row">
+    <div class="chart-title-text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ביצועים יחסית לאינדקס (TWR)
+    </div>
+    <div class="v3-controls">
+      <div class="v3-milestone-group" id="v3-group">
+        <button class="v3-btn active" data-v="v3" data-val="inception">
+          <span class="v3-name">התחלה</span>
+          <span class="v3-date">מהיום הראשון</span>
+        </button>
+        <button class="v3-btn" data-v="v3" data-val="core">
+          <span class="v3-name">Core</span>
+          <span class="v3-date">פבר׳ 2024</span>
+        </button>
+        <button class="v3-btn" data-v="v3" data-val="risky">
+          <span class="v3-name">+ סיכוני</span>
+          <span class="v3-date">פבר׳ 2025</span>
+        </button>
+        <button class="v3-btn" data-v="v3" data-val="ta125">
+          <span class="v3-name">+ ת"א 125</span>
+          <span class="v3-date">ינו׳ 2026</span>
+        </button>
+      </div>
+      <button class="fx-btn" data-fx="v3">נרמל שקל</button>
+    </div>
+  </div>
+  <div class="fake-chart" id="v3-chart"></div>
+</div>
+
+<!-- ════════════════════════════════════
+     VARIANT 4 — Dropdown
+════════════════════════════════════ -->
+<div class="chart-shell">
+  <div class="variant-label">
+    גרסה 4
+    <span>Dropdown מינימליסטי</span>
+  </div>
+  <div class="chart-title-row">
+    <div class="chart-title-text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ביצועים יחסית לאינדקס (TWR)
+    </div>
+    <div class="v4-controls">
+      <span class="v4-period-display" id="v4-period">תקופה: <strong>מהיום הראשון</strong></span>
+      <div class="v4-select-wrap">
+        <select class="v4-select" id="v4-select">
+          <option value="inception">התחלה — מהיום הראשון</option>
+          <option value="core">Core — פבר׳ 2024</option>
+          <option value="risky">+ סיכוני — פבר׳ 2025</option>
+          <option value="ta125">+ ת"א 125 — ינו׳ 2026</option>
+        </select>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <button class="fx-btn" data-fx="v4">נרמל שקל</button>
+    </div>
+  </div>
+  <div class="fake-chart" id="v4-chart"></div>
+</div>
+
+<!-- ════════════════════════════════════
+     VARIANT 5 — Pill chips with dots
+════════════════════════════════════ -->
+<div class="chart-shell">
+  <div class="variant-label">
+    גרסה 5
+    <span>Pill chips עם נקודת צבע</span>
+  </div>
+  <div class="chart-title-row">
+    <div class="chart-title-text">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      ביצועים יחסית לאינדקס (TWR)
+    </div>
+    <div class="v5-controls">
+      <div class="v5-chips" id="v5-chips">
+        <button class="v5-chip active" data-v="v5" data-val="inception"><span class="v5-dot"></span>התחלה</button>
+        <button class="v5-chip" data-v="v5" data-val="core"><span class="v5-dot"></span>Core</button>
+        <button class="v5-chip" data-v="v5" data-val="risky"><span class="v5-dot"></span>+ סיכוני</button>
+        <button class="v5-chip" data-v="v5" data-val="ta125"><span class="v5-dot"></span>+ ת"א 125</button>
+      </div>
+      <div class="v5-divider"></div>
+      <button class="fx-btn" data-fx="v5">נרמל שקל</button>
+    </div>
+  </div>
+  <div class="fake-chart" id="v5-chart"></div>
+</div>
+
+<p class="footer-note">mockup.html — לא מחובר לנתוני תיק אמיתיים</p>
+
+<script>
+// ——— Bar data per milestone ———
+const barSets = {
+  inception: [
+    { label: 'התיק (TWR)', val: 13.9, color: '#10b981' },
+    { label: 'ACWI',       val: 49.2, color: '#3b82f6' },
+    { label: 'S&P 500',    val: 53.1, color: '#6366f1' },
+    { label: 'NASDAQ',     val: 65.4, color: '#d97706' },
+    { label: 'ת"א 125',   val: 46.0, color: '#8b5cf6' },
+  ],
+  core: [
+    { label: 'התיק (TWR)', val: 13.9, color: '#10b981' },
+    { label: 'ACWI',       val: 13.35, color: '#3b82f6' },
+    { label: 'S&P 500',    val: 16.2, color: '#6366f1' },
+    { label: 'NASDAQ',     val: 22.1, color: '#d97706' },
+    { label: 'ת"א 125',   val: 28.4, color: '#8b5cf6' },
+  ],
+  risky: [
+    { label: 'התיק (TWR)', val: 7.8, color: '#10b981' },
+    { label: 'ACWI',       val: 5.1, color: '#3b82f6' },
+    { label: 'S&P 500',    val: 6.3, color: '#6366f1' },
+    { label: 'NASDAQ',     val: 9.7, color: '#d97706' },
+    { label: 'ת"א 125',   val: 11.2, color: '#8b5cf6' },
+  ],
+  ta125: [
+    { label: 'התיק (TWR)', val: 3.2, color: '#10b981' },
+    { label: 'ACWI',       val: -1.4, color: '#3b82f6' },
+    { label: 'S&P 500',    val: -0.9, color: '#6366f1' },
+    { label: 'NASDAQ',     val: 1.2, color: '#d97706' },
+    { label: 'ת"א 125',   val: 5.8, color: '#8b5cf6' },
+  ],
+};
+
+// FX adjustment factor ~0.85 (ILS strengthened ~15%)
+const FX = 0.85;
+
+function applyFX(bars) {
+  return bars.map((b, i) => {
+    if (i === 0 || b.label === 'ת"א 125') return b;
+    const adj = ((1 + b.val / 100) * FX - 1) * 100;
+    return { ...b, val: Math.round(adj * 10) / 10 };
+  });
+}
+
+function renderBars(chartId, milestone, fxActive) {
+  const el = document.getElementById(chartId);
+  if (!el) return;
+  let bars = barSets[milestone] || barSets.inception;
+  if (fxActive) bars = applyFX(bars);
+
+  const maxAbs = Math.max(...bars.map(b => Math.abs(b.val)), 1);
+  const heightScale = 110; // px for maxAbs
+
+  el.innerHTML = bars.map(b => {
+    const pct = (Math.abs(b.val) / maxAbs * heightScale).toFixed(1);
+    const isNeg = b.val < 0;
+    return `
+      <div class="bar-group">
+        <div class="bar-val" style="color:${isNeg ? '#ef4444' : '#f1f5f9'}">${b.val >= 0 ? '+' : ''}${b.val.toFixed(1)}%</div>
+        <div class="bar" style="height:${pct}px; background:${isNeg ? '#ef4444' : b.color}; opacity:${isNeg ? 0.8 : 1}"></div>
+        <div class="bar-label">${b.label}</div>
+      </div>`;
+  }).join('');
+}
+
+// ——— State ———
+const state = {
+  v1: { milestone: 'inception', fx: false },
+  v2: { milestone: 'inception', fx: false },
+  v3: { milestone: 'inception', fx: false },
+  v4: { milestone: 'inception', fx: false },
+  v5: { milestone: 'inception', fx: false },
+};
+
+function refresh(v) {
+  renderBars(`${v}-chart`, state[v].milestone, state[v].fx);
+}
+
+// Init all charts
+Object.keys(state).forEach(v => renderBars(`${v}-chart`, 'inception', false));
+
+// ——— Generic milestone click handler ———
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-v]');
+  if (!btn) return;
+  const v = btn.dataset.v;
+  const val = btn.dataset.val;
+  state[v].milestone = val;
+
+  // Update active class on siblings
+  const parent = btn.parentElement;
+  parent.querySelectorAll('[data-v="' + v + '"]').forEach(b => b.classList.toggle('active', b === btn));
+
+  refresh(v);
+
+  // V2: move indicator
+  if (v === 'v2') moveV2Indicator(btn);
+});
+
+// ——— FX toggle ———
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-fx]');
+  if (!btn) return;
+  const v = btn.dataset.fx;
+  state[v].fx = !state[v].fx;
+  btn.classList.toggle('active', state[v].fx);
+  btn.textContent = state[v].fx ? 'בטל נרמול' : 'נרמל שקל';
+  refresh(v);
+});
+
+// ——— Dropdown v4 ———
+const v4Sel = document.getElementById('v4-select');
+const v4Period = document.getElementById('v4-period');
+const periodLabels = {
+  inception: 'מהיום הראשון',
+  core:      'מפבר׳ 2024',
+  risky:     'מפבר׳ 2025',
+  ta125:     'מינו׳ 2026',
+};
+v4Sel && v4Sel.addEventListener('change', () => {
+  state.v4.milestone = v4Sel.value;
+  v4Period.innerHTML = `תקופה: <strong>${periodLabels[v4Sel.value]}</strong>`;
+  refresh('v4');
+});
+
+// ——— V2 slider indicator ———
+function moveV2Indicator(activeBtn) {
+  const track = document.getElementById('v2-track');
+  const indicator = document.getElementById('v2-indicator');
+  if (!track || !indicator) return;
+  const trackRect = track.getBoundingClientRect();
+  const btnRect = activeBtn.getBoundingClientRect();
+  indicator.style.left = (btnRect.left - trackRect.left - 3) + 'px';
+  indicator.style.width = btnRect.width + 'px';
+}
+
+// Init V2 indicator on the first active button
+window.addEventListener('load', () => {
+  const firstActive = document.querySelector('.v2-btn.active');
+  if (firstActive) {
+    // defer one frame to let layout settle
+    requestAnimationFrame(() => {
+      document.getElementById('v2-indicator').style.transition = 'none';
+      moveV2Indicator(firstActive);
+      requestAnimationFrame(() => {
+        document.getElementById('v2-indicator').style.transition = '';
+      });
+    });
+  }
+});
+</script>
+</body>
+</html>

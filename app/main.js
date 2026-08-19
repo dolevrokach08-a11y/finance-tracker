@@ -125,22 +125,40 @@ document.addEventListener('click', event => {
     if (!event.target.closest('.rail-session')) sessionMenu.hidden = true;
 });
 document.getElementById('logoutButton').addEventListener('click', () => sessionApi?.logout());
-document.getElementById('themeToggle').addEventListener('click', () => {
+function toggleAppTheme() {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     if (isLight) document.documentElement.removeAttribute('data-theme');
     else document.documentElement.setAttribute('data-theme', 'light');
     localStorage.setItem('theme', isLight ? 'dark' : 'light');
     sessionMenu.hidden = true;
-});
+}
+
+document.getElementById('themeToggle').addEventListener('click', toggleAppTheme);
+document.getElementById('themeQuickToggle').addEventListener('click', toggleAppTheme);
 
 const commandBackdrop = document.getElementById('commandBackdrop');
 const commandInput = document.getElementById('commandInput');
 const commandResults = document.getElementById('commandResults');
 let commandSelection = 0;
 
+// Palette entries are either a route (navigate) or an action (run). Actions
+// live here rather than in `routes` so the rail keeps showing only real
+// destinations.
+const commandActions = [
+    {
+        id: 'assistant',
+        title: 'עוזר AI',
+        subtitle: 'שאל שאלה על התיק ועל התזרים',
+        keywords: 'ai עוזר בינה שאלה ניתוח',
+        icon: 'sparkles',
+        run: () => toggleAssistant(),
+    },
+];
+
 function commandItems(query = '') {
     const normalized = query.trim().toLowerCase();
-    return Object.values(routes).filter(route => !normalized || `${route.title} ${route.subtitle} ${route.keywords}`.toLowerCase().includes(normalized));
+    return [...Object.values(routes), ...commandActions]
+        .filter(item => !normalized || `${item.title} ${item.subtitle} ${item.keywords}`.toLowerCase().includes(normalized));
 }
 
 function renderCommands() {
@@ -167,11 +185,15 @@ function closeCommand() {
     commandBackdrop.hidden = true;
 }
 
-function runSelectedCommand() {
-    const item = commandItems(commandInput.value)[commandSelection];
+function activateCommand(item) {
     if (!item) return;
     closeCommand();
-    router.navigate(item.id);
+    if (typeof item.run === 'function') item.run();
+    else router.navigate(item.id);
+}
+
+function runSelectedCommand() {
+    activateCommand(commandItems(commandInput.value)[commandSelection]);
 }
 
 document.getElementById('openCommand').addEventListener('click', openCommand);
@@ -181,8 +203,7 @@ commandInput.addEventListener('input', () => { commandSelection = 0; renderComma
 commandResults.addEventListener('click', event => {
     const button = event.target.closest('[data-command-route]');
     if (!button) return;
-    closeCommand();
-    router.navigate(button.dataset.commandRoute);
+    activateCommand(commandItems(commandInput.value).find(item => item.id === button.dataset.commandRoute));
 });
 document.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
@@ -197,8 +218,47 @@ document.addEventListener('keydown', event => {
     if (event.key === 'Enter') { event.preventDefault(); runSelectedCommand(); }
 });
 
-window.addEventListener('load', () => window.lucide?.createIcons?.());
+// The legacy pages each hand the assistant their own page globals. Here the
+// shell already owns the read model, so point it at the store instead — the
+// assistant then sees exactly what the visible route sees.
+let assistant = null;
+function ensureAssistant() {
+    if (assistant) return assistant;
+    if (typeof window.FinancialAIAssistant !== 'function') return null;
+    assistant = new window.FinancialAIAssistant({
+        getFinanceData: () => store.getState().data?.finance || {},
+        getPortfolioData: () => store.getState().data?.portfolio || {},
+    });
+    return assistant;
+}
+
+function toggleAssistant() {
+    ensureAssistant()?.toggle();
+}
+
+// Same shortcut the portfolio page uses, so the habit carries across the app.
+document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'j') {
+        event.preventDefault();
+        toggleAssistant();
+    }
+});
+
+window.addEventListener('load', () => {
+    window.lucide?.createIcons?.();
+    ensureAssistant();
+});
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service worker registration failed', error));
+    const isLocalDev = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    if (isLocalDev) {
+        navigator.serviceWorker.getRegistrations().then(registrations =>
+            Promise.all(registrations.map(registration => registration.unregister()))
+        );
+    } else {
+        // updateViaCache:'none' matches the other pages — without it the browser
+        // may serve sw.js itself from HTTP cache and pin the app to old code.
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' })
+            .catch(error => console.warn('Service worker registration failed', error));
+    }
 }

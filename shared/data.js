@@ -114,8 +114,13 @@
      * (they belong to a different account). Demo mode bypasses the guard.
      */
     function canLoadLocal(uid, isDemoMode) {
-        if (isDemoMode) return true;
         const US = typeof window !== 'undefined' ? window.UserStorage : null;
+        if (isDemoMode) {
+            // Demo may only see the explicit demo namespace. If isolation was
+            // not established, fail closed instead of exposing a signed-in
+            // user's plain cache.
+            return !!US && US.activeUid() === (US.DEMO_UID || 'demo-user-readonly');
+        }
         if (!US || !uid) return true;
         const owner = US.activeUid();
         return !owner || owner === uid;

@@ -46,27 +46,27 @@
 
             <p class="rail-label">מרכז השליטה</p>
             <nav class="rail-nav" id="primaryNav">
-                <a class="rail-link is-active" href="app.html#/home" data-route="home" aria-current="page">
+                <a class="rail-link is-active" href="app.html#/home" data-route="home" aria-current="page" aria-label="התמונה הפיננסית הכוללת" title="התמונה הפיננסית הכוללת">
                     <span class="rail-link-icon"><i data-lucide="layout-dashboard"></i></span>
                     <span class="rail-link-copy"><strong>תמונה כוללת</strong><small>כל הכסף, מבט אחד</small></span>
                     <span class="rail-link-index">01</span>
                 </a>
-                <a class="rail-link" href="portfolio.html" data-route="portfolio">
+                <a class="rail-link" href="portfolio.html" data-route="portfolio" aria-label="תיק השקעות, תשואה וסיכון" title="תיק השקעות, תשואה וסיכון">
                     <span class="rail-link-icon"><i data-lucide="line-chart"></i></span>
                     <span class="rail-link-copy"><strong>השקעות</strong><small>תיק, תשואה וסיכון</small></span>
                     <span class="rail-link-index">02</span>
                 </a>
-                <a class="rail-link" href="finance.html" data-route="finance">
+                <a class="rail-link" href="finance.html" data-route="finance" aria-label="הכנסות, הוצאות ויעדים" title="הכנסות, הוצאות ויעדים">
                     <span class="rail-link-icon"><i data-lucide="wallet-cards"></i></span>
                     <span class="rail-link-copy"><strong>תזרים</strong><small>הכנסות, הוצאות ויעדים</small></span>
                     <span class="rail-link-index">03</span>
                 </a>
-                <a class="rail-link" href="mortgage.html" data-route="mortgage">
+                <a class="rail-link" href="mortgage.html" data-route="mortgage" aria-label="תרחישים ותכנון משכנתא" title="תרחישים ותכנון משכנתא">
                     <span class="rail-link-icon"><i data-lucide="landmark"></i></span>
                     <span class="rail-link-copy"><strong>משכנתא</strong><small>תרחישים ותכנון</small></span>
                     <span class="rail-link-index">04</span>
                 </a>
-                <a class="rail-link" href="tax-optimizer.html" data-route="tax">
+                <a class="rail-link" href="tax-optimizer.html" data-route="tax" aria-label="זכויות ואופטימיזציית מס" title="זכויות ואופטימיזציית מס">
                     <span class="rail-link-icon"><i data-lucide="calculator"></i></span>
                     <span class="rail-link-copy"><strong>מס</strong><small>זכויות ואופטימיזציה</small></span>
                     <span class="rail-link-index">05</span>
@@ -75,8 +75,8 @@
 
             <div class="rail-spacer"></div>
 
-            <button class="rail-command" id="openCommand" type="button" aria-haspopup="dialog">
-                <span><i data-lucide="search"></i> חיפוש ופעולות</span>
+            <button class="rail-command" id="openCommand" type="button" aria-haspopup="dialog" aria-label="חיפוש ופעולות" title="חיפוש ופעולות">
+                <span><i data-lucide="search"></i> חיפוש</span>
                 <kbd>Ctrl K</kbd>
             </button>
 
@@ -111,6 +111,9 @@
                         <strong id="clockTime">--:--</strong>
                         <span id="clockDate">טוען תאריך</span>
                     </div>
+                    <button class="topbar-action" id="themeQuickToggle" type="button" aria-label="החלפת מצב תצוגה" title="החלפת מצב תצוגה">
+                        <i data-lucide="sun-moon"></i>
+                    </button>
                     <button class="topbar-action" id="topbarCommand" type="button" aria-label="פתח חיפוש מהיר">
                         <i data-lucide="command"></i>
                     </button>
@@ -152,6 +155,17 @@
 
     <noscript>כדי להשתמש במערכת יש להפעיל JavaScript בדפדפן.</noscript>
     <script src="vendor/lucide-1.17.0.min.js" defer></script>
+    <!-- Defines classes only, no side effects; main.js constructs the assistant
+         against the shell store so it never scrapes page globals. -->
+    <script src="ai-assistant.js" defer></script>
     <script type="module" src="app/main.js"></script>
+    <!-- Consent gate. The shell is the landing page now, so a first-time user
+         would otherwise reach the product without ever seeing the terms. Loaded
+         only outside demo mode: terms-modal.js imports firebase-config at module
+         scope, and the shell deliberately keeps the Firebase SDK off the demo
+         path entirely. Demo has no account to record consent against anyway. -->
+    <script type="module">
+        if (sessionStorage.getItem('demoMode') !== 'true') import('./terms-modal.js');
+    </script>
 </body>
 </html>
