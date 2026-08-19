@@ -253,7 +253,7 @@
     </div>
 
     <script type="module">
-        import { enterDemoMode } from './demo-data.js';
+        import { enterDemoMode, exitDemoMode } from './demo-data.js';
 
         // Demo mode button
         document.getElementById('demoBtn').addEventListener('click', () => {
@@ -280,6 +280,15 @@
                 const user = result.user;
 
                 console.log('User signed in:', user.email);
+                // Leave the demo sandbox first. sessionStorage survives navigation
+                // within a tab, so signing in after trying the demo used to keep
+                // demoMode set: the app would show the demo banner and fabricated
+                // data while genuinely authenticated, and the demo barrier would
+                // block every Firestore call for a real account.
+                // Order matters — exitDemoMode archives the demo cache and clears
+                // the active-uid marker, so syncToUser then adopts the real user's
+                // own data rather than swapping against the demo namespace.
+                exitDemoMode();
                 // Bind the plain localStorage keys to this uid BEFORE any page reads them
                 if (window.UserStorage) window.UserStorage.syncToUser(user.uid);
                 window.location.href = 'app.html#/home';
