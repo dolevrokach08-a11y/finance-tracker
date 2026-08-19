@@ -436,6 +436,13 @@ kbd {
 @keyframes pulse-loader { to { opacity: .45; transform: scale(.65); } }
 
 body { --app-bottom-dock: 0px; }
+/* The hidden attribute has to beat a component's own display rule.
+   The UA stylesheet's [hidden] { display: none } is weaker than any class
+   selector, so `.demo-ribbon { display: flex }` quietly won and the demo
+   banner showed for every user, signed in or not — el.hidden = true had no
+   visible effect at all. Same for the account menu, which sat permanently
+   open. Fixing it once here rather than per component. */
+[hidden] { display: none !important; }
 .mobile-dock { display: none; }
 
 .command-backdrop {
