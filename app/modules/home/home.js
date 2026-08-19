@@ -16,6 +16,12 @@ function monthName(key) {
     const parts = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
     return parts ? (MONTH_NAMES[Number(parts[2]) - 1] || '') : '';
 }
+// A share or a progress level: no sign, because it is not a change.
+function ratio(value) {
+    if (!Number.isFinite(value)) return '—';
+    return `${value.toFixed(1)}%`;
+}
+
 function percent(value) {
     if (!Number.isFinite(value)) return '—';
     return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -179,9 +185,25 @@ export function mount({ root, store }) {
         text(root, 'cashValue', portfolio.cash ? currency(portfolio.cash) : '—');
         const cashShare = portfolio.total > 0 ? (portfolio.cash / portfolio.total) * 100 : null;
         text(root, 'cashShare', Number.isFinite(cashShare) ? `${cashShare.toFixed(0)}% מהתיק זמין ללא מכירת נכסים` : 'אין מספיק נתונים לחישוב');
-        text(root, 'cashShareValue', percent(cashShare));
+        text(root, 'cashShareValue', ratio(cashShare));
 
-        text(root, 'debtRatio', percent(metrics.debtRatio));
+        // Three months is the common floor, six the comfortable one — so the bar
+        // fills against six rather than against an open-ended scale.
+        const months = metrics.emergencyMonths;
+        text(root, 'emergencyMonths', Number.isFinite(months) ? `${months.toFixed(1)} חודשים` : '—');
+        text(root, 'emergencyAmount', metrics.emergencyCushion ? currency(metrics.emergencyCushion) : '—');
+        text(root, 'emergencyCaption', Number.isFinite(months)
+            ? (months >= 6 ? 'מכוסה בנוחות' : months >= 3 ? 'מכוסה בבסיס' : 'מתחת לשלושה חודשים')
+            : 'חודשי הוצאות מכוסים');
+        root.querySelector('#emergencyScale').style.width =
+            `${Number.isFinite(months) ? Math.min(100, (months / 6) * 100) : 0}%`;
+
+        text(root, 'firePct', ratio(metrics.firePct));
+        text(root, 'fireTarget', metrics.fireTarget ? currency(metrics.fireTarget, { compact: true }) : '—');
+        root.querySelector('#fireScale').style.width =
+            `${Number.isFinite(metrics.firePct) ? Math.min(100, metrics.firePct) : 0}%`;
+
+        text(root, 'debtRatio', ratio(metrics.debtRatio));
         text(root, 'mortgagePayment', mortgage.monthlyPayment ? currency(mortgage.monthlyPayment) : '—');
 
         const insight = metrics.insight;

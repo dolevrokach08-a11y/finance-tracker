@@ -14,7 +14,7 @@ function rateFor(currency, rates) {
 }
 
 function portfolioMetrics(portfolio, cachedTwr) {
-    if (!portfolio) return { total: 0, invested: 0, cash: 0, cost: 0, pensions: 0, returnPct: null, history: [], allocation: [] };
+    if (!portfolio) return { total: 0, invested: 0, cash: 0, bonds: 0, cost: 0, pensions: 0, returnPct: null, history: [], allocation: [] };
     const rates = portfolio.rates || {};
     let stocks = 0;
     let bonds = 0;
@@ -70,7 +70,7 @@ function portfolioMetrics(portfolio, cachedTwr) {
         { id: 'cash', label: 'מזומן', value: cash, color: '#ad85ff' },
     ].filter(item => item.value > 0);
 
-    return { total, invested, cash, cost, pensions, returnPct, history, allocation };
+    return { total, invested, cash, bonds, cost, pensions, returnPct, history, allocation };
 }
 
 function financeMetrics(finance, cachedSummary) {
@@ -212,6 +212,24 @@ function buildInsight({ finance, portfolio, mortgage }) {
     };
 }
 
+// Completed months only. The current month is partial, so including it
+// understates expenses — which would inflate both ratios below exactly when a
+// user is most likely to check them.
+function averageMonthlyExpenses(finance, rules, monthCount = 3) {
+    if (!finance || !rules) return 0;
+    const now = new Date();
+    const keys = [];
+    for (let back = 1; back <= monthCount; back++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+        keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    const months = keys.map(key => rules.monthSummary(finance, key)).filter(m => m.hasData);
+    if (months.length) return months.reduce((sum, m) => sum + m.exp, 0) / months.length;
+    // A brand-new account has no completed month yet; the partial one beats nothing.
+    const current = rules.monthSummary(finance, rules.currentMonthKey());
+    return current.hasData ? current.exp : 0;
+}
+
 export function deriveMetrics(data = {}) {
     const portfolio = portfolioMetrics(data.portfolio, data.cachedTwr);
     const finance = financeMetrics(data.finance, data.cachedFinance);
@@ -228,6 +246,28 @@ export function deriveMetrics(data = {}) {
         + (livePensions ? number(manual.pension) : 0);
     const combinedNetWorth = finance.assets - supersededByLive - finance.liabilities
         + portfolio.total + portfolio.pensions;
+
+    // ── Resilience ───────────────────────────────────────────────────────────
+    // What could actually be reached if income stopped: portfolio cash, the bond
+    // sleeve (held as the safety cushion rather than as a return bet), and any
+    // cash or deposit recorded by hand. Deliberately excludes equities — a
+    // forced sale in a bad month is a last resort, not a cushion — and pensions,
+    // which carry a withdrawal penalty.
+    const rules = typeof globalThis !== 'undefined' ? globalThis.FTFinance : null;
+    const avgMonthlyExpenses = averageMonthlyExpenses(data.finance, rules);
+    const liquidRecorded = number(manual.cash) + number(manual.savings);
+    const emergencyCushion = portfolio.cash + portfolio.bonds + liquidRecorded;
+    const emergencyMonths = avgMonthlyExpenses > 0 && emergencyCushion > 0
+        ? emergencyCushion / avgMonthlyExpenses
+        : null;
+
+    // FIRE: 25× annual expenses, the 4% rule. Measured against the tradeable
+    // portfolio only — pensions are retirement money but not drawable early,
+    // so counting them would overstate how close early independence is.
+    const fireTarget = avgMonthlyExpenses * 12 * 25;
+    const firePct = fireTarget > 0 && portfolio.total > 0
+        ? Math.min((portfolio.total / fireTarget) * 100, 100)
+        : null;
     const debtRatio = finance.income > 0 ? (mortgage.monthlyPayment / finance.income) * 100 : null;
     const hasData = Boolean(data.finance || data.portfolio || data.mortgage);
 
@@ -237,6 +277,11 @@ export function deriveMetrics(data = {}) {
         finance,
         mortgage,
         combinedNetWorth,
+        avgMonthlyExpenses,
+        emergencyCushion,
+        emergencyMonths,
+        fireTarget,
+        firePct,
         debtRatio,
         recent: recentActivity(data.portfolio),
     };
