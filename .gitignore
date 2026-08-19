@@ -8,6 +8,10 @@ worker/.wrangler/
 node_modules/
 dist/
 
+# Local copy of anything retired from the app. git history is the real
+# source of truth; this is just easier to reach for.
+.archive/
+
 # Local backup files — git history is the source of truth
 *.backup
 
