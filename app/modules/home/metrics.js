@@ -43,9 +43,17 @@ function portfolioMetrics(portfolio, cachedTwr) {
     const total = invested + cash;
     const pensions = sum(portfolio.pensions, item => item.currentValue);
 
-    let returnPct = cost > 0 ? ((invested - cost) / cost) * 100 : null;
+    // Real TWR, from the snapshots this module already holds. It used to show a
+    // cost-basis return under the same label whenever portfolio_cachedTWR was
+    // missing or over a day old — a different measure, silently substituted. The
+    // cache is now only a shortcut: identical answer, one less pass.
+    const twrEngine = typeof globalThis !== 'undefined' ? globalThis.FTPortfolioTWR : null;
+    let returnPct = null;
     if (cachedTwr && typeof cachedTwr.total === 'number' && Date.now() - number(cachedTwr.timestamp) < 86_400_000) {
         returnPct = cachedTwr.total;
+    } else if (twrEngine) {
+        const twr = twrEngine.calculate(portfolio.snapshots, invested + cash);
+        returnPct = twr ? twr.total : null;
     }
 
     const snapshots = Array.isArray(portfolio.snapshots) ? portfolio.snapshots : [];

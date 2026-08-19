@@ -37,6 +37,7 @@
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
+    <script src="shared/portfolio-twr.js" defer></script>
     <script src="shared/load-script.js"></script>
     <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
          file input in the holdings-import wizard. hiFileChange() fetches it. -->
@@ -5325,6 +5326,13 @@ function calculateTWRv3(startDate = null) {
             if (!Array.isArray(portfolio.snapshots) || portfolio.snapshots.length === 0) {
                 console.log('⚠️ No snapshots for TWR calculation');
                 return null;
+            }
+
+            // Shared with the home screen so the two cannot report different
+            // returns for the same snapshots. Needs only the snapshots and the
+            // current value — pensions excluded, as everywhere else.
+            if (window.FTPortfolioTWR) {
+                return window.FTPortfolioTWR.calculate(portfolio.snapshots, getTotalPortfolioValueEnhanced());
             }
             
             const snapshots = [...portfolio.snapshots].sort((a, b) => new Date(a.date) - new Date(b.date));
