@@ -48,6 +48,9 @@
     ];
 
     var ACTIVE_KEY = 'ft_active_uid';
+    var DEMO_UID = 'demo-user-readonly';
+    var PRE_DEMO_UID = '__unclaimed_before_demo__';
+    var PRE_DEMO_KEY = 'ft_pre_demo_unclaimed';
 
     function nsKey(uid, key) {
         return 'u::' + uid + '::' + key;
@@ -77,6 +80,23 @@
         });
     }
 
+    function hasArchive(uid) {
+        return USER_KEYS.some(function (k) { return localStorage.getItem(nsKey(uid, k)) !== null; });
+    }
+
+    /** Merge a preserved archive into a real account without replacing newer account data. */
+    function mergeArchive(fromUid, toUid) {
+        USER_KEYS.forEach(function (k) {
+            var sourceKey = nsKey(fromUid, k);
+            var targetKey = nsKey(toUid, k);
+            var source = localStorage.getItem(sourceKey);
+            if (source !== null && localStorage.getItem(targetKey) === null) {
+                localStorage.setItem(targetKey, source);
+            }
+            localStorage.removeItem(sourceKey);
+        });
+    }
+
     /**
      * Make the plain keys belong to `uid`. Call on every successful auth
      * (login page + each page's onAuthStateChanged) BEFORE any data load.
@@ -91,11 +111,22 @@
         if (active) {
             // Another user's data occupies the plain keys — swap.
             archive(active);
+            // If demo mode was entered before the old single-user cache had an
+            // owner marker, recover that quarantined cache into the first real
+            // account that signs in. Never merge it into the demo account.
+            if (uid !== DEMO_UID && localStorage.getItem(PRE_DEMO_KEY) === 'true') {
+                mergeArchive(PRE_DEMO_UID, uid);
+                localStorage.removeItem(PRE_DEMO_KEY);
+            }
             restore(uid);
         } else {
             // No active owner recorded. Plain keys may hold pre-isolation data
             // (the original single-user install) — adopt each key for this uid
             // unless the uid already has its own archived copy (post-logout case).
+            if (uid !== DEMO_UID && localStorage.getItem(PRE_DEMO_KEY) === 'true') {
+                mergeArchive(PRE_DEMO_UID, uid);
+                localStorage.removeItem(PRE_DEMO_KEY);
+            }
             USER_KEYS.forEach(function (k) {
                 var plain = localStorage.getItem(k);
                 var stored = localStorage.getItem(nsKey(uid, k));
@@ -107,6 +138,40 @@
         }
         localStorage.setItem(ACTIVE_KEY, uid);
         return true;
+    }
+
+    /**
+     * Move all plain user data out of reach before demo mode starts.
+     * Unlike syncToUser(DEMO_UID), an unowned legacy cache is quarantined rather
+     * than adopted by the fictitious demo account.
+     */
+    function enterDemoSandbox() {
+        var active = localStorage.getItem(ACTIVE_KEY);
+        if (active === DEMO_UID) {
+            // Already inside the sandbox: the plain keys ARE the demo data.
+            // restore() deletes every key with no archived copy, and
+            // seedDemoStorage() writes the plain keys directly rather than the
+            // archive — so restoring here erased the whole demo dataset on each
+            // page load, leaving demo users an empty mortgage and empty caches.
+            return false;
+        }
+        if (active) {
+            archive(active);
+        } else {
+            archive(PRE_DEMO_UID);
+            if (hasArchive(PRE_DEMO_UID)) localStorage.setItem(PRE_DEMO_KEY, 'true');
+        }
+        restore(DEMO_UID);
+        localStorage.setItem(ACTIVE_KEY, DEMO_UID);
+        return true;
+    }
+
+    /** Archive the disposable demo cache and leave no private/plain keys behind. */
+    function exitDemoSandbox() {
+        var active = localStorage.getItem(ACTIVE_KEY);
+        if (active === DEMO_UID) archive(DEMO_UID);
+        else USER_KEYS.forEach(function (k) { localStorage.removeItem(k); });
+        localStorage.removeItem(ACTIVE_KEY);
     }
 
     /** Archive the active user's data and clear the plain keys. Call BEFORE signOut. */
@@ -129,8 +194,11 @@
     window.UserStorage = {
         syncToUser: syncToUser,
         clearOnLogout: clearOnLogout,
+        enterDemoSandbox: enterDemoSandbox,
+        exitDemoSandbox: exitDemoSandbox,
         activeUid: activeUid,
-        USER_KEYS: USER_KEYS
+        USER_KEYS: USER_KEYS,
+        DEMO_UID: DEMO_UID
     };
 
     // ── Per-browser writer identity (window.FTDevice) ────────────────────

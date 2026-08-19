@@ -1,0 +1,881 @@
+/* Tax Lab — component-level workspace design for the React calculator. */
+body[data-product-page="tax"] {
+  --tax-violet: #ad85ff;
+  --tax-pink: #ff83c6;
+  --tax-cyan: #75d9ff;
+  --tax-mint: #70efc7;
+  --tax-amber: #ffc768;
+  --tax-red: #ff7185;
+  --tax-panel: rgba(15, 17, 23, .9);
+  --tax-panel-2: rgba(22, 24, 31, .82);
+  --tax-soft: rgba(255, 255, 255, .052);
+  --tax-grid: rgba(255, 255, 255, .04);
+}
+
+[data-theme="light"] body[data-product-page="tax"],
+body[data-product-page="tax"][data-theme="light"] {
+  --tax-panel: rgba(255, 255, 252, .97);
+  --tax-panel-2: rgba(248, 246, 252, .96);
+  --tax-soft: rgba(35, 26, 46, .055);
+  --tax-grid: rgba(35, 26, 46, .055);
+}
+
+body[data-product-page="tax"] #root {
+  width: min(100%, 1600px) !important;
+  padding: clamp(14px, 2.4vw, 38px) !important;
+}
+
+body[data-product-page="tax"] .tax-os {
+  color: var(--product-text) !important;
+}
+
+body[data-product-page="tax"] .tax-hero {
+  position: relative;
+  min-height: 230px;
+  padding: clamp(32px, 5vw, 66px) clamp(24px, 6vw, 82px) !important;
+  margin-bottom: 18px;
+  border: 1px solid var(--product-line) !important;
+  border-radius: 30px !important;
+  text-align: right !important;
+  background:
+    radial-gradient(circle at 14% 50%, rgba(173,133,255,.19), transparent 23rem),
+    linear-gradient(112deg, rgba(255,131,198,.1), transparent 48%),
+    var(--tax-panel) !important;
+  box-shadow: 0 28px 70px rgba(0,0,0,.2), inset 0 1px rgba(255,255,255,.04);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+body[data-product-page="tax"] .tax-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--tax-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tax-grid) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: linear-gradient(90deg, transparent, #000 35%, #000);
+}
+
+body[data-product-page="tax"] .tax-hero__eyebrow {
+  color: var(--tax-pink) !important;
+  font: 700 10px/1.2 "JetBrains Mono", monospace !important;
+  letter-spacing: .14em !important;
+}
+
+body[data-product-page="tax"] .tax-hero h1 {
+  max-width: 820px;
+  margin: 14px 0 10px !important;
+  color: var(--product-text) !important;
+  font-size: clamp(2.35rem, 5.4vw, 5rem) !important;
+  line-height: .95;
+  letter-spacing: -.06em;
+}
+
+body[data-product-page="tax"] .tax-hero p {
+  max-width: 750px;
+  color: var(--product-muted) !important;
+  font-size: 14px !important;
+  line-height: 1.8;
+}
+
+body[data-product-page="tax"] .tax-hero__code {
+  position: absolute;
+  right: clamp(24px, 6vw, 82px);
+  bottom: 26px;
+  color: rgba(173,133,255,.72);
+  font: 700 10px/1 "JetBrains Mono", monospace;
+  letter-spacing: .16em;
+}
+
+body[data-product-page="tax"] .tax-hero__signal {
+  position: absolute;
+  left: clamp(22px, 6vw, 90px);
+  top: 50%;
+  width: 180px;
+  height: 180px;
+  border: 1px solid rgba(173,133,255,.28);
+  border-radius: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 22px rgba(173,133,255,.025), 0 0 54px rgba(173,133,255,.1);
+}
+
+body[data-product-page="tax"] .tax-hero__signal::before,
+body[data-product-page="tax"] .tax-hero__signal::after {
+  content: "";
+  position: absolute;
+  border: 1px dashed rgba(255,131,198,.25);
+  border-radius: 50%;
+  inset: 22px;
+}
+
+body[data-product-page="tax"] .tax-hero__signal::after { inset: 47px; border-style: solid; }
+
+body[data-product-page="tax"] .tax-hero__signal i {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--tax-violet);
+  box-shadow: 0 0 14px currentColor;
+}
+
+body[data-product-page="tax"] .tax-hero__signal i:nth-child(1) { top: 15px; right: 35px; }
+body[data-product-page="tax"] .tax-hero__signal i:nth-child(2) { bottom: 28px; left: 16px; background: var(--tax-pink); }
+body[data-product-page="tax"] .tax-hero__signal i:nth-child(3) { top: 85px; right: -5px; background: var(--tax-mint); }
+
+body[data-product-page="tax"] .tax-hero__signal b {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--product-text);
+  font: 800 31px/1 "JetBrains Mono", monospace;
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs {
+  position: sticky;
+  top: 12px;
+  z-index: 55;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  max-width: 1100px;
+  margin: 0 auto 18px;
+  padding: 6px;
+  border: 1px solid var(--product-line);
+  border-radius: 20px;
+  background: rgba(14,16,20,.86);
+  backdrop-filter: blur(22px);
+  box-shadow: 0 17px 45px rgba(0,0,0,.18);
+}
+
+[data-theme="light"] body[data-product-page="tax"] .tax-workspace-tabs,
+body[data-product-page="tax"][data-theme="light"] .tax-workspace-tabs {
+  background: rgba(255,255,252,.88);
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0,1fr);
+  grid-template-rows: auto auto;
+  column-gap: 9px;
+  min-height: 62px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  color: var(--product-muted);
+  text-align: right;
+  background: transparent;
+  cursor: pointer;
+  transition: .2s ease;
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button > span {
+  grid-row: 1 / 3;
+  align-self: center;
+  color: rgba(173,133,255,.75);
+  font: 700 10px "JetBrains Mono", monospace;
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button strong {
+  color: var(--product-text);
+  font-size: 12px;
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button small {
+  font-size: 9px;
+  color: var(--product-muted);
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button:hover {
+  background: rgba(173,133,255,.06);
+}
+
+body[data-product-page="tax"] .tax-workspace-tabs button.is-active {
+  border-color: rgba(173,133,255,.34);
+  background: linear-gradient(135deg, rgba(173,133,255,.18), rgba(255,131,198,.075));
+  box-shadow: inset 0 -2px var(--tax-violet), 0 10px 28px rgba(173,133,255,.1);
+}
+
+body[data-product-page="tax"] .tax-kpi-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0,1fr));
+  gap: 11px;
+  max-width: 1320px;
+  margin: 0 auto 18px;
+}
+
+body[data-product-page="tax"] .tax-kpi-strip article {
+  position: relative;
+  min-height: 128px;
+  padding: 19px;
+  border: 1px solid var(--product-line);
+  border-radius: 20px;
+  background:
+    linear-gradient(145deg, rgba(173,133,255,.075), transparent 50%),
+    var(--tax-panel);
+  box-shadow: 0 18px 42px rgba(0,0,0,.13);
+  overflow: hidden;
+}
+
+body[data-product-page="tax"] .tax-kpi-strip article::after {
+  content: "";
+  position: absolute;
+  left: 17px;
+  bottom: 17px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tax-violet);
+  box-shadow: 0 0 0 7px rgba(173,133,255,.08), 0 0 18px rgba(173,133,255,.5);
+}
+
+body[data-product-page="tax"] .tax-kpi-strip article:nth-child(2)::after { background:var(--tax-pink); box-shadow:0 0 0 7px rgba(255,131,198,.08),0 0 18px rgba(255,131,198,.45); }
+body[data-product-page="tax"] .tax-kpi-strip article:nth-child(3)::after { background:var(--tax-cyan); box-shadow:0 0 0 7px rgba(117,217,255,.08),0 0 18px rgba(117,217,255,.45); }
+body[data-product-page="tax"] .tax-kpi-strip article:nth-child(4)::after { background:var(--tax-mint); box-shadow:0 0 0 7px rgba(112,239,199,.08),0 0 18px rgba(112,239,199,.45); }
+
+body[data-product-page="tax"] .tax-kpi-strip span,
+body[data-product-page="tax"] .tax-kpi-strip small { display:block; color:var(--product-muted); font-size:10px; }
+body[data-product-page="tax"] .tax-kpi-strip strong { display:block; margin:9px 0 4px; color:var(--product-text); font:800 clamp(19px,2.2vw,30px)/1 "JetBrains Mono", "Heebo", sans-serif; letter-spacing:-.055em; }
+
+body[data-product-page="tax"] .tax-system-alert {
+  max-width: 1320px;
+  margin: 10px auto 16px !important;
+  padding: 14px 17px !important;
+  border-color: var(--product-line) !important;
+  border-radius: 16px !important;
+  color: var(--product-text) !important;
+  background: var(--tax-panel-2) !important;
+  box-shadow: 0 12px 34px rgba(0,0,0,.1);
+}
+
+body[data-product-page="tax"] .tax-system-alert--danger { border-right:4px solid var(--tax-red) !important; }
+body[data-product-page="tax"] .tax-system-alert--data { border-right:4px solid var(--tax-cyan) !important; }
+body[data-product-page="tax"] .tax-system-alert--empty,
+body[data-product-page="tax"] .tax-system-alert--insight { border-right:4px solid var(--tax-mint) !important; }
+
+body[data-product-page="tax"] .tax-workspace {
+  max-width: 1320px !important;
+  padding: 0 0 40px !important;
+  margin: 0 auto !important;
+}
+
+body[data-product-page="tax"] .tax-view { animation: taxViewIn .32s cubic-bezier(.2,.8,.2,1); }
+@keyframes taxViewIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+body[data-product-page="tax"] [data-tax-workspace="household"] .tax-view:not(.tax-view--household),
+body[data-product-page="tax"] [data-tax-workspace="credits"] .tax-view:not(.tax-view--credits),
+body[data-product-page="tax"] [data-tax-workspace="capital"] .tax-view:not(.tax-view--capital),
+body[data-product-page="tax"] [data-tax-workspace="plan"] .tax-view:not(.tax-view--plan) {
+  display: none !important;
+}
+
+body[data-product-page="tax"] .tax-panel {
+  padding: clamp(18px, 2.4vw, 30px) !important;
+  margin-bottom: 16px !important;
+  border: 1px solid var(--product-line) !important;
+  border-radius: 24px !important;
+  color: var(--product-text);
+  background:
+    linear-gradient(145deg, rgba(173,133,255,.052), transparent 45%),
+    var(--tax-panel) !important;
+  box-shadow: 0 22px 54px rgba(0,0,0,.14), inset 0 1px rgba(255,255,255,.035) !important;
+}
+
+body[data-product-page="tax"] .tax-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 18px !important;
+  color: var(--product-text) !important;
+  font-size: 16px !important;
+}
+
+body[data-product-page="tax"] .tax-panel__title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  margin-right: 9px;
+  background: linear-gradient(90deg, var(--product-line), transparent);
+}
+
+body[data-product-page="tax"] .tax-household > div[style*="grid-template-columns"] {
+  gap: 16px !important;
+}
+
+body[data-product-page="tax"] .tax-slider {
+  padding: 13px 14px;
+  border: 1px solid var(--product-line);
+  border-radius: 14px;
+  background: var(--tax-soft);
+}
+
+body[data-product-page="tax"] .tax-slider__label { color:var(--product-muted) !important; }
+body[data-product-page="tax"] .tax-slider__value { color:var(--product-text) !important; font-family:"JetBrains Mono",monospace; }
+
+body[data-product-page="tax"] input[type="range"] {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(173,133,255,.72), rgba(255,131,198,.28)) !important;
+}
+
+body[data-product-page="tax"] input[type="range"]::-webkit-slider-thumb {
+  width: 19px;
+  height: 19px;
+  appearance: none;
+  border: 3px solid var(--tax-panel);
+  border-radius: 50%;
+  background: linear-gradient(145deg, var(--tax-pink), var(--tax-violet));
+  box-shadow: 0 0 0 2px rgba(173,133,255,.5), 0 0 19px rgba(173,133,255,.5);
+}
+
+body[data-product-page="tax"] :is(input[type="number"], input[type="text"], select) {
+  min-height: 40px;
+  border: 1px solid var(--product-line) !important;
+  border-radius: 10px !important;
+  color: var(--product-text) !important;
+  background: rgba(0,0,0,.17) !important;
+}
+
+[data-theme="light"] body[data-product-page="tax"] :is(input[type="number"], input[type="text"], select),
+body[data-product-page="tax"][data-theme="light"] :is(input[type="number"], input[type="text"], select) {
+  background: rgba(255,255,255,.78) !important;
+}
+
+body[data-product-page="tax"] .tax-subpanel {
+  padding: 17px !important;
+  border-color: rgba(173,133,255,.25) !important;
+  border-radius: 17px !important;
+  background: linear-gradient(135deg, rgba(173,133,255,.09), rgba(255,131,198,.035)) !important;
+}
+
+body[data-product-page="tax"] .tax-payslip-list {
+  max-height: 260px !important;
+  gap: 7px !important;
+}
+
+body[data-product-page="tax"] :is(.tax-payslip-row, .tax-child-row) {
+  min-height: 46px;
+  padding: 9px 11px !important;
+  border: 1px solid var(--product-line);
+  border-radius: 12px !important;
+  color: var(--product-text);
+  background: var(--tax-soft) !important;
+}
+
+body[data-product-page="tax"] .tax-child-row > span { color:var(--product-text) !important; }
+body[data-product-page="tax"] .tax-child-row > span:first-child { color:var(--product-muted) !important; }
+
+body[data-product-page="tax"] .tax-toggle {
+  min-height: 39px;
+  padding: 7px 15px !important;
+  border-color: var(--product-line) !important;
+  border-radius: 999px !important;
+  color: var(--product-muted) !important;
+  background: var(--tax-soft) !important;
+}
+
+body[data-product-page="tax"] .tax-toggle.is-active {
+  border-color: rgba(173,133,255,.38) !important;
+  color: var(--tax-pink) !important;
+  background: rgba(173,133,255,.13) !important;
+  box-shadow: inset 0 -2px var(--tax-violet);
+}
+
+body[data-product-page="tax"] .tax-waterfall {
+  overflow: hidden;
+}
+
+body[data-product-page="tax"] .tax-waterfall__legend {
+  padding: 10px;
+  border: 1px solid var(--product-line);
+  border-radius: 13px;
+  background: var(--tax-soft);
+}
+
+body[data-product-page="tax"] .tax-waterfall__swatch {
+  border-radius: 50% !important;
+  box-shadow: 0 0 10px currentColor;
+}
+
+body[data-product-page="tax"] .tax-waterfall__person {
+  padding: 16px;
+  border: 1px solid var(--product-line);
+  border-radius: 17px;
+  background: var(--tax-soft);
+}
+
+body[data-product-page="tax"] .tax-waterfall__track {
+  height: 48px !important;
+  padding: 4px;
+  gap: 3px;
+  border-radius: 14px !important;
+  background: rgba(0,0,0,.14) !important;
+}
+
+body[data-product-page="tax"] .tax-waterfall__segment {
+  min-width: 4px !important;
+  border-radius: 9px;
+  box-shadow: inset 0 1px rgba(255,255,255,.34), 0 0 16px color-mix(in srgb, currentColor 28%, transparent);
+}
+
+body[data-product-page="tax"] .tax-waterfall__chip {
+  padding: 5px 8px !important;
+  border: 1px solid var(--product-line);
+  border-radius: 999px !important;
+  color: var(--product-muted) !important;
+  background: var(--tax-soft) !important;
+}
+
+body[data-product-page="tax"] .tax-waterfall__total {
+  padding: 18px !important;
+  border: 1px solid rgba(255,113,133,.2);
+  border-radius: 16px !important;
+  background: linear-gradient(135deg, rgba(255,113,133,.1), transparent) !important;
+}
+
+body[data-product-page="tax"] .tax-person-card,
+body[data-product-page="tax"] .tax-scenario-card,
+body[data-product-page="tax"] .tax-cpi-metric {
+  padding: 16px !important;
+  border: 1px solid var(--product-line) !important;
+  border-radius: 16px !important;
+  color: var(--product-text);
+  background: var(--tax-panel-2) !important;
+  box-shadow: inset 0 1px rgba(255,255,255,.03);
+}
+
+body[data-product-page="tax"] .tax-person-grid {
+  counter-reset: taxPerson;
+  gap: 15px !important;
+}
+
+body[data-product-page="tax"] .tax-person-card {
+  counter-increment: taxPerson;
+  position: relative;
+  min-height: 235px;
+  padding: 21px !important;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+body[data-product-page="tax"] .tax-person-card::before {
+  content: "0" counter(taxPerson);
+  position: absolute;
+  left: 17px;
+  top: 14px;
+  z-index: -1;
+  color: rgba(173,133,255,.13);
+  font: 800 42px/1 "JetBrains Mono", monospace;
+  letter-spacing: -.08em;
+}
+
+body[data-product-page="tax"] .tax-person-card::after {
+  content: "";
+  position: absolute;
+  left: -70px;
+  bottom: -110px;
+  z-index: -2;
+  width: 230px;
+  height: 230px;
+  border: 1px solid rgba(173,133,255,.15);
+  border-radius: 50%;
+  box-shadow: 0 0 0 28px rgba(173,133,255,.018), 0 0 0 58px rgba(255,131,198,.012);
+}
+
+body[data-product-page="tax"] .tax-person-card > div:first-child {
+  min-height: 39px;
+  margin-bottom: 13px !important;
+  font-size: 15px !important;
+  border-bottom: 1px solid var(--product-line);
+}
+
+body[data-product-page="tax"] .tax-person-card:nth-child(1) { border-top:2px solid var(--tax-cyan) !important; }
+body[data-product-page="tax"] .tax-person-card:nth-child(2) { border-top:2px solid var(--tax-pink) !important; }
+body[data-product-page="tax"] .tax-scenario-card--actual { border-top:2px solid var(--tax-cyan) !important; }
+body[data-product-page="tax"] .tax-scenario-card--optimal { border-top:2px solid var(--tax-mint) !important; }
+
+body[data-product-page="tax"] .tax-data-row {
+  display: grid !important;
+  grid-template-columns: minmax(0,1fr) auto;
+  gap: 12px;
+  min-height: 43px;
+  align-items: center;
+  margin-bottom: 0 !important;
+  padding: 9px 2px !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--product-line) !important;
+  border-radius: 0;
+  color: var(--product-muted);
+  background: transparent;
+}
+
+body[data-product-page="tax"] .tax-data-row__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+body[data-product-page="tax"] .tax-data-row__label i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--tax-violet);
+  box-shadow: 0 0 11px rgba(173,133,255,.65);
+}
+
+body[data-product-page="tax"] .tax-data-row__amount {
+  min-width: 92px;
+  padding: 5px 9px;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 9px;
+  text-align: left;
+  white-space: nowrap;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+body[data-product-page="tax"] .tax-data-row--total {
+  min-height: 59px;
+  margin-top: 10px !important;
+  padding: 10px 12px !important;
+  border-color: rgba(173,133,255,.24) !important;
+  border: 1px solid rgba(173,133,255,.24) !important;
+  border-radius: 13px;
+  color: var(--product-text);
+  background: linear-gradient(135deg, rgba(173,133,255,.13), rgba(255,131,198,.045));
+}
+
+body[data-product-page="tax"] .tax-data-row--total .tax-data-row__label i {
+  width: 9px;
+  height: 9px;
+  flex-basis: 9px;
+  background: var(--tax-mint);
+  box-shadow: 0 0 14px rgba(112,239,199,.65);
+}
+
+body[data-product-page="tax"] .tax-data-row--total .tax-data-row__amount {
+  min-width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -.04em;
+}
+
+body[data-product-page="tax"] .tax-data-row__amount { font-family:"JetBrains Mono",monospace; }
+
+[data-theme="light"] body[data-product-page="tax"] .tax-data-row__amount[style*="210, 20%, 92%"],
+body[data-product-page="tax"][data-theme="light"] .tax-data-row__amount[style*="210, 20%, 92%"] {
+  color: var(--product-text) !important;
+}
+
+body[data-product-page="tax"] .tax-bottom-line > div:last-child {
+  padding: 20px !important;
+  border: 1px solid rgba(112,239,199,.22);
+  border-radius: 17px !important;
+  background: radial-gradient(circle at 50% 120%, rgba(112,239,199,.19), transparent 60%) !important;
+}
+
+body[data-product-page="tax"] .tax-scenario-grid {
+  gap: 14px !important;
+}
+
+body[data-product-page="tax"] .tax-scenario-card {
+  position: relative;
+  min-height: 250px;
+  padding: 21px !important;
+  overflow: hidden;
+}
+
+body[data-product-page="tax"] .tax-scenario-card::after {
+  content: "";
+  position: absolute;
+  left: -35px;
+  bottom: -55px;
+  width: 130px;
+  height: 130px;
+  border: 1px solid rgba(173,133,255,.13);
+  border-radius: 50%;
+}
+
+body[data-product-page="tax"] .tax-result-callout {
+  position: relative;
+  min-height: 108px;
+  display: grid;
+  place-content: center;
+  padding: 20px 24px !important;
+  border: 1px solid rgba(173,133,255,.22);
+  border-radius: 17px !important;
+  color: var(--product-text) !important;
+  background:
+    radial-gradient(circle at 18% 120%, rgba(173,133,255,.17), transparent 44%),
+    linear-gradient(135deg, rgba(173,133,255,.08), rgba(255,131,198,.035)) !important;
+  overflow: hidden;
+}
+
+body[data-product-page="tax"] .tax-result-callout::before {
+  content: "";
+  position: absolute;
+  right: 22px;
+  top: 50%;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(173,133,255,.35);
+  border-radius: 50%;
+  transform: translateY(-50%);
+  box-shadow: 0 0 0 8px rgba(173,133,255,.04), 0 0 19px rgba(173,133,255,.15);
+}
+
+body[data-product-page="tax"] .tax-result-callout > div:nth-child(2),
+body[data-product-page="tax"] .tax-result-callout > strong {
+  color: var(--tax-mint) !important;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: -.04em;
+}
+
+body[data-product-page="tax"] .tax-result-callout--grant {
+  min-height: 78px;
+  place-content: center start;
+  font-size: 13px !important;
+}
+
+body[data-product-page="tax"] .tax-result-callout--grant strong {
+  margin-inline: 6px;
+  font-size: 20px;
+}
+
+body[data-product-page="tax"] .tax-result-callout--saving > div:nth-child(2) {
+  font-size: clamp(27px, 3vw, 40px) !important;
+}
+
+body[data-product-page="tax"] .tax-offset-meter {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--product-line);
+}
+
+body[data-product-page="tax"] .tax-offset-meter > span {
+  display: block;
+  height: 9px;
+  padding: 2px;
+  border: 1px solid var(--product-line);
+  border-radius: 999px;
+  background: rgba(0,0,0,.16);
+}
+
+body[data-product-page="tax"] .tax-offset-meter > span i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tax-violet), var(--tax-pink), var(--tax-mint));
+  box-shadow: 0 0 14px rgba(173,133,255,.38);
+  transition: width .45s cubic-bezier(.2,.8,.2,1);
+}
+
+body[data-product-page="tax"] .tax-offset-meter small {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  color: var(--product-muted);
+  font-size: 10px;
+}
+
+body[data-product-page="tax"] .tax-offset-meter b {
+  color: var(--tax-mint);
+  font-family: "JetBrains Mono", monospace;
+}
+
+body[data-product-page="tax"] .tax-optimal-callout {
+  position: relative;
+  min-height: 178px;
+  display: grid;
+  grid-template-columns: 132px minmax(0,1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 23px 27px !important;
+  border-color: rgba(112,239,199,.23) !important;
+  border-radius: 21px !important;
+  background:
+    radial-gradient(circle at 10% 50%, rgba(112,239,199,.17), transparent 18rem),
+    linear-gradient(135deg, rgba(173,133,255,.1), rgba(112,239,199,.045)) !important;
+  overflow: hidden;
+}
+
+body[data-product-page="tax"] .tax-optimal-callout__orbit {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  border: 1px solid rgba(112,239,199,.4);
+  border-radius: 50%;
+  box-shadow: 0 0 0 12px rgba(112,239,199,.028), inset 0 0 32px rgba(112,239,199,.08);
+}
+
+body[data-product-page="tax"] .tax-optimal-callout__orbit::before,
+body[data-product-page="tax"] .tax-optimal-callout__orbit::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+}
+
+body[data-product-page="tax"] .tax-optimal-callout__orbit::before { inset: 20px; border: 1px dashed rgba(255,131,198,.42); }
+body[data-product-page="tax"] .tax-optimal-callout__orbit::after { inset: 43px; background:var(--tax-mint); box-shadow:0 0 20px rgba(112,239,199,.7); }
+body[data-product-page="tax"] .tax-optimal-callout__orbit i { position:absolute;width:7px;height:7px;border-radius:50%;background:var(--tax-pink);box-shadow:0 0 11px currentColor; }
+body[data-product-page="tax"] .tax-optimal-callout__orbit i:first-child { top:9px;right:19px; }
+body[data-product-page="tax"] .tax-optimal-callout__orbit i:last-child { bottom:15px;left:8px;background:var(--tax-violet); }
+
+body[data-product-page="tax"] .tax-optimal-callout__copy span,
+body[data-product-page="tax"] .tax-optimal-callout__copy small,
+body[data-product-page="tax"] .tax-optimal-callout__refund span { display:block;color:var(--product-muted); }
+body[data-product-page="tax"] .tax-optimal-callout__copy span { color:var(--tax-mint);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase; }
+body[data-product-page="tax"] .tax-optimal-callout__copy strong { display:block;margin:8px 0 5px;color:var(--product-text);font:800 clamp(29px,4vw,49px)/1 "JetBrains Mono",monospace;letter-spacing:-.07em; }
+body[data-product-page="tax"] .tax-optimal-callout__copy small { font-size:11px; }
+
+body[data-product-page="tax"] .tax-optimal-callout__refund {
+  min-width: 160px;
+  padding: 15px 17px;
+  border: 1px solid rgba(255,131,198,.2);
+  border-radius: 15px;
+  text-align: center;
+  background: rgba(255,131,198,.065);
+}
+
+body[data-product-page="tax"] .tax-optimal-callout__refund strong {
+  display:block;
+  margin-top:6px;
+  color:var(--tax-pink);
+  font:800 21px/1 "JetBrains Mono",monospace;
+  letter-spacing:-.05em;
+}
+
+body[data-product-page="tax"] .tax-cpi-summary { gap:12px !important; }
+body[data-product-page="tax"] .tax-cpi-metric { min-height:118px; display:flex; flex-direction:column; justify-content:center; }
+body[data-product-page="tax"] .tax-cpi-metric--flat { border-top:2px solid var(--tax-red) !important; }
+body[data-product-page="tax"] .tax-cpi-metric--real { border-top:2px solid var(--tax-cyan) !important; }
+body[data-product-page="tax"] .tax-cpi-metric--saving { border-top:2px solid var(--tax-mint) !important; }
+
+body[data-product-page="tax"] .tax-detail-toggle {
+  min-height: 54px;
+  border-color: rgba(173,133,255,.26) !important;
+  border-radius: 15px !important;
+  color: var(--product-text) !important;
+  background: rgba(173,133,255,.075) !important;
+}
+
+body[data-product-page="tax"] .tax-table-wrap {
+  border-radius: 17px;
+  overflow-x: auto;
+}
+
+body[data-product-page="tax"] .tax-data-table {
+  width:100%;
+  min-width:680px;
+  border-collapse:separate !important;
+  border-spacing:0 6px !important;
+}
+
+body[data-product-page="tax"] .tax-data-table th {
+  padding:10px 9px !important;
+  border:0 !important;
+  color:var(--product-muted) !important;
+  background:transparent !important;
+}
+
+body[data-product-page="tax"] .tax-data-table td {
+  padding:11px 9px !important;
+  border-block:1px solid var(--product-line) !important;
+  color:var(--product-text);
+  background:var(--tax-soft);
+}
+
+body[data-product-page="tax"] .tax-data-table tr td:first-child { border-right:1px solid var(--product-line) !important; border-radius:0 10px 10px 0; }
+body[data-product-page="tax"] .tax-data-table tr td:last-child { border-left:1px solid var(--product-line) !important; border-radius:10px 0 0 10px; }
+body[data-product-page="tax"] .tax-data-table tbody tr:hover td { background:rgba(173,133,255,.09) !important; }
+
+[data-theme="light"] body[data-product-page="tax"] .tax-data-table td[style*="#c8d8f0"],
+body[data-product-page="tax"][data-theme="light"] .tax-data-table td[style*="#c8d8f0"] {
+  color:var(--product-text) !important;
+}
+
+body[data-product-page="tax"] .tax-step-row {
+  min-height:64px;
+  align-items:center;
+  padding:11px 13px;
+  margin-bottom:7px !important;
+  border:1px solid var(--product-line);
+  border-radius:14px;
+  background:var(--tax-soft);
+}
+
+body[data-product-page="tax"] .tax-step-row__index {
+  width:34px !important;
+  height:34px !important;
+  color:#17121e !important;
+  background:linear-gradient(145deg,var(--tax-pink),var(--tax-violet)) !important;
+  box-shadow:0 0 0 6px rgba(173,133,255,.07);
+}
+
+body[data-product-page="tax"] .tax-disclaimer {
+  padding:16px !important;
+  border-color:rgba(255,199,104,.22) !important;
+  border-radius:15px !important;
+  color:var(--product-muted) !important;
+  background:rgba(255,199,104,.065) !important;
+}
+
+body[data-product-page="tax"] .tax-info-tip__icon {
+  color:#17121e !important;
+  background:linear-gradient(145deg,var(--tax-pink),var(--tax-violet)) !important;
+}
+
+body[data-product-page="tax"] .tax-info-tip__bubble {
+  border-color:var(--product-line) !important;
+  color:var(--product-text) !important;
+  background:var(--tax-panel) !important;
+  box-shadow:0 18px 45px rgba(0,0,0,.28) !important;
+}
+
+@media (max-width: 940px) {
+  body[data-product-page="tax"] .tax-hero__signal { opacity:.42; left:-28px; }
+  body[data-product-page="tax"] .tax-kpi-strip { grid-template-columns:repeat(2,1fr); }
+  body[data-product-page="tax"] .tax-workspace-tabs button small { display:none; }
+  body[data-product-page="tax"] .tax-workspace-tabs button { min-height:48px; grid-template-rows:1fr; }
+  body[data-product-page="tax"] .tax-optimal-callout { grid-template-columns:92px minmax(0,1fr); }
+  body[data-product-page="tax"] .tax-optimal-callout__orbit { width:82px;height:82px; }
+  body[data-product-page="tax"] .tax-optimal-callout__refund { grid-column:1 / -1; }
+}
+
+@media (max-width: 640px) {
+  body[data-product-page="tax"] #root { padding:10px !important; }
+  body[data-product-page="tax"] .tax-hero { min-height:255px; padding:30px 22px 58px !important; border-radius:22px !important; }
+  body[data-product-page="tax"] .tax-hero__signal { display:none; }
+  body[data-product-page="tax"] .tax-hero__code { right:22px; }
+  body[data-product-page="tax"] .tax-workspace-tabs { grid-template-columns:repeat(2,1fr); position:static; }
+  body[data-product-page="tax"] .tax-kpi-strip { grid-template-columns:1fr 1fr; }
+  body[data-product-page="tax"] .tax-kpi-strip article { min-height:112px; padding:15px; }
+  body[data-product-page="tax"] .tax-panel { border-radius:19px !important; }
+  body[data-product-page="tax"] .tax-panel > div[style*="grid-template-columns"] { grid-template-columns:1fr !important; }
+  body[data-product-page="tax"] .tax-cpi-summary { grid-template-columns:1fr !important; }
+  body[data-product-page="tax"] .tax-payslip-row { align-items:flex-start; gap:7px; flex-wrap:wrap; }
+  body[data-product-page="tax"] .tax-person-grid,
+  body[data-product-page="tax"] .tax-scenario-grid { grid-template-columns:1fr !important; }
+  body[data-product-page="tax"] .tax-person-card,
+  body[data-product-page="tax"] .tax-scenario-card { min-height:auto; }
+  body[data-product-page="tax"] .tax-optimal-callout { grid-template-columns:1fr; text-align:center; }
+  body[data-product-page="tax"] .tax-optimal-callout__orbit { margin-inline:auto; }
+  body[data-product-page="tax"] .tax-optimal-callout__refund { min-width:0; }
+}
+
+@media (max-width: 420px) {
+  body[data-product-page="tax"] .tax-kpi-strip { grid-template-columns:1fr; }
+}

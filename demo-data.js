@@ -467,6 +467,70 @@ function generateDemoPortfolioData() {
     };
 }
 
+function generateDemoMortgageData() {
+    return {
+        tranches: [
+            { id: 1, name: 'פריים', type: 'prime', rate: 5.1, principal: 290000, months: 300, anchor: 6.0, spread: -0.9 },
+            { id: 2, name: 'קבועה לא צמודה', type: 'fix', rate: 4.75, principal: 360000, months: 300 },
+            { id: 3, name: 'משתנה כל 5 שנים', type: 'var5', rate: 4.45, principal: 210000, months: 300, anchor: 3.9, spread: 0.55 }
+        ],
+        propertyValue: 1850000,
+        taxPropertyValue: 1850000,
+        taxShevachSell: 2100000
+    };
+}
+
+function demoMortgageSummary(state) {
+    const loanAmount = state.tranches.reduce((sum, tranche) => sum + (Number(tranche.principal) || 0), 0);
+    return {
+        propertyValue: Number(state.propertyValue) || 0,
+        loanAmount,
+        remainingBalance: loanAmount,
+        monthlyPayment: 5050,
+        weightedRate: 4.78,
+        totalInterest: 655000,
+        tranches: state.tranches.length,
+        lastUpdate: new Date().toISOString()
+    };
+}
+
+const DEMO_READY_KEY = 'demoSandboxReady';
+
+function seedDemoStorage() {
+    if (typeof window === 'undefined') return;
+    const finance = generateDemoFinanceData();
+    const portfolio = generateDemoPortfolioData();
+    const mortgageState = generateDemoMortgageData();
+    const demoValues = {
+        financeTrackerData: finance,
+        portfolio,
+        mortgageState,
+        mortgageData: demoMortgageSummary(mortgageState)
+    };
+    Object.entries(demoValues).forEach(([key, value]) => {
+        localStorage.setItem(key, JSON.stringify(value));
+    });
+    localStorage.setItem('mortgage_monthly_income', '32000');
+    [
+        'financeData', 'financeData_backup', 'mortgage', 'taxOptimizerData', 'taxData',
+        'portfolio_cachedTWR', 'portfolio_cachedBenchmarks', 'portfolio_sync_meta',
+        'financeTrackerData_meta', 'mortgage_sync_meta', 'ft_sync_manifest', 'ft_warnings',
+        'ai_api_key', 'ai_model'
+    ].forEach(key => localStorage.removeItem(key));
+}
+
+function ensureDemoStorageSandbox({ reset = false } = {}) {
+    if (typeof window === 'undefined' || !isDemoMode()) return false;
+    const storage = window.UserStorage;
+    if (!storage?.enterDemoSandbox) return false;
+    const changed = storage.enterDemoSandbox();
+    if (reset || changed || sessionStorage.getItem(DEMO_READY_KEY) !== 'true') {
+        seedDemoStorage();
+        sessionStorage.setItem(DEMO_READY_KEY, 'true');
+    }
+    return true;
+}
+
 // Check if we're in demo mode
 function isDemoMode() {
     return sessionStorage.getItem('demoMode') === 'true';
@@ -475,11 +539,17 @@ function isDemoMode() {
 // Enter demo mode
 function enterDemoMode() {
     sessionStorage.setItem('demoMode', 'true');
+    sessionStorage.removeItem(DEMO_READY_KEY);
+    ensureDemoStorageSandbox({ reset: true });
 }
 
 // Exit demo mode
 function exitDemoMode() {
+    if (typeof window !== 'undefined' && window.UserStorage?.exitDemoSandbox) {
+        window.UserStorage.exitDemoSandbox();
+    }
     sessionStorage.removeItem('demoMode');
+    sessionStorage.removeItem(DEMO_READY_KEY);
 }
 
 // Get the demo user object
@@ -487,4 +557,14 @@ function getDemoUser() {
     return DEMO_USER;
 }
 
-export { isDemoMode, enterDemoMode, exitDemoMode, getDemoUser, generateDemoFinanceData, generateDemoPortfolioData, DEMO_USER };
+export {
+    isDemoMode,
+    enterDemoMode,
+    exitDemoMode,
+    ensureDemoStorageSandbox,
+    getDemoUser,
+    generateDemoFinanceData,
+    generateDemoPortfolioData,
+    generateDemoMortgageData,
+    DEMO_USER
+};

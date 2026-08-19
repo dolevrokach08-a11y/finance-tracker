@@ -54,7 +54,7 @@ class FinancialAIAssistant {
         style.textContent = `
             .ai-fab {
                 position: fixed;
-                bottom: 24px;
+                bottom: calc(24px + var(--app-bottom-dock, 0px));
                 left: 24px;
                 width: 56px;
                 height: 56px;
@@ -384,12 +384,12 @@ class FinancialAIAssistant {
                 .ai-chat-panel {
                     left: 8px;
                     right: 8px;
-                    bottom: 80px;
+                    bottom: calc(80px + var(--app-bottom-dock, 0px));
                     width: auto;
                     max-height: 70vh;
                 }
                 .ai-fab {
-                    bottom: 16px;
+                    bottom: calc(16px + var(--app-bottom-dock, 0px));
                     left: 16px;
                     width: 50px;
                     height: 50px;

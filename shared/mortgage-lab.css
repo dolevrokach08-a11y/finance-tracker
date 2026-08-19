@@ -1,0 +1,601 @@
+/* Mortgage Lab — deep visual layer for every calculator, comparison and chart. */
+body[data-product-page="mortgage"] {
+  --mortgage-coral: #ff806b;
+  --mortgage-amber: #ffc15b;
+  --mortgage-blue: #6fa8ff;
+  --mortgage-teal: #62e5ce;
+  --mortgage-purple: #b68cff;
+  --mortgage-danger: #ff6572;
+  --mortgage-ink: #0b0d11;
+  --mortgage-panel: rgba(15, 18, 23, 0.88);
+  --mortgage-panel-2: rgba(21, 25, 31, 0.82);
+  --mortgage-soft: rgba(255, 255, 255, 0.055);
+  --mortgage-grid: rgba(255, 255, 255, 0.045);
+}
+
+[data-theme="light"] body[data-product-page="mortgage"],
+body[data-product-page="mortgage"][data-theme="light"] {
+  --mortgage-ink: #f7f4ed;
+  --mortgage-panel: rgba(255, 255, 252, 0.96);
+  --mortgage-panel-2: rgba(249, 247, 240, 0.92);
+  --mortgage-soft: rgba(27, 31, 22, 0.055);
+  --mortgage-grid: rgba(27, 31, 22, 0.06);
+}
+
+body[data-product-page="mortgage"] > nav:not(.shared-nav) {
+  min-height: 68px !important;
+  height: auto !important;
+  padding: 10px 14px !important;
+}
+
+body[data-product-page="mortgage"] .logo {
+  min-width: max-content;
+  color: var(--product-text);
+  font-size: 14px;
+}
+
+body[data-product-page="mortgage"] .logo-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 13px;
+  color: #17120f;
+  background: linear-gradient(145deg, var(--mortgage-amber), var(--mortgage-coral));
+  box-shadow: 0 0 0 5px rgba(var(--product-accent-rgb), 0.08), 0 10px 24px rgba(var(--product-accent-rgb), 0.22);
+}
+
+body[data-product-page="mortgage"] .nav-center {
+  max-width: min(76vw, 1040px);
+  padding: 4px;
+  gap: 3px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--product-line);
+  border-radius: 15px;
+  background: rgba(0, 0, 0, 0.13);
+}
+
+body[data-product-page="mortgage"] .nav-center::-webkit-scrollbar { display: none; }
+
+body[data-product-page="mortgage"] .nav-tab {
+  min-height: 37px;
+  padding-inline: 13px !important;
+  font-size: 11px !important;
+}
+
+body[data-product-page="mortgage"] .nav-tab.active {
+  color: #17120f !important;
+  background: linear-gradient(135deg, var(--mortgage-amber), var(--mortgage-coral)) !important;
+  box-shadow: 0 8px 22px rgba(var(--product-accent-rgb), 0.22), inset 0 1px rgba(255, 255, 255, 0.4) !important;
+}
+
+body[data-product-page="mortgage"] .page {
+  animation: mortgagePageIn 0.38s cubic-bezier(.2,.8,.2,1);
+}
+
+@keyframes mortgagePageIn {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: none; }
+}
+
+body[data-product-page="mortgage"] .container {
+  max-width: 1540px !important;
+}
+
+body[data-product-page="mortgage"] .workspace-intro,
+body[data-product-page="mortgage"] .page-hero {
+  position: relative;
+  min-height: 172px;
+  margin-bottom: 22px !important;
+  padding: clamp(25px, 3.4vw, 48px) !important;
+  border: 1px solid var(--product-line);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 14% 50%, rgba(var(--product-accent-rgb), 0.18), transparent 23rem),
+    linear-gradient(118deg, rgba(var(--product-accent-rgb), 0.13), transparent 45%),
+    var(--mortgage-panel) !important;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+body[data-product-page="mortgage"] .workspace-intro::before,
+body[data-product-page="mortgage"] .page-hero::before {
+  content: "";
+  position: absolute;
+  width: 320px;
+  height: 320px;
+  left: -45px;
+  top: -150px;
+  border: 1px solid rgba(var(--product-accent-rgb), 0.3);
+  border-radius: 50%;
+  box-shadow: 0 0 0 42px rgba(var(--product-accent-rgb), 0.028), 0 0 0 90px rgba(var(--product-accent-rgb), 0.016);
+  z-index: -1;
+}
+
+body[data-product-page="mortgage"] .workspace-intro::after,
+body[data-product-page="mortgage"] .page-hero::after {
+  content: attr(data-code);
+  position: absolute;
+  left: 30px;
+  bottom: 24px;
+  color: var(--mortgage-amber);
+  font: 700 10px/1 "Space Grotesk", sans-serif;
+  letter-spacing: 0.18em;
+}
+
+body[data-product-page="mortgage"] .workspace-intro .workspace-eyebrow,
+body[data-product-page="mortgage"] .hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mortgage-amber) !important;
+  font: 700 10px/1.2 "Space Grotesk", "Heebo", sans-serif;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+body[data-product-page="mortgage"] .workspace-intro .workspace-eyebrow::before,
+body[data-product-page="mortgage"] .hero-eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 2px;
+  background: linear-gradient(90deg, var(--mortgage-coral), var(--mortgage-amber));
+  box-shadow: 0 0 12px rgba(var(--product-accent-rgb), 0.5);
+}
+
+body[data-product-page="mortgage"] :is(.workspace-intro, .page-hero) h1 {
+  max-width: 880px;
+  margin: 12px 0 7px;
+  color: var(--product-text) !important;
+  font-size: clamp(2rem, 4vw, 3.8rem) !important;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+body[data-product-page="mortgage"] :is(.workspace-intro, .page-hero) p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--product-muted) !important;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+body[data-product-page="mortgage"] .two-col {
+  grid-template-columns: minmax(330px, 410px) minmax(0, 1fr);
+  gap: 20px;
+}
+
+body[data-product-page="mortgage"] :is(.card, .metric-card, .method-compare-card) {
+  border: 1px solid var(--product-line) !important;
+  background:
+    linear-gradient(145deg, rgba(var(--product-accent-rgb), 0.045), transparent 42%),
+    var(--mortgage-panel) !important;
+  box-shadow: 0 20px 46px rgba(0, 0, 0, 0.15), inset 0 1px rgba(255, 255, 255, 0.035) !important;
+}
+
+body[data-product-page="mortgage"] .card {
+  border-radius: 24px !important;
+}
+
+body[data-product-page="mortgage"] .card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--product-accent-rgb), 0.28) !important;
+}
+
+body[data-product-page="mortgage"] .card-head {
+  min-height: 61px;
+  padding: 16px 20px;
+  border-bottom-color: var(--product-line);
+  background: linear-gradient(90deg, rgba(var(--product-accent-rgb), 0.055), transparent 34%);
+}
+
+body[data-product-page="mortgage"] .card-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--product-text) !important;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+body[data-product-page="mortgage"] .card-title::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--mortgage-coral);
+  box-shadow: 0 0 13px rgba(var(--product-accent-rgb), 0.7);
+}
+
+body[data-product-page="mortgage"] .card-body { padding: 20px; }
+
+body[data-product-page="mortgage"] .metric-card {
+  min-height: 128px;
+  padding: 18px !important;
+  border-radius: 20px !important;
+}
+
+body[data-product-page="mortgage"] .metric-card::before {
+  top: auto;
+  right: 17px;
+  bottom: 14px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  opacity: 1;
+  background: var(--mortgage-coral);
+  box-shadow: 0 0 0 7px rgba(var(--product-accent-rgb), 0.08), 0 0 18px rgba(var(--product-accent-rgb), 0.45);
+}
+
+body[data-product-page="mortgage"] .metric-card:nth-child(2)::before { background: var(--mortgage-blue); box-shadow: 0 0 0 7px rgba(111,168,255,.08), 0 0 18px rgba(111,168,255,.42); }
+body[data-product-page="mortgage"] .metric-card:nth-child(3)::before { background: var(--mortgage-teal); box-shadow: 0 0 0 7px rgba(98,229,206,.08), 0 0 18px rgba(98,229,206,.42); }
+body[data-product-page="mortgage"] .metric-card:nth-child(4)::before { background: var(--mortgage-purple); box-shadow: 0 0 0 7px rgba(182,140,255,.08), 0 0 18px rgba(182,140,255,.42); }
+body[data-product-page="mortgage"] .metric-card:nth-child(5)::before { background: var(--mortgage-amber); box-shadow: 0 0 0 7px rgba(255,193,91,.08), 0 0 18px rgba(255,193,91,.42); }
+
+body[data-product-page="mortgage"] .m-label {
+  color: var(--product-muted) !important;
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+
+body[data-product-page="mortgage"] .m-val {
+  margin-top: 8px;
+  color: var(--product-text);
+  font-size: clamp(20px, 2vw, 29px);
+  letter-spacing: -0.04em;
+}
+
+body[data-product-page="mortgage"] .m-sub { color: var(--product-muted); }
+
+body[data-product-page="mortgage"] #er-results .three-col {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body[data-product-page="mortgage"] #er-results .metric-card {
+  min-width: 0;
+  padding-inline: 12px !important;
+}
+
+body[data-product-page="mortgage"] #er-results .er-money-value {
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+  white-space: nowrap;
+  text-align: center;
+  font-size: clamp(17px, 1.45vw, 23px);
+  letter-spacing: -.075em;
+  font-variant-numeric: tabular-nums;
+  unicode-bidi: isolate;
+}
+
+body[data-product-page="mortgage"] .field {
+  padding: 12px 13px;
+  margin-bottom: 10px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: var(--mortgage-soft);
+  transition: border-color .2s, background .2s;
+}
+
+body[data-product-page="mortgage"] .field:focus-within {
+  border-color: rgba(var(--product-accent-rgb), .32);
+  background: rgba(var(--product-accent-rgb), .065);
+}
+
+body[data-product-page="mortgage"] .f-label {
+  margin-bottom: 8px;
+  color: var(--product-muted);
+  font-size: 11px;
+}
+
+body[data-product-page="mortgage"] :is(input[type="number"], input[type="text"], select) {
+  min-height: 42px;
+  border-color: var(--product-line) !important;
+  border-radius: 11px;
+  color: var(--product-text) !important;
+  background: rgba(0, 0, 0, .15) !important;
+}
+
+[data-theme="light"] body[data-product-page="mortgage"] :is(input[type="number"], input[type="text"], select),
+body[data-product-page="mortgage"][data-theme="light"] :is(input[type="number"], input[type="text"], select) {
+  background: rgba(255, 255, 255, .72) !important;
+}
+
+body[data-product-page="mortgage"] input[type="range"] {
+  height: 6px;
+  background: linear-gradient(90deg, rgba(var(--product-accent-rgb), .5), rgba(255,193,91,.18));
+}
+
+body[data-product-page="mortgage"] input[type="range"]::-webkit-slider-thumb {
+  width: 19px;
+  height: 19px;
+  border: 3px solid var(--mortgage-ink);
+  background: linear-gradient(145deg, var(--mortgage-amber), var(--mortgage-coral));
+  box-shadow: 0 0 0 2px rgba(var(--product-accent-rgb), .48), 0 0 18px rgba(var(--product-accent-rgb), .45);
+}
+
+body[data-product-page="mortgage"] .tranche {
+  padding: 15px;
+  border-color: var(--product-line) !important;
+  border-radius: 17px;
+  background:
+    linear-gradient(110deg, rgba(var(--product-accent-rgb), .07), transparent 40%),
+    var(--mortgage-panel-2) !important;
+}
+
+body[data-product-page="mortgage"] .tranche:hover {
+  border-color: rgba(var(--product-accent-rgb), .28) !important;
+  transform: translateX(-2px);
+}
+
+body[data-product-page="mortgage"] .t-num {
+  width: 28px;
+  height: 28px;
+  color: #17120f;
+  background: linear-gradient(145deg, var(--mortgage-amber), var(--mortgage-coral));
+  box-shadow: 0 0 0 5px rgba(var(--product-accent-rgb), .07);
+}
+
+body[data-product-page="mortgage"] :is(.btn, .btn-add, .method-pill) {
+  border-radius: 11px;
+}
+
+body[data-product-page="mortgage"] .btn-primary,
+body[data-product-page="mortgage"] .method-pill.active {
+  color: #17120f !important;
+  background: linear-gradient(135deg, var(--mortgage-amber), var(--mortgage-coral)) !important;
+  box-shadow: 0 9px 24px rgba(var(--product-accent-rgb), .2) !important;
+}
+
+body[data-product-page="mortgage"] .btn-add {
+  min-height: 46px;
+  color: var(--mortgage-coral);
+  border-color: rgba(var(--product-accent-rgb), .32);
+  background: rgba(var(--product-accent-rgb), .055);
+}
+
+body[data-product-page="mortgage"] .method-pills {
+  padding: 5px;
+  border: 1px solid var(--product-line);
+  border-radius: 15px;
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] .method-pill {
+  flex: 1;
+  min-width: max-content;
+  text-align: center;
+}
+
+body[data-product-page="mortgage"] :is(.rec-box, .method-compare-card) {
+  border-radius: 17px;
+  background: var(--mortgage-panel-2) !important;
+}
+
+body[data-product-page="mortgage"] .rec-box {
+  padding: 15px 16px;
+  border-right-width: 4px;
+}
+
+body[data-product-page="mortgage"] .rec-text,
+body[data-product-page="mortgage"] .tip { color: var(--product-muted); }
+
+body[data-product-page="mortgage"] .chart-wrap {
+  height: clamp(270px, 30vw, 360px);
+  padding: 14px 8px 4px;
+  border: 1px solid var(--product-line);
+  border-radius: 17px;
+  background:
+    linear-gradient(var(--mortgage-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mortgage-grid) 1px, transparent 1px),
+    radial-gradient(circle at 82% 16%, rgba(var(--product-accent-rgb), .085), transparent 45%),
+    rgba(0, 0, 0, .09);
+  background-size: 42px 42px, 42px 42px, auto, auto;
+}
+
+[data-theme="light"] body[data-product-page="mortgage"] .chart-wrap,
+body[data-product-page="mortgage"][data-theme="light"] .chart-wrap {
+  background:
+    linear-gradient(var(--mortgage-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--mortgage-grid) 1px, transparent 1px),
+    radial-gradient(circle at 82% 16%, rgba(var(--product-accent-rgb), .13), transparent 45%),
+    rgba(255, 255, 255, .48);
+  background-size: 42px 42px, 42px 42px, auto, auto;
+}
+
+body[data-product-page="mortgage"] .chart-wrap canvas {
+  filter: drop-shadow(0 12px 20px rgba(0,0,0,.14));
+}
+
+body[data-product-page="mortgage"] .pie-wrap {
+  max-width: 250px;
+  padding: 13px;
+  border: 1px solid var(--product-line);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(var(--product-accent-rgb), .08), transparent 65%);
+  box-shadow: 0 0 0 10px rgba(var(--product-accent-rgb), .018), 0 18px 42px rgba(0,0,0,.16);
+}
+
+body[data-product-page="mortgage"] :is(#mix-bar, #b-mix-bar) {
+  height: 42px !important;
+  padding: 4px;
+  gap: 3px;
+  border: 1px solid var(--product-line);
+  border-radius: 14px !important;
+  background: rgba(0,0,0,.14);
+}
+
+body[data-product-page="mortgage"] :is(#mix-bar, #b-mix-bar) > * {
+  border-radius: 8px;
+  box-shadow: inset 0 1px rgba(255,255,255,.25), 0 0 18px currentColor;
+}
+
+body[data-product-page="mortgage"] :is(#mix-legend, #b-mix-legend) > * {
+  padding: 6px 9px;
+  border: 1px solid var(--product-line);
+  border-radius: 999px;
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] table {
+  border-collapse: separate;
+  border-spacing: 0 6px;
+  padding: 0 10px 10px;
+}
+
+body[data-product-page="mortgage"] thead { position: sticky; top: 0; z-index: 2; }
+
+body[data-product-page="mortgage"] th {
+  padding: 11px 12px;
+  color: var(--product-muted);
+  border: 0;
+  background: transparent;
+}
+
+body[data-product-page="mortgage"] td {
+  padding: 12px;
+  border-block: 1px solid var(--product-line);
+  color: var(--product-text);
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] tr td:first-child {
+  border-right: 1px solid var(--product-line);
+  border-radius: 0 11px 11px 0;
+}
+
+body[data-product-page="mortgage"] tr td:last-child {
+  border-left: 1px solid var(--product-line);
+  border-radius: 11px 0 0 11px;
+}
+
+body[data-product-page="mortgage"] tr:hover td {
+  background: rgba(var(--product-accent-rgb), .09);
+}
+
+body[data-product-page="mortgage"] .sc-row {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--product-line);
+  border-radius: 14px;
+  background: transparent;
+}
+
+body[data-product-page="mortgage"] .sc-cell {
+  border-radius: 9px;
+  color: var(--product-text);
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] .sc-head {
+  color: var(--product-muted);
+  background: rgba(255,255,255,.025);
+}
+
+body[data-product-page="mortgage"] .stress-grid {
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--product-line);
+  border-radius: 16px;
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] .stress-cell {
+  min-height: 45px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+}
+
+body[data-product-page="mortgage"] .stress-header {
+  color: var(--product-muted);
+  background: rgba(255,255,255,.035);
+}
+
+body[data-product-page="mortgage"] .stress-ok { background: rgba(98,229,206,.12); color: var(--mortgage-teal); }
+body[data-product-page="mortgage"] .stress-warn { background: rgba(255,193,91,.13); color: var(--mortgage-amber); }
+body[data-product-page="mortgage"] .stress-danger { background: rgba(255,101,114,.13); color: var(--mortgage-danger); }
+
+body[data-product-page="mortgage"] .pen-row,
+body[data-product-page="mortgage"] .method-stat {
+  min-height: 39px;
+  padding: 9px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--product-line);
+  border-radius: 10px;
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] .bep-track {
+  height: 12px;
+  padding: 2px;
+  border: 1px solid var(--product-line);
+  background: rgba(0,0,0,.14);
+}
+
+body[data-product-page="mortgage"] .bep-fill {
+  background: linear-gradient(90deg, var(--mortgage-teal), var(--mortgage-amber), var(--mortgage-danger));
+  box-shadow: 0 0 16px rgba(var(--product-accent-rgb), .2);
+}
+
+body[data-product-page="mortgage"] .tax-step {
+  min-height: 62px;
+  padding: 13px 15px;
+  border-color: var(--product-line);
+  border-radius: 14px;
+  background: var(--mortgage-soft);
+}
+
+body[data-product-page="mortgage"] .toggle-switch.on {
+  border-color: var(--mortgage-coral);
+  background: linear-gradient(135deg, var(--mortgage-amber), var(--mortgage-coral));
+}
+
+body[data-product-page="mortgage"] #milestones .metric-card {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+body[data-product-page="mortgage"] #p-methods .three-col,
+body[data-product-page="mortgage"] #p-graph .four-col {
+  align-items: stretch;
+}
+
+body[data-product-page="mortgage"] #p-methods .method-compare-card {
+  min-height: 220px;
+}
+
+body[data-product-page="mortgage"] #p-current #analysis-box,
+body[data-product-page="mortgage"] :is(#b-rec-box, #stress-summary, #cliff-summary, #penalty-detail, #bep-panel) {
+  display: grid;
+  gap: 8px;
+}
+
+@media (max-width: 1120px) {
+  body[data-product-page="mortgage"] > nav:not(.shared-nav) { align-items: flex-start; flex-wrap: wrap; }
+  body[data-product-page="mortgage"] .nav-center { order: 3; width: 100%; max-width: 100%; }
+  body[data-product-page="mortgage"] .two-col { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 720px) {
+  body[data-product-page="mortgage"] .container { padding: 12px !important; }
+  body[data-product-page="mortgage"] .workspace-intro,
+  body[data-product-page="mortgage"] .page-hero { min-height: 190px; border-radius: 22px; }
+  body[data-product-page="mortgage"] .workspace-intro::after,
+  body[data-product-page="mortgage"] .page-hero::after { left: 20px; bottom: 18px; }
+  body[data-product-page="mortgage"] .card { border-radius: 19px !important; }
+  body[data-product-page="mortgage"] .summary-metrics-grid,
+  body[data-product-page="mortgage"] .four-col { grid-template-columns: 1fr 1fr !important; }
+  body[data-product-page="mortgage"] .metric-card { min-height: 112px; }
+  body[data-product-page="mortgage"] .stress-grid { grid-template-columns: repeat(2, 1fr); }
+  body[data-product-page="mortgage"] .stress-header:first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 470px) {
+  body[data-product-page="mortgage"] .summary-metrics-grid,
+  body[data-product-page="mortgage"] .four-col { grid-template-columns: 1fr !important; }
+  body[data-product-page="mortgage"] .tranche-head { align-items: flex-start; gap: 8px; }
+}

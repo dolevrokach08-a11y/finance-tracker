@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#08090c">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="מרכז שליטה פיננסי אישי — תיק השקעות, תזרים, משכנתא ומס במקום אחד.">
+    <title>המעקב — מרכז השליטה הפיננסי</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="app/shell.css">
+    <link rel="stylesheet" href="app/modules/home/home.css">
+    <script>
+        if (localStorage.getItem('theme') === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+        }
+    </script>
+    <script src="shared/user-storage.js"></script>
+    <script src="shared/data.js"></script>
+</head>
+<body data-route="home">
+    <a class="skip-link" href="#app-outlet">דלג לתוכן</a>
+
+    <div class="shell-atmosphere" aria-hidden="true">
+        <span class="atmosphere-orb atmosphere-orb-a"></span>
+        <span class="atmosphere-orb atmosphere-orb-b"></span>
+        <span class="atmosphere-grid"></span>
+    </div>
+
+    <div class="app-shell">
+        <aside class="shell-rail" aria-label="ניווט ראשי">
+            <div class="rail-brand">
+                <span class="brand-mark" aria-hidden="true"><span>F</span></span>
+                <span class="brand-copy">
+                    <strong>המעקב</strong>
+                    <small>FINANCIAL OS</small>
+                </span>
+                <span class="brand-edition">01</span>
+            </div>
+
+            <p class="rail-label">מרכז השליטה</p>
+            <nav class="rail-nav" id="primaryNav">
+                <a class="rail-link is-active" href="app.html#/home" data-route="home" aria-current="page" aria-label="התמונה הפיננסית הכוללת" title="התמונה הפיננסית הכוללת">
+                    <span class="rail-link-icon"><i data-lucide="layout-dashboard"></i></span>
+                    <span class="rail-link-copy"><strong>תמונה כוללת</strong><small>כל הכסף, מבט אחד</small></span>
+                    <span class="rail-link-index">01</span>
+                </a>
+                <a class="rail-link" href="portfolio.html" data-route="portfolio" aria-label="תיק השקעות, תשואה וסיכון" title="תיק השקעות, תשואה וסיכון">
+                    <span class="rail-link-icon"><i data-lucide="line-chart"></i></span>
+                    <span class="rail-link-copy"><strong>השקעות</strong><small>תיק, תשואה וסיכון</small></span>
+                    <span class="rail-link-index">02</span>
+                </a>
+                <a class="rail-link" href="finance.html" data-route="finance" aria-label="הכנסות, הוצאות ויעדים" title="הכנסות, הוצאות ויעדים">
+                    <span class="rail-link-icon"><i data-lucide="wallet-cards"></i></span>
+                    <span class="rail-link-copy"><strong>תזרים</strong><small>הכנסות, הוצאות ויעדים</small></span>
+                    <span class="rail-link-index">03</span>
+                </a>
+                <a class="rail-link" href="mortgage.html" data-route="mortgage" aria-label="תרחישים ותכנון משכנתא" title="תרחישים ותכנון משכנתא">
+                    <span class="rail-link-icon"><i data-lucide="landmark"></i></span>
+                    <span class="rail-link-copy"><strong>משכנתא</strong><small>תרחישים ותכנון</small></span>
+                    <span class="rail-link-index">04</span>
+                </a>
+                <a class="rail-link" href="tax-optimizer.html" data-route="tax" aria-label="זכויות ואופטימיזציית מס" title="זכויות ואופטימיזציית מס">
+                    <span class="rail-link-icon"><i data-lucide="calculator"></i></span>
+                    <span class="rail-link-copy"><strong>מס</strong><small>זכויות ואופטימיזציה</small></span>
+                    <span class="rail-link-index">05</span>
+                </a>
+            </nav>
+
+            <div class="rail-spacer"></div>
+
+            <button class="rail-command" id="openCommand" type="button" aria-haspopup="dialog" aria-label="חיפוש ופעולות" title="חיפוש ופעולות">
+                <span><i data-lucide="search"></i> חיפוש</span>
+                <kbd>Ctrl K</kbd>
+            </button>
+
+            <div class="rail-session">
+                <div class="session-avatar" id="sessionAvatar" aria-hidden="true">ד</div>
+                <div class="session-copy">
+                    <strong id="sessionName">מתחבר…</strong>
+                    <span><i class="status-dot"></i><span id="sessionStatus">מאמת חיבור</span></span>
+                </div>
+                <button class="icon-button" id="sessionMenuButton" type="button" aria-label="אפשרויות חשבון" title="אפשרויות חשבון">
+                    <i data-lucide="more-horizontal"></i>
+                </button>
+                <div class="session-menu" id="sessionMenu" hidden>
+                    <button type="button" id="themeToggle"><i data-lucide="sun-moon"></i><span>החלף מצב תצוגה</span></button>
+                    <button type="button" id="logoutButton"><i data-lucide="log-out"></i><span>התנתקות</span></button>
+                </div>
+            </div>
+        </aside>
+
+        <main class="shell-main">
+            <header class="shell-topbar">
+                <div class="topbar-context">
+                    <span class="context-kicker"><i class="context-pulse"></i> LIVE WORKSPACE</span>
+                    <div class="context-title-row">
+                        <h1 id="routeTitle">התמונה הפיננסית שלך</h1>
+                        <span class="context-slash" aria-hidden="true">/</span>
+                        <p id="routeSubtitle">הנתונים החשובים מחוברים לתמונה אחת</p>
+                    </div>
+                </div>
+                <div class="topbar-actions">
+                    <div class="topbar-date" aria-label="תאריך ושעה">
+                        <strong id="clockTime">--:--</strong>
+                        <span id="clockDate">טוען תאריך</span>
+                    </div>
+                    <button class="topbar-action" id="themeQuickToggle" type="button" aria-label="החלפת מצב תצוגה" title="החלפת מצב תצוגה">
+                        <i data-lucide="sun-moon"></i>
+                    </button>
+                    <button class="topbar-action" id="topbarCommand" type="button" aria-label="פתח חיפוש מהיר">
+                        <i data-lucide="command"></i>
+                    </button>
+                </div>
+            </header>
+
+            <section class="shell-workspace" id="app-outlet" tabindex="-1" aria-live="polite" aria-busy="true">
+                <div class="shell-loader" id="shellLoader" role="status">
+                    <div class="loader-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <div>
+                        <strong>מחבר את התמונה המלאה</strong>
+                        <span>הנתונים שלך נאספים למרחב עבודה אחד</span>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <nav class="mobile-dock" aria-label="ניווט ראשי במובייל">
+        <a class="is-active" href="app.html#/home" data-route="home"><i data-lucide="layout-dashboard"></i><span>ראשי</span></a>
+        <a href="portfolio.html" data-route="portfolio"><i data-lucide="line-chart"></i><span>השקעות</span></a>
+        <a href="finance.html" data-route="finance"><i data-lucide="wallet-cards"></i><span>תזרים</span></a>
+        <a href="mortgage.html" data-route="mortgage"><i data-lucide="landmark"></i><span>משכנתא</span></a>
+        <a href="tax-optimizer.html" data-route="tax"><i data-lucide="calculator"></i><span>מס</span></a>
+    </nav>
+
+    <div class="command-backdrop" id="commandBackdrop" hidden>
+        <section class="command-panel" id="commandPanel" role="dialog" aria-modal="true" aria-labelledby="commandTitle">
+            <div class="command-input-wrap">
+                <i data-lucide="search"></i>
+                <label class="sr-only" for="commandInput" id="commandTitle">חיפוש ופעולות מהירות</label>
+                <input id="commandInput" type="search" placeholder="לאן ממשיכים?" autocomplete="off">
+                <kbd>ESC</kbd>
+            </div>
+            <div class="command-results" id="commandResults"></div>
+            <footer><span>↑↓ ניווט</span><span>Enter בחירה</span></footer>
+        </section>
+    </div>
+
+    <noscript>כדי להשתמש במערכת יש להפעיל JavaScript בדפדפן.</noscript>
+    <script src="vendor/lucide-1.17.0.min.js" defer></script>
+    <!-- Defines classes only, no side effects; main.js constructs the assistant
+         against the shell store so it never scrapes page globals. -->
+    <script src="ai-assistant.js" defer></script>
+    <script type="module" src="app/main.js"></script>
+    <!-- Consent gate. The shell is the landing page now, so a first-time user
+         would otherwise reach the product without ever seeing the terms. Loaded
+         only outside demo mode: terms-modal.js imports firebase-config at module
+         scope, and the shell deliberately keeps the Firebase SDK off the demo
+         path entirely. Demo has no account to record consent against anyway. -->
+    <script type="module">
+        if (sessionStorage.getItem('demoMode') !== 'true') import('./terms-modal.js');
+    </script>
+</body>
+</html>

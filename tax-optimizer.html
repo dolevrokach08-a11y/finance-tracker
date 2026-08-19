@@ -25,16 +25,6 @@ input[type="range"] { width: 100%; height: 4px; -webkit-appearance: none; appear
 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; }
 a { color: var(--accent); }
 
-/* Auth loading */
-#auth-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  font-size: 16px;
-  color: hsl(215, 12%, 52%);
-}
-
 /* Data banner */
 .data-banner {
   margin: 12px 14px;
@@ -85,10 +75,29 @@ a { color: var(--accent); }
 <script src="shared/user-storage.js" defer></script>
 <script src="shared/data.js" defer></script>
 <script src="sync-widget.js" defer></script>
+<link rel="stylesheet" href="shared/product-pages.css">
+<link rel="stylesheet" href="shared/tax-lab.css">
+<link rel="stylesheet" href="shared/product-loader.css">
+<script src="shared/product-loader.js" defer></script>
 </head>
-<body>
+<body data-product-page="tax">
 
-<div id="auth-loading">טוען...</div>
+<div id="auth-loading" class="product-boot-screen" data-boot-module="tax">
+  <div class="product-boot-grid" aria-hidden="true"></div>
+  <div class="product-boot-frame" role="status" aria-live="polite">
+    <header class="product-boot-header">
+      <div class="product-boot-brand"><span>F</span><div><strong>המעקב</strong><small>FINANCIAL OS</small></div></div>
+      <div class="product-boot-module"><span>MODULE 03</span><strong>TAX LAB</strong></div>
+    </header>
+    <section class="product-boot-stage">
+      <div class="product-boot-orbit" aria-hidden="true"><i></i><i></i><i></i><b>03</b></div>
+      <div class="product-boot-copy"><span>TAX / SECURE WORKSPACE</span><strong>פותח את מעבדת המס</strong><small>טוען חישובים, סימולציות ונתוני משתמש מאובטחים.</small></div>
+    </section>
+    <div class="product-boot-progress" aria-hidden="true"><i></i></div>
+    <footer class="product-boot-signals" aria-label="שלבי טעינה"><span>PROFILE <i></i></span><span>RULES <i></i></span><span>SIMULATION <i></i></span></footer>
+  </div>
+  <div class="product-boot-footnote"><span>PRIVATE BY DESIGN</span><span>SECURE MODULE TRANSITION</span></div>
+</div>
 <div id="root" style="display:none;"></div>
 
 <!-- babel-standalone (~2.7MB) used to be the third tag here, transpiling 2,100+
@@ -116,6 +125,7 @@ a { color: var(--accent); }
     const demoModule = await import('./demo-data.js');
     _isDemoMode = demoModule.isDemoMode();
     if (_isDemoMode) {
+      demoModule.ensureDemoStorageSandbox();
       _demoFinanceData = demoModule.generateDemoFinanceData();
     }
   } catch(e) { console.warn('Demo module not loaded:', e); }

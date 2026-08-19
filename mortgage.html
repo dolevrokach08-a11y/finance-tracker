@@ -11,7 +11,14 @@
 <link rel="stylesheet" href="shared-theme.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="modulepreload" href="./firebase-config.js">
-<script src="shared/user-storage.js" defer></script>
+<script src="shared/user-storage.js"></script>
+<script>
+  // Demo must claim an isolated storage namespace before the classic data
+  // script below gets a chance to read mortgageState.
+  if (sessionStorage.getItem('demoMode') === 'true') {
+    window.UserStorage?.enterDemoSandbox?.();
+  }
+</script>
 <script src="shared/load-script.js"></script>
 <!-- defer is only safe because renderCurrentPage() is now waiting on
      DOMContentLoaded — a deferred script runs AFTER parser-inserted inline
@@ -350,8 +357,10 @@ tr:hover td{background:var(--bg-elevated);}
 }
 </style>
 <script src="sync-widget.js" defer></script>
+<link rel="stylesheet" href="shared/product-pages.css">
+<link rel="stylesheet" href="shared/mortgage-lab.css">
 </head>
-<body>
+<body data-product-page="mortgage">
 
 <div class="toast" id="toast"></div>
 
@@ -376,8 +385,14 @@ tr:hover td{background:var(--bg-elevated);}
 </nav>
 <script type="module">
   // Unified cross-page nav strip (Phase 4b; local slot keeps the sync widget)
-  import { injectNav } from './shared/nav.js';
+  import { injectNav, injectDemoBanner, setNavUser } from './shared/nav.js';
+  import { isDemoMode, ensureDemoStorageSandbox, getDemoUser } from './demo-data.js';
   injectNav('mortgage', 'sharedNavSyncSlot');
+  if (isDemoMode()) {
+    ensureDemoStorageSandbox();
+    setNavUser(getDemoUser());
+    injectDemoBanner();
+  }
 </script>
 
 <!-- ═══════════════ PAGE 1 — CURRENT MORTGAGE ═══════════════ -->
@@ -963,18 +978,25 @@ tr:hover td{background:var(--bg-elevated);}
 let auth, db, onAuthStateChanged, doc, setDoc, getDoc;
 let firebaseReady = false;
 let currentUser = null;
+const demoModule = await import('./demo-data.js');
+const _isDemoMode = demoModule.isDemoMode();
 
-try {
-    const fb = await import('./firebase-config.js');
-    auth = fb.auth;
-    db = fb.db;
-    onAuthStateChanged = fb.onAuthStateChanged;
-    doc = fb.doc;
-    setDoc = fb.setDoc;
-    getDoc = fb.getDoc;
-    firebaseReady = true;
-} catch(e) {
-    console.warn('Firebase not available, using localStorage only:', e.message);
+if (_isDemoMode) {
+    demoModule.ensureDemoStorageSandbox();
+    currentUser = demoModule.getDemoUser();
+} else {
+    try {
+        const fb = await import('./firebase-config.js');
+        auth = fb.auth;
+        db = fb.db;
+        onAuthStateChanged = fb.onAuthStateChanged;
+        doc = fb.doc;
+        setDoc = fb.setDoc;
+        getDoc = fb.getDoc;
+        firebaseReady = true;
+    } catch(e) {
+        console.warn('Firebase not available, using localStorage only:', e.message);
+    }
 }
 
 // Initialize sync widget (renders the button into the nav slot)
@@ -982,7 +1004,7 @@ if (window.SyncWidget) {
     window.SyncWidget.init({
         containerId: 'syncWidgetSlot',
         metaKey: 'mortgage_sync_meta',
-        isDemoMode: () => false,
+        isDemoMode: () => _isDemoMode,
         onForceSync: async () => {
             if (typeof window.saveMortgage === 'function') {
                 window.saveMortgage();
@@ -1053,6 +1075,10 @@ async function loadFromFirebase() {
 }
 
 window._saveToFirebase = async function(state) {
+    if (_isDemoMode) {
+        if (window.SyncWidget) window.SyncWidget.markLocalOnly();
+        return;
+    }
     if (!currentUser || !firebaseReady) {
         // Not signed in / Firebase unavailable — keep local-only state visible
         if (window.SyncWidget) window.SyncWidget.markLocalOnly();
@@ -1092,6 +1118,8 @@ function toggleTheme() {
   if(document.getElementById('p-graph').classList.contains('active')) setTimeout(updateGraph,50);
   if(document.getElementById('p-stress').classList.contains('active')) setTimeout(updateStress,50);
   if(document.getElementById('p-methods').classList.contains('active')) setTimeout(updateMethods,50);
+  if(document.getElementById('p-current').classList.contains('active')) setTimeout(renderCurrentPage,50);
+  if(document.getElementById('p-cliff').classList.contains('active')) setTimeout(renderCliff,50);
 }
 (function(){
   // Shared 'theme' key; fall back to the legacy 'mortgage-theme' once for migration.
@@ -1355,6 +1383,81 @@ function calcGraceFull(principal, rateAnnual, months, graceMonths) {
 }
 
 // ═══════════════════════════ NAVIGATION ═══════════════════════════
+const MORTGAGE_PAGE_META = {
+  'p-current': {
+    code: '01 / LOAN CONTROL',
+    eyebrow: 'תמונת מצב · מסלולים פעילים',
+    title: 'מרכז השליטה של המשכנתא',
+    text: 'יתרות, עלות הריבית, לוח הסילוקין ופירעון מוקדם — תמונת מצב אחת שמחברת את כל ההחלטות.'
+  },
+  'p-builder': {
+    code: '02 / MIX STUDIO',
+    eyebrow: 'תכנון · איזון · גמישות',
+    title: 'סטודיו לבניית תמהיל',
+    text: 'בנה מסלולים, בדוק את החשיפה לריבית משתנה והשווה את התמהיל שלך לחלופה מאוזנת בזמן אמת.'
+  },
+  'p-methods': {
+    code: '03 / REPAYMENT ENGINE',
+    eyebrow: 'שפיצר · קרן שווה · בלון · גרייס',
+    title: 'ארבע שיטות, סיפור תזרימי אחד',
+    text: 'השווה תשלום, יתרת קרן וריבית מצטברת לאורך חיי ההלוואה — לא רק את המספר של החודש הראשון.'
+  },
+  'p-refi': {
+    code: '04 / REFINANCE RADAR',
+    eyebrow: 'מחזור · חיסכון · נקודת איזון',
+    title: 'רדאר מחזור משכנתא',
+    text: 'שלושה תרחישים, עלות מעבר מלאה ונקודת איזון ברורה שמראה מתי המחזור באמת מתחיל לעבוד עבורך.'
+  },
+  'p-penalty': {
+    code: '05 / EXIT COST',
+    eyebrow: 'פירעון מוקדם · עלויות יציאה',
+    title: 'מפת עמלת הפירעון',
+    text: 'פרק את עמלת היציאה למסלולים ולמרכיבים, וזהה מראש איפה הודעה מוקדמת או שינוי ריבית חוסכים כסף.'
+  },
+  'p-stress': {
+    code: '06 / STRESS MATRIX',
+    eyebrow: 'רגישות · הכנסה · סף סיכון',
+    title: 'מטריצת עמידות לריבית',
+    text: 'העבר את המשכנתא דרך תשעה תרחישי ריבית ובדוק היכן ההחזר עובר מירוק לאזהרה ולסיכון.'
+  },
+  'p-cliff': {
+    code: '07 / RATE CLIFF',
+    eyebrow: 'תחנות ריבית · תרחישי עתיד',
+    title: 'קו הזמן של מצוק הריבית',
+    text: 'ראה מתי המסלולים המשתנים מתעדכנים, ואיך תרחיש אופטימי או שמרני משנה את עומס ההחזר.'
+  },
+  'p-tax': {
+    code: '08 / ACQUISITION COST',
+    eyebrow: 'מס רכישה · שכר טרחה · מס שבח',
+    title: 'עלות העסקה האמיתית',
+    text: 'חבר את מדרגות המס, שכר הטרחה ומס השבח לתמונה אחת — כדי שמחיר הנכס לא יסתיר את עלות הרכישה.'
+  },
+  'p-graph': {
+    code: '09 / PAYMENT SIGNAL',
+    eyebrow: 'תשלומים · יתרה · ריבית · הון עצמי',
+    title: 'אותות ההחזר לאורך זמן',
+    text: 'החלף בין חמש שכבות מידע וקבל קו זמן קריא של התשלום, הקרן, הריבית וההון העצמי.'
+  }
+};
+
+function enhanceMortgagePages() {
+  Object.entries(MORTGAGE_PAGE_META).forEach(([id, meta]) => {
+    const page = document.getElementById(id);
+    const container = page?.querySelector('.container');
+    if (!container) return;
+    let intro = container.querySelector(':scope > .page-hero, :scope > .workspace-intro');
+    if (intro) {
+      intro.dataset.code = meta.code;
+      return;
+    }
+    intro = document.createElement('section');
+    intro.className = 'workspace-intro';
+    intro.dataset.code = meta.code;
+    intro.innerHTML = `<span class="workspace-eyebrow">${meta.eyebrow}</span><h1>${meta.title}</h1><p>${meta.text}</p>`;
+    container.prepend(intro);
+  });
+}
+
 function showPage(id, btn) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
@@ -1396,11 +1499,60 @@ function animateValue(el, start, end, duration) {
 // ═══════════════════════════ PIE CHART ═══════════════════════════
 let pieChart = null;
 
-function updatePieChart(principalTotal, interestTotal) {
+function mortgageChartTheme() {
   const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const ctx = document.getElementById('pie-chart');
-  if(!ctx) return;
+  return {
+    isLight,
+    text: isLight ? '#242720' : '#f4f6ef',
+    muted: isLight ? '#687064' : '#8f978d',
+    grid: isLight ? 'rgba(26,31,20,0.085)' : 'rgba(255,255,255,0.065)',
+    tooltip: isLight ? 'rgba(255,255,252,.98)' : 'rgba(14,17,21,.98)',
+    border: isLight ? 'rgba(26,31,20,.16)' : 'rgba(255,255,255,.12)'
+  };
+}
+
+const mortgageChartGlow = {
+  id: 'mortgageChartGlow',
+  beforeDatasetDraw(chart, args) {
+    const color = chart.getDatasetMeta(args.index)?.dataset?.options?.borderColor;
+    chart.ctx.save();
+    chart.ctx.shadowBlur = 12;
+    chart.ctx.shadowColor = typeof color === 'string' ? color : 'rgba(255,128,107,.35)';
+  },
+  afterDatasetDraw(chart) { chart.ctx.restore(); }
+};
+
+function updatePieChart(principalTotal, interestTotal) {
+  const theme = mortgageChartTheme();
+  const canvas = document.getElementById('pie-chart');
+  if(!canvas) return;
   if(pieChart) pieChart.destroy();
+  const ctx = canvas.getContext('2d');
+  const principalGradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+  principalGradient.addColorStop(0, '#62e5ce');
+  principalGradient.addColorStop(1, '#5f8fff');
+  const interestGradient = ctx.createLinearGradient(0, canvas.height, canvas.width, 0);
+  interestGradient.addColorStop(0, '#ff806b');
+  interestGradient.addColorStop(1, '#ffc15b');
+  const ratio = principalTotal + interestTotal > 0 ? Math.round(interestTotal / (principalTotal + interestTotal) * 100) : 0;
+  const centerLabel = {
+    id: 'mortgagePieCenter',
+    afterDraw(chart) {
+      const {ctx: chartCtx, chartArea} = chart;
+      if (!chartArea) return;
+      const x = (chartArea.left + chartArea.right) / 2;
+      const y = (chartArea.top + chartArea.bottom) / 2;
+      chartCtx.save();
+      chartCtx.textAlign = 'center';
+      chartCtx.fillStyle = theme.text;
+      chartCtx.font = '700 22px Space Grotesk, Heebo, sans-serif';
+      chartCtx.fillText(`${ratio}%`, x, y - 2);
+      chartCtx.fillStyle = theme.muted;
+      chartCtx.font = '600 10px Heebo, sans-serif';
+      chartCtx.fillText('עלות ריבית', x, y + 17);
+      chartCtx.restore();
+    }
+  };
   pieChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -1409,23 +1561,28 @@ function updatePieChart(principalTotal, interestTotal) {
         data: [principalTotal, interestTotal],
         // Neutral palette: principal/interest is a split, not profit/loss —
         // green/red stays reserved for money gained/lost (Phase 4b #13)
-        backgroundColor: ['rgba(59,130,246,0.75)', 'rgba(147,51,234,0.6)'],
-        borderColor: ['rgba(59,130,246,1)', 'rgba(147,51,234,1)'],
-        borderWidth: 2,
-        hoverOffset: 8
+        backgroundColor: [principalGradient, interestGradient],
+        borderColor: [theme.isLight ? '#f8faf3' : '#11151a', theme.isLight ? '#f8faf3' : '#11151a'],
+        borderWidth: 4,
+        borderRadius: 7,
+        spacing: 2,
+        hoverOffset: 10
       }]
     },
+    plugins: [centerLabel],
     options: {
       responsive: true, maintainAspectRatio: true,
-      cutout: '60%',
+      cutout: '69%',
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { color: isLight ? '#666' : '#8892a4', font: { family: 'Heebo', size: 11 }, padding: 12 } },
+        legend: { display: true, position: 'bottom', labels: { color: theme.muted, font: { family: 'Heebo', size: 11, weight: '600' }, padding: 15, usePointStyle: true, pointStyle: 'circle' } },
         tooltip: {
-          backgroundColor: isLight ? '#fff' : '#1e2535',
-          titleColor: isLight ? '#333' : '#e2e8f0',
-          bodyColor: isLight ? '#666' : '#8892a4',
-          borderColor: isLight ? '#ddd' : '#252d40',
+          backgroundColor: theme.tooltip,
+          titleColor: theme.text,
+          bodyColor: theme.muted,
+          borderColor: theme.border,
           borderWidth: 1,
+          padding: 12,
+          cornerRadius: 12,
           callbacks: { label: c => `${c.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}` }
         }
       }
@@ -1649,7 +1806,7 @@ function updateEarlyRepay() {
     document.getElementById('er-results').innerHTML = `
       <div class="three-col">
         <div class="metric-card"><div class="m-label">חודשים נחסכים</div><div class="m-val m-green">${Math.max(0,monthsSaved)}</div><div class="m-sub">${(Math.max(0,monthsSaved)/12).toFixed(1)} שנים</div></div>
-        <div class="metric-card"><div class="m-label">ריבית נחסכת</div><div class="m-val m-green">₪${fmtShort(Math.max(0,interestSaved))}</div></div>
+        <div class="metric-card"><div class="m-label">ריבית נחסכת</div><div class="m-val m-green er-money-value" dir="ltr">₪${fmtShort(Math.max(0,interestSaved))}</div></div>
         <div class="metric-card"><div class="m-label">תקופה חדשה</div><div class="m-val">${newMonths}</div><div class="m-sub">חודשים</div></div>
       </div>
       <div class="rec-box good" style="margin-top:12px;">
@@ -1664,9 +1821,9 @@ function updateEarlyRepay() {
 
     document.getElementById('er-results').innerHTML = `
       <div class="three-col">
-        <div class="metric-card"><div class="m-label">חיסכון חודשי</div><div class="m-val m-green">₪${fmtShort(Math.max(0,monthlySaved))}</div></div>
-        <div class="metric-card"><div class="m-label">החזר חדש</div><div class="m-val">₪${fmtShort(newMonthly)}</div></div>
-        <div class="metric-card"><div class="m-label">ריבית נחסכת</div><div class="m-val m-green">₪${fmtShort(Math.max(0,interestSaved))}</div></div>
+        <div class="metric-card"><div class="m-label">חיסכון חודשי</div><div class="m-val m-green er-money-value" dir="ltr">₪${fmtShort(Math.max(0,monthlySaved))}</div></div>
+        <div class="metric-card"><div class="m-label">החזר חדש</div><div class="m-val er-money-value" dir="ltr">₪${fmtShort(newMonthly)}</div></div>
+        <div class="metric-card"><div class="m-label">ריבית נחסכת</div><div class="m-val m-green er-money-value" dir="ltr">₪${fmtShort(Math.max(0,interestSaved))}</div></div>
       </div>
       <div class="rec-box good" style="margin-top:12px;">
         <div class="rec-title">הקטנת החזר</div>
@@ -1841,12 +1998,12 @@ function updateMethods() {
   document.getElementById('methods-compare').innerHTML = cardsHTML;
 
   // ─── Charts ───
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
-  const tickColor = isLight ? '#666' : '#4a5568';
-  const tooltipBg = isLight ? '#fff' : '#1e2535';
-  const tooltipTitle = isLight ? '#333' : '#e2e8f0';
-  const tooltipBody = isLight ? '#666' : '#8892a4';
+  const chartTheme = mortgageChartTheme();
+  const gridColor = chartTheme.grid;
+  const tickColor = chartTheme.muted;
+  const tooltipBg = chartTheme.tooltip;
+  const tooltipTitle = chartTheme.text;
+  const tooltipBody = chartTheme.muted;
 
   // Sample every 6 months for chart performance
   const sampleRate = 6;
@@ -1868,12 +2025,12 @@ function updateMethods() {
     responsive: true, maintainAspectRatio: false,
     animation: { duration: 500 },
     plugins: {
-      legend: { display: true, position: 'bottom', labels: { color: tickColor, font: { family: 'Heebo', size: 10 }, padding: 10, usePointStyle: true } },
-      tooltip: { mode: 'index', intersect: false, backgroundColor: tooltipBg, titleColor: tooltipTitle, bodyColor: tooltipBody, borderColor: isLight ? '#ddd' : '#252d40', borderWidth: 1, callbacks: { label: c => `${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}` } }
+      legend: { display: true, position: 'bottom', labels: { color: tickColor, font: { family: 'Heebo', size: 10, weight: '600' }, padding: 14, usePointStyle: true, pointStyle: 'line' } },
+      tooltip: { mode: 'index', intersect: false, backgroundColor: tooltipBg, titleColor: tooltipTitle, bodyColor: tooltipBody, borderColor: chartTheme.border, borderWidth: 1, padding: 12, cornerRadius: 12, callbacks: { label: c => `${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}` } }
     },
     scales: {
-      x: { ticks: { color: tickColor, font: { size: 9 }, maxRotation: 0 }, grid: { color: gridColor } },
-      y: { ticks: { color: tickColor, font: { size: 10 }, callback: v => '₪' + Math.round(v / 1000) + 'K' }, grid: { color: gridColor } }
+      x: { ticks: { color: tickColor, font: { family: 'Space Grotesk', size: 9 }, maxRotation: 0 }, grid: { color: gridColor, drawBorder: false } },
+      y: { ticks: { color: tickColor, font: { family: 'Space Grotesk', size: 10 }, callback: v => '₪' + Math.round(v / 1000) + 'K' }, grid: { color: gridColor, drawBorder: false } }
     },
     interaction: { mode: 'index', intersect: false }
   };
@@ -1890,9 +2047,10 @@ function updateMethods() {
         data: sampleData(res.schedule).map(s => Math.round(s.payment)),
         borderColor: METHOD_COLORS[key],
         backgroundColor: METHOD_COLORS[key] + '22',
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: false
+        tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 3, fill: false
       }))
     },
+    plugins: [mortgageChartGlow],
     options: chartOptions
   });
 
@@ -1908,9 +2066,10 @@ function updateMethods() {
         data: sampleData(res.schedule).map(s => Math.round(s.balance)),
         borderColor: METHOD_COLORS[key],
         backgroundColor: METHOD_COLORS[key] + '22',
-        tension: 0.3, pointRadius: 0, borderWidth: 2, fill: false
+        tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 3, fill: false
       }))
     },
+    plugins: [mortgageChartGlow],
     options: chartOptions
   });
 
@@ -1931,12 +2090,13 @@ function updateMethods() {
       data,
       borderColor: METHOD_COLORS[key],
       backgroundColor: METHOD_COLORS[key] + '22',
-      tension: 0.3, pointRadius: 0, borderWidth: 2, fill: false
+      tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 3, fill: false
     };
   });
   methodsInterestChart = new Chart(ctx3, {
     type: 'line',
     data: { labels, datasets: cumIntDatasets },
+    plugins: [mortgageChartGlow],
     options: chartOptions
   });
 }
@@ -2131,9 +2291,9 @@ function updateStress() {
   }
   document.getElementById('stress-summary').innerHTML = summaryRecs.map(r=>`<div class="rec-box ${r.cls}"><div class="rec-title">${r.title}</div><div class="rec-text">${r.text}</div></div>`).join('');
 
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
-  const tickColor = isLight ? '#666' : '#4a5568';
+  const chartTheme = mortgageChartTheme();
+  const gridColor = chartTheme.grid;
+  const tickColor = chartTheme.muted;
 
   if(stressChart) stressChart.destroy();
   const ctx = document.getElementById('stress-chart').getContext('2d');
@@ -2146,27 +2306,33 @@ function updateStress() {
       datasets: [{
         label: 'החזר חודשי',
         data: chartData,
-        backgroundColor: chartData.map(v => v > thresholdLine ? 'rgba(239,68,68,0.7)' : v > thresholdLine * 0.85 ? 'rgba(245,166,35,0.7)' : 'rgba(45,216,122,0.7)'),
-        borderRadius: 6, borderSkipped: false,
+        backgroundColor: chartData.map(v => v > thresholdLine ? 'rgba(255,101,114,0.7)' : v > thresholdLine * 0.85 ? 'rgba(255,193,91,0.72)' : 'rgba(98,229,206,0.7)'),
+        borderColor: chartData.map(v => v > thresholdLine ? '#ff6572' : v > thresholdLine * 0.85 ? '#ffc15b' : '#62e5ce'),
+        borderWidth: 1.5,
+        borderRadius: 9, borderSkipped: false,
+        maxBarThickness: 42
       }]
     },
+    plugins: [mortgageChartGlow],
     options: {
       responsive: true, maintainAspectRatio: false,
       animation: {duration: 500},
       plugins: {
         legend: {display: false},
         tooltip: {
-          backgroundColor: isLight ? '#fff' : '#1e2535',
-          titleColor: isLight ? '#333' : '#e2e8f0',
-          bodyColor: isLight ? '#666' : '#8892a4',
-          borderColor: isLight ? '#ddd' : '#252d40',
+          backgroundColor: chartTheme.tooltip,
+          titleColor: chartTheme.text,
+          bodyColor: chartTheme.muted,
+          borderColor: chartTheme.border,
           borderWidth: 1,
+          padding: 12,
+          cornerRadius: 12,
           callbacks: {label: c => `₪${Math.round(c.raw).toLocaleString('he-IL')}`}
         },
       },
       scales: {
-        x: {ticks: {color: tickColor, font: {size: 10}}, grid: {display: false}},
-        y: {ticks: {color: tickColor, font: {size: 10}, callback: v => '₪' + Math.round(v/1000) + 'K'}, grid: {color: gridColor}}
+        x: {ticks: {color: tickColor, font: {family:'Space Grotesk',size: 10}}, grid: {display: false}},
+        y: {ticks: {color: tickColor, font: {family:'Space Grotesk',size: 10}, callback: v => '₪' + Math.round(v/1000) + 'K'}, grid: {color: gridColor, drawBorder:false}}
       }
     }
   });
@@ -2274,12 +2440,12 @@ function updateGraph() {
   const source = document.getElementById('graph-source').value;
   const view = document.getElementById('graph-view').value;
   const rateChange = +document.getElementById('rate-change').value;
-  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-  const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.04)';
-  const tickColor = isLight ? '#666' : '#4a5568';
-  const tooltipBg = isLight ? '#fff' : '#1e2535';
-  const tooltipTitle = isLight ? '#333' : '#e2e8f0';
-  const tooltipBody = isLight ? '#666' : '#8892a4';
+  const chartTheme = mortgageChartTheme();
+  const gridColor = chartTheme.grid;
+  const tickColor = chartTheme.muted;
+  const tooltipBg = chartTheme.tooltip;
+  const tooltipTitle = chartTheme.text;
+  const tooltipBody = chartTheme.muted;
 
   // Show/hide equity field
   const eqField = document.getElementById('equity-property-field');
@@ -2315,7 +2481,7 @@ function updateGraph() {
       if(m%6===0||m===1){labels.push(`ח' ${m}`);}else{labels.push('');}
       data.push(Math.round(equity));
     }
-    datasets=[{label:'הון עצמי',data,borderColor:'#38d4c8',backgroundColor:'rgba(56,212,200,0.15)',fill:true,tension:.3,pointRadius:0,borderWidth:2}];
+    datasets=[{label:'הון עצמי',data,borderColor:'#62e5ce',backgroundColor:'rgba(98,229,206,0.14)',fill:true,tension:.38,pointRadius:0,pointHoverRadius:5,borderWidth:3}];
   } else if(view==='split') {
     let prinData=[], intData=[];
     let bals=tranches.map(t=>t.principal);
@@ -2336,8 +2502,8 @@ function updateGraph() {
       totalPmt+=mp; totalInt+=mint;
     }
     datasets=[
-      {label:'קרן',data:prinData,backgroundColor:'rgba(45,216,122,0.7)',stack:'s',borderRadius:2},
-      {label:'ריבית',data:intData,backgroundColor:'rgba(239,68,68,0.5)',stack:'s',borderRadius:2}
+      {label:'קרן',data:prinData,backgroundColor:'rgba(98,229,206,0.72)',borderColor:'#62e5ce',borderWidth:1,stack:'s',borderRadius:5,maxBarThickness:22},
+      {label:'ריבית',data:intData,backgroundColor:'rgba(255,128,107,0.64)',borderColor:'#ff806b',borderWidth:1,stack:'s',borderRadius:5,maxBarThickness:22}
     ];
   } else {
     let data=[];
@@ -2362,8 +2528,9 @@ function updateGraph() {
       else data.push(Math.round(cumInt));
       totalPmt+=mPmt; totalInt+=mInt;
     }
-    const clr=view==='monthly'?'hsl(142,60%,50%)':view==='balance'?'#38d4c8':'#ef4444';
-    datasets=[{label:view==='monthly'?'החזר חודשי':view==='balance'?'יתרת קרן':'ריבית מצטברת',data,borderColor:clr,backgroundColor:clr+'22',fill:true,tension:.3,pointRadius:0,borderWidth:2}];
+    const clr=view==='monthly'?'#ffc15b':view==='balance'?'#62e5ce':'#ff806b';
+    const fillClr=view==='monthly'?'rgba(255,193,91,.13)':view==='balance'?'rgba(98,229,206,.13)':'rgba(255,128,107,.13)';
+    datasets=[{label:view==='monthly'?'החזר חודשי':view==='balance'?'יתרת קרן':'ריבית מצטברת',data,borderColor:clr,backgroundColor:fillClr,fill:true,tension:.38,pointRadius:0,pointHoverRadius:5,borderWidth:3}];
   }
 
   document.getElementById('g-total').textContent='₪'+fmtShort(totalPmt);
@@ -2411,16 +2578,17 @@ function updateGraph() {
   mainChart=new Chart(ctx,{
     type: view==='split'?'bar':'line',
     data:{labels,datasets},
+    plugins:[mortgageChartGlow],
     options:{
       responsive:true,maintainAspectRatio:false,
       animation:{duration:500},
       plugins:{
-        legend:{display:view==='split'||view==='equity',labels:{color:tickColor,font:{family:'Heebo',size:11}}},
-        tooltip:{mode:'index',intersect:false,backgroundColor:tooltipBg,titleColor:tooltipTitle,bodyColor:tooltipBody,borderColor:isLight?'#ddd':'#252d40',borderWidth:1,callbacks:{label:c=>`${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}`}}
+        legend:{display:view==='split'||view==='equity',position:'bottom',labels:{color:tickColor,font:{family:'Heebo',size:11,weight:'600'},padding:14,usePointStyle:true}},
+        tooltip:{mode:'index',intersect:false,backgroundColor:tooltipBg,titleColor:tooltipTitle,bodyColor:tooltipBody,borderColor:chartTheme.border,borderWidth:1,padding:12,cornerRadius:12,callbacks:{label:c=>`${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}`}}
       },
       scales:{
-        x:{ticks:{color:tickColor,font:{size:9},maxRotation:0},grid:{color:gridColor}},
-        y:{ticks:{color:tickColor,font:{size:10},callback:v=>'₪'+Math.round(v/1000)+'K'},grid:{color:gridColor}}
+        x:{stacked:view==='split',ticks:{color:tickColor,font:{family:'Space Grotesk',size:9},maxRotation:0},grid:{color:gridColor,drawBorder:false}},
+        y:{stacked:view==='split',ticks:{color:tickColor,font:{family:'Space Grotesk',size:10},callback:v=>'₪'+Math.round(v/1000)+'K'},grid:{color:gridColor,drawBorder:false}}
       },
       interaction:{mode:'index',intersect:false}
     }
@@ -2500,23 +2668,29 @@ function renderCliff() {
   const ctx = document.getElementById('cliff-chart');
   if (!ctx) return;
   if (cliffChart) cliffChart.destroy();
+  const chartTheme = mortgageChartTheme();
   cliffChart = new Chart(ctx.getContext('2d'), {
     type: 'line',
     data: {
       labels: yearLabels,
       datasets: [
-        { label: 'תשלום נוכחי', data: curData, borderColor: '#4f7cff', fill: false, tension: 0.2, pointRadius: 3, borderWidth: 2.5 },
-        { label: 'תרחיש אופטימי', data: optData, borderColor: '#2dd87a', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
-        { label: 'תרחיש שמרני', data: pesData, borderColor: '#ef4444', borderDash: [5,3], fill: false, tension: 0.2, pointRadius: 2, borderWidth: 2 },
-        { label: `סף ${threshold}% מהכנסה`, data: threshData, borderColor: '#f5a623', borderDash: [8,4], pointRadius: 0, fill: false, borderWidth: 1.5 }
+        { label: 'תשלום נוכחי', data: curData, borderColor: '#6fa8ff', backgroundColor: 'rgba(111,168,255,.11)', fill: true, tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 3 },
+        { label: 'תרחיש אופטימי', data: optData, borderColor: '#62e5ce', borderDash: [7,4], fill: false, tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2.5 },
+        { label: 'תרחיש שמרני', data: pesData, borderColor: '#ff6572', borderDash: [7,4], fill: false, tension: 0.38, pointRadius: 0, pointHoverRadius: 5, borderWidth: 2.5 },
+        { label: `סף ${threshold}% מהכנסה`, data: threshData, borderColor: '#ffc15b', borderDash: [10,5], pointRadius: 0, fill: false, borderWidth: 2 }
       ]
     },
+    plugins: [mortgageChartGlow],
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'top', rtl: true, labels: { font: { family: 'Heebo', size: 11 } } } },
+      plugins: {
+        legend: { position: 'bottom', rtl: true, labels: { color: chartTheme.muted, padding: 14, usePointStyle: true, font: { family: 'Heebo', size: 11, weight: '600' } } },
+        tooltip: { mode:'index', intersect:false, backgroundColor:chartTheme.tooltip, titleColor:chartTheme.text, bodyColor:chartTheme.muted, borderColor:chartTheme.border, borderWidth:1, padding:12, cornerRadius:12, callbacks:{ label:c=>`${c.dataset.label}: ₪${Math.round(c.raw).toLocaleString('he-IL')}` } }
+      },
       scales: {
-        y: { position: 'right', title: { display: true, text: '₪ תשלום חודשי' },
-             ticks: { callback: v => '₪' + Math.round(v).toLocaleString() } }
+        x: { ticks:{color:chartTheme.muted,font:{family:'Space Grotesk',size:9}}, grid:{color:chartTheme.grid,drawBorder:false} },
+        y: { position: 'right', title: { display: true, text: '₪ תשלום חודשי', color:chartTheme.muted },
+             ticks: { color:chartTheme.muted,font:{family:'Space Grotesk',size:10},callback: v => '₪' + Math.round(v).toLocaleString() }, grid:{color:chartTheme.grid,drawBorder:false} }
       }
     }
   });
@@ -2563,7 +2737,10 @@ function renderCliff() {
 
 // Chart.js is deferred, so it isn't parsed yet at this point in the document.
 // DOMContentLoaded fires after all deferred scripts have run.
-document.addEventListener('DOMContentLoaded', renderCurrentPage);
+document.addEventListener('DOMContentLoaded', () => {
+  enhanceMortgagePages();
+  renderCurrentPage();
+});
 </script>
     <script type="module" src="terms-modal.js"></script>
 </body>
