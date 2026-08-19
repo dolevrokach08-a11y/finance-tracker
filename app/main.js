@@ -125,6 +125,80 @@ document.addEventListener('click', event => {
     if (!event.target.closest('.rail-session')) sessionMenu.hidden = true;
 });
 document.getElementById('logoutButton').addEventListener('click', () => sessionApi?.logout());
+
+// ── Whole-account backup ─────────────────────────────────────────────────────
+// The only export that captures every dataset in one file. It reads what is in
+// this browser, so it must not run before the cloud has had its say — otherwise
+// a device that opened offline would write a confident-looking backup of stale
+// data over a good one.
+const backupFileInput = document.getElementById('backupFile');
+
+function cloudSettled() {
+    const { session, cloud } = store.getState();
+    if (session.isDemo) return false;
+    return session.status === 'ready' && (cloud.status === 'ready' || cloud.status === 'offline');
+}
+
+document.getElementById('backupExport').addEventListener('click', () => {
+    sessionMenu.hidden = true;
+    const { session, cloud } = store.getState();
+    if (session.isDemo) {
+        alert('מצב הדגמה — אין כאן נתונים אמיתיים לגבות.');
+        return;
+    }
+    if (!cloudSettled()) {
+        const proceed = confirm(
+            'הנתונים עדיין לא סונכרנו מהענן במכשיר הזה.\n\n' +
+            'גיבוי עכשיו עלול לשמור מצב חלקי או ישן. מומלץ להמתין לסיום הסנכרון.\n\n' +
+            'לגבות בכל זאת?'
+        );
+        if (!proceed) return;
+    }
+    const result = window.FTBackup?.exportAll();
+    if (!result) return;
+    if (!result.ok) {
+        alert('אין נתונים לגיבוי במכשיר הזה.');
+        return;
+    }
+    alert('✅ הגיבוי ירד.\n\n' + result.summary);
+});
+
+document.getElementById('backupImport').addEventListener('click', () => {
+    sessionMenu.hidden = true;
+    if (store.getState().session.isDemo) {
+        alert('מצב הדגמה — שחזור מושבת כאן.');
+        return;
+    }
+    backupFileInput.click();
+});
+
+backupFileInput.addEventListener('change', event => {
+    const file = event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        let backup;
+        try {
+            backup = window.FTBackup.parseBackup(String(reader.result));
+        } catch (error) {
+            alert('❌ ' + error.message);
+            return;
+        }
+        const when = new Date(backup.exportDate).toLocaleDateString('he-IL');
+        const proceed = confirm(
+            `שחזור מגיבוי מתאריך ${when}${backup.legacy ? ' (פורמט ישן)' : ''}\n\n`
+            + window.FTBackup.describe(backup.data)
+            + '\n\n⚠️ הנתונים הנוכחיים במכשיר יוחלפו. הפעולה תסומן כשינוי שטרם סונכרן,\n'
+            + 'כך שהיא תידחף לענן ולא תידרס על ידו.\n\nלהמשיך?'
+        );
+        if (!proceed) return;
+        const restored = window.FTBackup.restore(backup.data);
+        alert(`✅ שוחזרו ${restored} מערכי נתונים. הדף ייטען מחדש.`);
+        window.location.reload();
+    };
+    reader.readAsText(file);
+});
 function toggleAppTheme() {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
     if (isLight) document.documentElement.removeAttribute('data-theme');

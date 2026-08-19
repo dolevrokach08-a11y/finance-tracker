@@ -25,6 +25,7 @@
     <script src="shared/data.js"></script>
     <script src="shared/finance-summary.js"></script>
     <script src="shared/portfolio-twr.js"></script>
+    <script src="shared/backup.js"></script>
 </head>
 <body data-route="home">
     <a class="skip-link" href="#app-outlet">דלג לתוכן</a>
@@ -93,6 +94,9 @@
                 </button>
                 <div class="session-menu" id="sessionMenu" hidden>
                     <button type="button" id="themeToggle"><i data-lucide="sun-moon"></i><span>החלף מצב תצוגה</span></button>
+                    <button type="button" id="backupExport"><i data-lucide="download"></i><span>גיבוי מלא</span></button>
+                    <button type="button" id="backupImport"><i data-lucide="upload"></i><span>שחזור מגיבוי</span></button>
+                    <input type="file" id="backupFile" accept=".json" hidden>
                     <button type="button" id="logoutButton"><i data-lucide="log-out"></i><span>התנתקות</span></button>
                 </div>
             </div>
