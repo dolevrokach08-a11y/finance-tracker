@@ -6658,6 +6658,9 @@ function calculateTWRv3(startDate = null) {
 
         // ✅ פונקציה: קריאת היסטוריית אינדקסים מ-Firebase (fallback)
         async function fetchIndexHistoryFromFirebase() {
+            // Same story as loadData(): no Firebase imports in demo mode, so doc()
+            // is undefined. Fall through to the proxies instead of throwing.
+            if (_isDemoMode) return null;
             try {
                 const docRef = doc(db, 'indexHistory', 'latest');
                 const docSnap = await getDoc(docRef);
@@ -8055,6 +8058,17 @@ function calculateTWRv3(startDate = null) {
         });
 
         async function loadData() {
+            if (_isDemoMode) {
+                // No Firebase in demo mode: the import block above is skipped, so
+                // doc/db/getDoc are undefined and the cloud call would throw. The
+                // demo dataset is the source here — deliberately NOT localStorage,
+                // which holds the real account's portfolio.
+                if (window.__demoPortfolioData) {
+                    portfolio = window.__demoPortfolioData();
+                    window.portfolio = portfolio;
+                }
+                return true;
+            }
             if (!currentUser) {
                 console.log('⏳ Waiting for authentication...');
                 return false;
@@ -15545,7 +15559,11 @@ ${msg}`, 'warning');
 
         // ==================== END ADVANCED CHARTS ====================
         
-        window.onload = function() {
+        // This module has top-level awaits (the demo/firebase dynamic imports), so its
+        // body can finish AFTER the load event has already fired — a window.onload
+        // assigned at that point never runs. Listen instead of assigning (nothing else
+        // is clobbered), and run right away when load is already behind us.
+        function onPageReady() {
             console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
             console.log('✨ VERSION: v49 - Smart TWR (Auto/Manual)');
             console.log('   ✅ Multi-currency cash tracking');
@@ -17192,6 +17210,12 @@ ${msg}`, 'warning');
                     </tr>`;
                 }).join('')}</tbody></table>`;
         }
+
+        // Fires onPageReady() (see its comment above) only here, at the end of the
+        // module: running it any earlier would hit the TDZ on the module-level
+        // let/const bindings that init() reaches through.
+        if (document.readyState === 'complete') onPageReady();
+        else window.addEventListener('load', onPageReady);
 
         // Register Service Worker for PWA
         if ('serviceWorker' in navigator && !['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
