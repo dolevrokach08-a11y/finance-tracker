@@ -3624,25 +3624,16 @@
                 </div>
                 
                 <div class="glass" style="border: 1px solid var(--border);">
-                    <h4 style="margin-bottom: 15px; color: var(--warning);">🔧 תיקון TWR</h4>
+                    <h4 style="margin-bottom: 15px; color: var(--info);">🩺 בדיקת תקינות Snapshots</h4>
                     <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
-                        אם TWR לא עובד, זה בגלל snapshots ישנים. לחץ כאן למחוק snapshots ישנים וליצור חדש.
-                    </p>
-                    <button onclick="fixSnapshots()" class="btn" style="background: var(--warning); color: white;">
-                        🔧 תקן Snapshots (איפוס מהיר)
-                    </button>
-                </div>
-                
-                <div class="glass" style="border: 2px solid #8b5cf6;">
-                    <h4 style="margin-bottom: 15px; color: #8b5cf6;">🔄 בנייה מחדש מההיסטוריה</h4>
-                    <p style="color: var(--text-secondary); margin-bottom: 15px; font-size: 0.9rem;">
-                        <strong>פתרון מקיף:</strong> הפונקציה הזו עוברת על כל הפעולות (הפקדות, משיכות, קניות, מכירות) מההתחלה ועד הסוף בסדר כרונולוגי, ובונה מחדש את ה-snapshots וחישובי המזומן בצורה נכונה.
+                        סורק את ה-snapshots ומדווח על שדות חסרים שמעוותים את חישובי התשואה — בעיקר שערי המרה שלא ננעלו בזמן היצירה.
                         <br><br>
-                        💡 <strong>מתי להשתמש?</strong> אם ייבאת נתונים מחדש, הוספת פעולות למפרע, או שיש אי-התאמות בחישובים.
+                        🔒 <strong>הבדיקה עצמה לא משנה דבר.</strong> אם יימצאו שערים חסרים, יוצע תיקון לאישור נפרד — עם גיבוי אוטומטי לפניו.
                     </p>
-                    <button onclick="rebuildSnapshotsFromHistory()" class="btn" style="background: var(--accent); color: white;">
-                        🔄 בנה מחדש מהיסטוריית הפעולות
+                    <button onclick="checkSnapshotIntegrity()" class="btn btn-primary">
+                        🩺 הרץ בדיקה
                     </button>
+                    <div id="snapshot-integrity-report" style="margin-top: 16px;"></div>
                 </div>
                 
                 <div class="glass" style="border: 1px solid var(--border);">
@@ -8222,6 +8213,7 @@ function calculateTWRv3(startDate = null) {
                         bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                         implicitCash: getImplicitCash('all'),
                         totalValue: getTotalPortfolioValueEnhanced(),
+                        exchange_rates: { ...portfolio.rates },
                         triggerType: 'deposit',
                         triggerNote: `הפקדה לקנייה: ${symbol}`
                     };
@@ -8894,6 +8886,7 @@ ${msg}`, 'warning');
                     bondsValue: portfolio.bonds.reduce((sum, b) => sum + (b.units * b.currentPrice), 0),
                     implicitCash: getImplicitCash('all'),
                     totalValue: getTotalPortfolioValueEnhanced(),
+                    exchange_rates: { ...portfolio.rates },
                     triggerType: 'deposit',
                     triggerNote: `הפקדה לקנייה: ${bond.symbol}`
                 });
@@ -12163,286 +12156,268 @@ ${msg}`, 'warning');
             notify('✅ כל הנתונים נמחקו', 'success');
         }
         
-        function fixSnapshots() {
-            if (!confirm('🔧 פעולה זו תמחק את כל ה-Snapshots הישנים ותיצור snapshot אחד חדש עם הפורמט המעודכן.\n\nהמשך?')) {
-                return;
+        // ===========================================
+        // SNAPSHOT INTEGRITY — diagnose first, repair only on request
+        // ===========================================
+        //
+        // This replaces two buttons (fixSnapshots / rebuildSnapshotsFromHistory)
+        // that both "repaired" snapshots by deleting them. Neither could restore
+        // what it erased: there is no historical price data to rebuild
+        // value_before_flow from, so the rebuild fell back to cost basis — which
+        // grows exactly as fast as the deposits funding it, flattening TWR to ~0%.
+        //
+        // The failure that actually happens is narrower and genuinely fixable: a
+        // snapshot created without exchange_rates. calculateIndexMWRFromHistory
+        // skips such a flow outright, so the benchmark MWR gets measured over a
+        // subset of the cash flows while the portfolio's own MWR uses all of them
+        // — two different series, presented as one comparison. Yahoo serves the
+        // daily USD/ILS and EUR/ILS closes, so the true rate for that date can be
+        // fetched instead of guessed.
+
+        let pendingSnapshotRateFixes = null;
+
+        function collectSnapshotIssues() {
+            const snaps = Array.isArray(portfolio.snapshots) ? portfolio.snapshots : [];
+            const rows = [];
+
+            snaps.forEach(snap => {
+                const problems = [];
+                const flow = Number(snap.cash_flow) || 0;
+                const validDate = snap.date && !isNaN(new Date(snap.date));
+
+                if (!validDate) problems.push('תאריך לא תקין');
+                // FX only matters where there is a cash flow — those are the
+                // snapshots the benchmark simulation replays.
+                if (flow !== 0 && validDate) {
+                    if (!(Number(snap.exchange_rates?.USD) > 0)) problems.push('חסר שער USD');
+                    if (!(Number(snap.exchange_rates?.EUR) > 0)) problems.push('חסר שער EUR');
+                }
+                if (snap.value_before_flow == null || isNaN(Number(snap.value_before_flow))) {
+                    problems.push('חסר value_before_flow');
+                } else if (Number(snap.value_before_flow) < 0) {
+                    problems.push('value_before_flow שלילי');
+                }
+
+                if (problems.length) rows.push({ snap, problems });
+            });
+
+            // calculateTWRv3 chains consecutive snapshots, so stored order matters.
+            let outOfOrder = 0;
+            for (let i = 1; i < snaps.length; i++) {
+                if (new Date(snaps[i].date) < new Date(snaps[i - 1].date)) outOfOrder++;
             }
-            
-            // Delete all old snapshots
-            portfolio.snapshots = [];
-            
-            // Create one new snapshot with current portfolio value (excluding pensions)
-            const currentValue = getTotalPortfolioValueEnhanced();
-            const totalDeposits = portfolio.deposits.reduce((sum, d) => sum + (d.amount || 0), 0);
-            
-            createSnapshot('fix', 'תיקון פורמט', 0);
-            
-            // Update the snapshot to have proper value_before_flow
-            if (portfolio.snapshots.length > 0) {
-                const newSnapshot = portfolio.snapshots[0];
-                newSnapshot.value_before_flow = 0;
-                newSnapshot.cash_flow = totalDeposits;
-            }
-            
-            saveData();
-            
-            updateOverview();
-            
-            notify('✅ Snapshots תוקנו! TWR יתחיל להתעדכן מעכשיו.', 'success');
+
+            const withFlow = snaps.filter(s => Number(s.cash_flow)).length;
+            const movements = (portfolio.deposits || []).length + (portfolio.withdrawals || []).length;
+
+            return { total: snaps.length, rows, outOfOrder, withFlow, movements };
         }
 
-        // ===========================================
-        // REBUILD SNAPSHOTS FROM HISTORY
-        // ===========================================
-        
-        function rebuildSnapshotsFromHistory() {
-            if (!confirm('🔄 פעולה זו תבנה מחדש את כל ה-Snapshots מהיסטוריית הפעולות.\n\nהפונקציה תעבור על כל ההפקדות והמשיכות בסדר כרונולוגי ותחשב מחדש את שווי התיק בכל נקודה.\n\nהמשך?')) {
+        function checkSnapshotIntegrity() {
+            const report = document.getElementById('snapshot-integrity-report');
+            if (!report) return;
+            const r = collectSnapshotIssues();
+            pendingSnapshotRateFixes = null;
+
+            if (r.total === 0) {
+                report.innerHTML = '<div class="rec-box"><div class="rec-text">אין snapshots כלל — אין מה לבדוק.</div></div>';
                 return;
             }
-            
-            console.log('🔄 Starting rebuildSnapshotsFromHistory...');
-            
-            // Step 1: Collect all cash flow events (deposits and withdrawals only)
-            const allCashFlows = [];
-            
-            // Add deposits
-            if (Array.isArray(portfolio.deposits)) {
-                portfolio.deposits.forEach(d => {
-                    allCashFlows.push({
-                        type: 'deposit',
-                        date: new Date(d.date),
-                        amount: d.amount || 0,
-                        note: d.note || 'הפקדה',
-                        id: d.id
-                    });
-                });
+
+            const missingFx = r.rows.filter(x => x.problems.some(p => p.startsWith('חסר שער')));
+            const lines = [];
+            lines.push('<div style="font-size:0.9rem; line-height:1.9;">');
+            lines.push('נבדקו <strong>' + r.total + '</strong> snapshots, מתוכם <strong>' + r.withFlow + '</strong> עם תזרים.<br>');
+            lines.push('תנועות רשומות (הפקדות + משיכות): <strong>' + r.movements + '</strong>.<br>');
+            if (r.outOfOrder > 0) {
+                lines.push('<span style="color: var(--warning);">⚠️ ' + r.outOfOrder + ' snapshots אינם בסדר תאריכים עולה.</span><br>');
             }
-            
-            // Add withdrawals (as negative amounts)
-            if (Array.isArray(portfolio.withdrawals)) {
-                portfolio.withdrawals.forEach(w => {
-                    allCashFlows.push({
-                        type: 'withdrawal',
-                        date: new Date(w.date),
-                        amount: -(w.amount || 0),
-                        note: w.note || 'משיכה',
-                        id: w.id
-                    });
-                });
-            }
-            
-            // Sort chronologically
-            allCashFlows.sort((a, b) => a.date - b.date);
-            
-            console.log(`📋 Found ${allCashFlows.length} cash flow events to process`);
-            
-            if (allCashFlows.length === 0) {
-                notify('❌ לא נמצאו הפקדות או משיכות בהיסטוריה', 'error');
+            lines.push('</div>');
+
+            if (r.rows.length === 0) {
+                lines.push('<div class="rec-box good" style="margin-top:12px;"><div class="rec-text">✅ לא נמצאו בעיות.</div></div>');
+                report.innerHTML = lines.join('');
                 return;
             }
-            
-            // Step 2: Collect all purchases and sales to calculate portfolio value at each point
-            const allPurchases = [];
-            const allSales = [];
-            
-            // Stock purchases from holdings
-            if (Array.isArray(portfolio.holdings)) {
-                portfolio.holdings.forEach(h => {
-                    if (h.purchaseDate) {
-                        allPurchases.push({
-                            type: 'stock',
-                            date: new Date(h.purchaseDate),
-                            amount: convertToILS(h.shares * h.costBasis, h.currency),
-                            symbol: h.symbol
-                        });
-                    }
-                });
-            }
-            
-            // Also check transactions for additional purchases
-            if (Array.isArray(portfolio.transactions)) {
-                portfolio.transactions.forEach(t => {
-                    if (t.type === 'buy' && t.date) {
-                        allPurchases.push({
-                            type: t.assetType || 'stock',
-                            date: new Date(t.date),
-                            amount: convertToILS(t.shares * t.price, t.currency || 'ILS'),
-                            symbol: t.symbol
-                        });
-                    } else if (t.type === 'sell' && t.date) {
-                        allSales.push({
-                            type: t.assetType || 'stock',
-                            date: new Date(t.date),
-                            amount: convertToILS(t.shares * t.price, t.currency || 'ILS'),
-                            symbol: t.symbol
-                        });
-                    }
-                });
-            }
-            
-            // Bond purchases
-            if (Array.isArray(portfolio.bonds)) {
-                portfolio.bonds.forEach(b => {
-                    if (b.purchaseDate) {
-                        allPurchases.push({
-                            type: 'bond',
-                            date: new Date(b.purchaseDate),
-                            amount: convertToILS(b.units * b.costBasis, b.currency || 'ILS'),
-                            symbol: b.symbol
-                        });
-                    }
-                });
-            }
-            
-            // Sales from portfolio.sales
-            if (Array.isArray(portfolio.sales)) {
-                portfolio.sales.forEach(s => {
-                    allSales.push({
-                        type: s.assetType || 'stock',
-                        date: new Date(s.date),
-                        amount: s.amount || 0,
-                        symbol: s.symbol
-                    });
-                });
-            }
-            
-            // Bond sales
-            if (Array.isArray(portfolio.bondsSales)) {
-                portfolio.bondsSales.forEach(s => {
-                    allSales.push({
-                        type: 'bond',
-                        date: new Date(s.date),
-                        amount: s.amount || 0,
-                        symbol: s.symbol
-                    });
-                });
-            }
-            
-            // Sort purchases and sales
-            allPurchases.sort((a, b) => a.date - b.date);
-            allSales.sort((a, b) => a.date - b.date);
-            
-            console.log(`📋 Found ${allPurchases.length} purchases and ${allSales.length} sales`);
-            
-            // Step 3: Calculate portfolio value at each cash flow event
-            // Using cost basis approach (since we don't have historical prices)
-            
-            function getPortfolioValueAtDate(targetDate) {
-                let stocksValue = 0;
-                let bondsValue = 0;
-                
-                // Calculate stocks value at target date using cost basis
-                if (Array.isArray(portfolio.holdings)) {
-                    portfolio.holdings.forEach(h => {
-                        const purchaseDate = h.purchaseDate ? new Date(h.purchaseDate) : new Date(0);
-                        if (purchaseDate <= targetDate) {
-                            // Use cost basis for historical value
-                            stocksValue += convertToILS(h.shares * h.costBasis, h.currency);
-                        }
-                    });
-                }
-                
-                // Calculate bonds value at target date using cost basis
-                if (Array.isArray(portfolio.bonds)) {
-                    portfolio.bonds.forEach(b => {
-                        const purchaseDate = b.purchaseDate ? new Date(b.purchaseDate) : new Date(0);
-                        if (purchaseDate <= targetDate) {
-                            // Use cost basis for historical value
-                            bondsValue += convertToILS(b.units * b.costBasis, b.currency || 'ILS');
-                        }
-                    });
-                }
-                
-                // Calculate cash at target date
-                let cashValue = 0;
-                
-                // Add all deposits before target date
-                if (Array.isArray(portfolio.deposits)) {
-                    portfolio.deposits.forEach(d => {
-                        if (new Date(d.date) <= targetDate) {
-                            cashValue += d.amount || 0;
-                        }
-                    });
-                }
-                
-                // Subtract all withdrawals before target date
-                if (Array.isArray(portfolio.withdrawals)) {
-                    portfolio.withdrawals.forEach(w => {
-                        if (new Date(w.date) <= targetDate) {
-                            cashValue -= w.amount || 0;
-                        }
-                    });
-                }
-                
-                // Subtract purchases before target date
-                allPurchases.forEach(p => {
-                    if (p.date <= targetDate) {
-                        cashValue -= p.amount;
-                    }
-                });
-                
-                // Add sales before target date
-                allSales.forEach(s => {
-                    if (s.date <= targetDate) {
-                        cashValue += s.amount;
-                    }
-                });
-                
-                // Cash can be negative if there were manual adjustments
-                cashValue = Math.max(0, cashValue);
-                
-                return {
-                    stocks: stocksValue,
-                    bonds: bondsValue,
-                    cash: cashValue,
-                    total: stocksValue + bondsValue + cashValue
-                };
-            }
-            
-            // Step 4: Clear old snapshots and build new ones
-            portfolio.snapshots = [];
-            
-            allCashFlows.forEach((event, index) => {
-                // Get portfolio value BEFORE this cash flow
-                // To do this, we look at the state just before this event's date
-                const valueBeforeDate = new Date(event.date.getTime() - 1000); // 1 second before
-                const valueBefore = getPortfolioValueAtDate(valueBeforeDate);
-                
-                // Create snapshot
-                const snapshot = {
-                    id: Date.now() + index,
-                    date: event.date.toISOString(),
-                    value_before_flow: valueBefore.total,
-                    cash_flow: event.amount, // positive for deposit, negative for withdrawal
-                    stocksValue: valueBefore.stocks,
-                    bondsValue: valueBefore.bonds,
-                    implicitCash: valueBefore.cash,
-                    totalValue: valueBefore.total,
-                    triggerType: event.type,
-                    triggerNote: event.note
-                };
-                
-                portfolio.snapshots.push(snapshot);
-                
-                console.log(`📸 Snapshot ${index + 1}:`, {
-                    date: event.date.toLocaleDateString('he-IL'),
-                    type: event.type,
-                    cashFlow: event.amount,
-                    valueBefore: valueBefore.total
-                });
+
+            lines.push('<div style="overflow-x:auto; margin-top:12px;">');
+            lines.push('<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">');
+            lines.push('<thead><tr style="text-align:right;"><th style="padding:6px;">תאריך</th><th>תזרים</th><th>בעיה</th></tr></thead><tbody>');
+            r.rows.forEach(entry => {
+                const snap = entry.snap;
+                const date = snap.date ? String(snap.date).slice(0, 10) : '—';
+                const flow = Number(snap.cash_flow) || 0;
+                const color = flow >= 0 ? 'var(--profit)' : 'var(--loss)';
+                lines.push('<tr style="border-bottom:1px solid var(--border);">'
+                    + '<td style="padding:6px;">' + date + '</td>'
+                    + '<td style="color:' + color + ';">₪' + Math.round(flow).toLocaleString() + '</td>'
+                    + '<td style="color: var(--warning);">' + entry.problems.join(' · ') + '</td>'
+                    + '</tr>');
             });
-            
-            // Sort snapshots by date
-            portfolio.snapshots.sort((a, b) => new Date(a.date) - new Date(b.date));
-            
-            console.log(`✅ Created ${portfolio.snapshots.length} snapshots from history`);
-            
-            // Save and update UI
+            lines.push('</tbody></table></div>');
+
+            if (missingFx.length > 0) {
+                lines.push('<div class="rec-box" style="margin-top:12px;">'
+                    + '<div class="rec-title">אפשר לתקן אוטומטית</div>'
+                    + '<div class="rec-text">' + missingFx.length + ' snapshots חסרי שער המרה. אפשר למשוך את השער האמיתי של אותו תאריך מ-Yahoo ולראות הצעה לפני החלה.</div>'
+                    + '</div>');
+                lines.push('<button onclick="proposeSnapshotRates()" class="btn btn-primary" style="margin-top:10px;">💱 משוך שערים היסטוריים</button>');
+            }
+
+            const manualOnly = r.rows.length - missingFx.length;
+            if (manualOnly > 0) {
+                lines.push('<div class="rec-box" style="margin-top:12px;">'
+                    + '<div class="rec-title">דורש טיפול ידני</div>'
+                    + '<div class="rec-text">' + manualOnly + ' snapshots עם בעיה ב-value_before_flow. שווי שוק היסטורי לא ניתן לשחזור אוטומטי — ערוך אותם דרך ייצוא וייבוא JSON.</div>'
+                    + '</div>');
+            }
+
+            report.innerHTML = lines.join('');
+        }
+
+        // Yahoo daily closes for one FX pair, as { 'yyyy-mm-dd': rate }.
+        async function fetchHistoricalFxSeries(symbol, fromMs, toMs) {
+            // Widen the window so the earliest and latest snapshot still have a
+            // trading day near them (weekends, holidays, thin FX days).
+            const padSeconds = 21 * 24 * 60 * 60;
+            const p1 = Math.floor(fromMs / 1000) - padSeconds;
+            const p2 = Math.floor(toMs / 1000) + padSeconds;
+            const yahooUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'
+                + encodeURIComponent(symbol)
+                + '?period1=' + p1 + '&period2=' + p2 + '&interval=1d';
+            const resp = await fetch(CF_WORKER_URL + encodeURIComponent(yahooUrl));
+            if (!resp.ok) throw new Error(symbol + ': HTTP ' + resp.status);
+            const data = await resp.json();
+            const result = data?.chart?.result?.[0];
+            const stamps = result?.timestamp || [];
+            const closes = result?.indicators?.quote?.[0]?.close || [];
+            const series = {};
+            stamps.forEach((t, i) => {
+                const close = closes[i];
+                if (close > 0) series[new Date(t * 1000).toISOString().slice(0, 10)] = close;
+            });
+            if (Object.keys(series).length === 0) throw new Error(symbol + ': no closes returned');
+            return series;
+        }
+
+        // FX has no quote on weekends and holidays, so land on the closest one.
+        function nearestFxRate(series, isoDate) {
+            const target = new Date(isoDate).getTime();
+            let bestDate = null;
+            let bestDiff = Infinity;
+            for (const day of Object.keys(series)) {
+                const diff = Math.abs(new Date(day).getTime() - target);
+                if (diff < bestDiff) { bestDiff = diff; bestDate = day; }
+            }
+            if (!bestDate) return null;
+            return {
+                rate: series[bestDate],
+                sourceDate: bestDate,
+                daysAway: Math.round(bestDiff / 86400000)
+            };
+        }
+
+        async function proposeSnapshotRates() {
+            const report = document.getElementById('snapshot-integrity-report');
+            if (!report) return;
+
+            const targets = collectSnapshotIssues().rows
+                .filter(x => x.problems.some(p => p.startsWith('חסר שער')))
+                .map(x => x.snap)
+                .filter(s => s.date && !isNaN(new Date(s.date)));
+
+            if (targets.length === 0) { notify('אין מה לתקן', 'success'); return; }
+
+            const times = targets.map(s => new Date(s.date).getTime());
+            notify('מושך שערים היסטוריים...', 'success');
+
+            let usdSeries, eurSeries;
+            try {
+                const range = [Math.min.apply(null, times), Math.max.apply(null, times)];
+                const fetched = await Promise.all([
+                    fetchHistoricalFxSeries('USDILS=X', range[0], range[1]),
+                    fetchHistoricalFxSeries('EURILS=X', range[0], range[1])
+                ]);
+                usdSeries = fetched[0];
+                eurSeries = fetched[1];
+            } catch (e) {
+                console.error('FX history fetch failed', e);
+                notify('❌ משיכת השערים נכשלה: ' + e.message, 'error');
+                return;
+            }
+
+            const proposals = [];
+            targets.forEach(snap => {
+                const iso = String(snap.date).slice(0, 10);
+                const usd = nearestFxRate(usdSeries, iso);
+                const eur = nearestFxRate(eurSeries, iso);
+                if (!usd && !eur) return;
+                proposals.push({ snap: snap, iso: iso, usd: usd, eur: eur });
+            });
+
+            if (proposals.length === 0) { notify('לא נמצאו שערים מתאימים', 'error'); return; }
+            pendingSnapshotRateFixes = proposals;
+
+            const gaps = proposals.map(p => Math.max(p.usd ? p.usd.daysAway : 0, p.eur ? p.eur.daysAway : 0));
+            const worstGap = Math.max.apply(null, gaps);
+
+            const lines = [];
+            lines.push('<div style="overflow-x:auto;">');
+            lines.push('<table style="width:100%; border-collapse:collapse; font-size:0.85rem;">');
+            lines.push('<thead><tr style="text-align:right;"><th style="padding:6px;">תאריך snapshot</th><th>USD</th><th>EUR</th><th>נלקח מתאריך</th></tr></thead><tbody>');
+            proposals.forEach(p => {
+                const src = p.usd ? p.usd.sourceDate : (p.eur ? p.eur.sourceDate : '—');
+                const gap = p.usd ? p.usd.daysAway : (p.eur ? p.eur.daysAway : 0);
+                const gapColor = gap > 5 ? 'var(--warning)' : 'var(--text-secondary)';
+                lines.push('<tr style="border-bottom:1px solid var(--border);">'
+                    + '<td style="padding:6px;">' + p.iso + '</td>'
+                    + '<td>' + (p.usd ? p.usd.rate.toFixed(4) : '—') + '</td>'
+                    + '<td>' + (p.eur ? p.eur.rate.toFixed(4) : '—') + '</td>'
+                    + '<td style="color:' + gapColor + ';">' + src + (gap > 0 ? ' (' + gap + ' ימים)' : '') + '</td>'
+                    + '</tr>');
+            });
+            lines.push('</tbody></table></div>');
+
+            if (worstGap > 5) {
+                lines.push('<div class="rec-box" style="margin-top:10px;"><div class="rec-text">⚠️ חלק מהשערים נלקחו מתאריך מרוחק ביותר מ-5 ימים. כדאי לבדוק אותם לפני החלה.</div></div>');
+            }
+
+            lines.push('<div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">'
+                + '<button onclick="applySnapshotRates()" class="btn btn-success">✅ החל ' + proposals.length + ' תיקונים (עם גיבוי)</button>'
+                + '<button onclick="checkSnapshotIntegrity()" class="btn">ביטול</button>'
+                + '</div>');
+
+            report.innerHTML = lines.join('');
+        }
+
+        function applySnapshotRates() {
+            if (!pendingSnapshotRateFixes || pendingSnapshotRateFixes.length === 0) {
+                notify('אין תיקונים ממתינים', 'error');
+                return;
+            }
+            const count = pendingSnapshotRateFixes.length;
+            if (!confirm('להחיל שערי המרה על ' + count + ' snapshots? קובץ גיבוי יירד אוטומטית לפני השינוי.')) return;
+
+            // Download the pre-change state first. This only ever adds missing
+            // fields, but a snapshot edit moves the base of every return number.
+            exportData();
+
+            let applied = 0;
+            pendingSnapshotRateFixes.forEach(fix => {
+                const rates = Object.assign({}, fix.snap.exchange_rates || {});
+                if (fix.usd && !(Number(rates.USD) > 0)) rates.USD = fix.usd.rate;
+                if (fix.eur && !(Number(rates.EUR) > 0)) rates.EUR = fix.eur.rate;
+                rates.ILS = 1;
+                fix.snap.exchange_rates = rates;
+                applied++;
+            });
+
+            pendingSnapshotRateFixes = null;
+            window.portfolio = portfolio;
             saveData();
             updateOverview();
-            renderCashFlow();
-            
-            notify(`✅ נבנו מחדש ${portfolio.snapshots.length} snapshots מהיסטוריית הפעולות!`, 'success');
+            notify('✅ עודכנו ' + applied + ' snapshots', 'success');
+            checkSnapshotIntegrity();
         }
 
         // ===========================================
@@ -16104,6 +16079,7 @@ ${msg}`, 'warning');
                         bondsValue: 0,
                         implicitCash: 0,
                         totalValue: Math.round(cumCostIls + flow),
+                        exchange_rates: { ...portfolio.rates },
                         triggerType: 'deposit',
                         triggerNote: 'ייבוא היסטוריה מאקסל (קירוב מבוסס עלות)'
                     });
@@ -16152,8 +16128,9 @@ ${msg}`, 'warning');
         window.editWatchlistItem = editWatchlistItem;
         window.promptManualWatchlistPrice = promptManualWatchlistPrice;
         window.renderWatchlist = renderWatchlist;
-        window.fixSnapshots = fixSnapshots;
-        window.rebuildSnapshotsFromHistory = rebuildSnapshotsFromHistory;
+        window.checkSnapshotIntegrity = checkSnapshotIntegrity;
+        window.proposeSnapshotRates = proposeSnapshotRates;
+        window.applySnapshotRates = applySnapshotRates;
         window.updateHoldingFee = updateHoldingFee;
         window.renderFeesTab = renderFeesTab;
         window.addDividend = addDividend;
