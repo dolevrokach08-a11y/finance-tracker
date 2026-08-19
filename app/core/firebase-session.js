@@ -31,13 +31,18 @@ function readLocalData(demo = false) {
             portfolio: generateDemoPortfolioData(),
             mortgage: generateDemoMortgageData(),
             cachedTwr: null,
+            // The demo sandbox is isolated localStorage, so a summary written
+            // there by finance.html describes the demo data — same contract as
+            // the real path, and it keeps the two demo screens agreeing.
+            cachedFinance: readJSON('finance_cachedSummary', null),
         };
     }
     const finance = readJSON('financeTrackerData', demo ? generateDemoFinanceData() : null);
     const portfolio = readJSON('portfolio', demo ? generateDemoPortfolioData() : null);
     const mortgage = readJSON('mortgageData', readJSON('mortgage', null));
     const cachedTwr = readJSON('portfolio_cachedTWR', null);
-    return { finance, portfolio, mortgage, cachedTwr };
+    const cachedFinance = readJSON('finance_cachedSummary', null);
+    return { finance, portfolio, mortgage, cachedTwr, cachedFinance };
 }
 
 function withTimeout(promise, ms = 15000) {

@@ -33,6 +33,7 @@
         'taxOptimizerData',
         'taxData',
         // computed caches
+        'finance_cachedSummary',
         'portfolio_cachedTWR',
         'portfolio_cachedBenchmarks',
         // sync metadata

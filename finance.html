@@ -7348,6 +7348,18 @@
             const month = getOverviewMonth();
             const sum = getMonthSummary(month);
 
+            // Publish for the home screen, the same way portfolio.html publishes
+            // portfolio_cachedTWR. getMonthSummary folds in template/transaction
+            // de-duplication, accrual shifting and the tithe cap — anything that
+            // re-derives a cash-flow figure elsewhere will drift from this page.
+            try {
+                localStorage.setItem('finance_cachedSummary', JSON.stringify({
+                    month, basis: 'cash',
+                    income: sum.inc, expenses: sum.exp, tithe: sum.tithe, available: sum.available,
+                    timestamp: Date.now()
+                }));
+            } catch (e) { /* private mode — the home screen falls back to its own estimate */ }
+
             // Animated count-up for summary values
             function animateValue(el, target, prefix) {
                 if (!el) return;

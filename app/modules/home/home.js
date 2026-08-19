@@ -9,6 +9,13 @@ function currency(value, { compact = false } = {}) {
     return `${sign}₪${Math.round(abs).toLocaleString('he-IL')}`;
 }
 
+const MONTH_NAMES = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+
+// finance.html keys its summary by 'YYYY-MM'.
+function monthName(key) {
+    const parts = /^(\d{4})-(\d{2})$/.exec(String(key || ''));
+    return parts ? (MONTH_NAMES[Number(parts[2]) - 1] || '') : '';
+}
 function percent(value) {
     if (!Number.isFinite(value)) return '—';
     return `${value > 0 ? '+' : ''}${value.toFixed(1)}%`;
@@ -154,7 +161,9 @@ export function mount({ root, store }) {
         const connected = [state.data.portfolio, state.data.finance, state.data.mortgage].filter(Boolean).length;
         text(root, 'orbitScore', `${Math.round((connected / 3) * 100)}%`);
         text(root, 'orbitPortfolio', portfolio.total ? currency(portfolio.total, { compact: true }) : '—');
-        text(root, 'orbitCashflow', finance.freeCash ? currency(finance.freeCash, { compact: true }) : '—');
+        text(root, 'orbitCashflow', finance.hasCashflow ? currency(finance.freeCash, { compact: true }) : '—');
+        const cashflowMonth = monthName(finance.month);
+        text(root, 'orbitCashflowLabel', cashflowMonth ? `תזרים · ${cashflowMonth}` : 'תזרים');
         text(root, 'orbitDebt', mortgage.balance ? currency(mortgage.balance, { compact: true }) : mortgage.monthlyPayment ? currency(mortgage.monthlyPayment, { compact: true }) : '—');
 
         text(root, 'portfolioValue', portfolio.total ? currency(portfolio.total) : '—');
@@ -162,7 +171,7 @@ export function mount({ root, store }) {
         const returnValue = root.querySelector('#portfolioReturn');
         returnValue.classList.toggle('negative', Number.isFinite(portfolio.returnPct) && portfolio.returnPct < 0);
 
-        text(root, 'monthlyMargin', finance.income || finance.expenses ? currency(finance.freeCash) : '—');
+        text(root, 'monthlyMargin', finance.hasCashflow ? currency(finance.freeCash) : '—');
         text(root, 'monthlyIncome', finance.income ? currency(finance.income) : '—');
         const marginPercent = finance.income > 0 ? Math.max(0, Math.min(100, (finance.freeCash / finance.income) * 100)) : 0;
         root.querySelector('#marginScale').style.width = `${marginPercent}%`;

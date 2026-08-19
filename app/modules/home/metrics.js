@@ -14,7 +14,7 @@ function rateFor(currency, rates) {
 }
 
 function portfolioMetrics(portfolio, cachedTwr) {
-    if (!portfolio) return { total: 0, invested: 0, cash: 0, cost: 0, returnPct: null, history: [], allocation: [] };
+    if (!portfolio) return { total: 0, invested: 0, cash: 0, cost: 0, pensions: 0, returnPct: null, history: [], allocation: [] };
     const rates = portfolio.rates || {};
     let stocks = 0;
     let bonds = 0;
@@ -37,7 +37,11 @@ function portfolioMetrics(portfolio, cachedTwr) {
         + number(portfolio.cash?.USD) * rateFor('USD', rates)
         + number(portfolio.cash?.EUR) * rateFor('EUR', rates);
     const invested = stocks + bonds;
+    // Tradeable portfolio only. Pensions and study funds are excluded here on
+    // purpose — the rest of the app keeps them out of performance figures — but
+    // they are real money and must land in net worth below.
     const total = invested + cash;
+    const pensions = sum(portfolio.pensions, item => item.currentValue);
 
     let returnPct = cost > 0 ? ((invested - cost) / cost) * 100 : null;
     if (cachedTwr && typeof cachedTwr.total === 'number' && Date.now() - number(cachedTwr.timestamp) < 86_400_000) {
@@ -58,16 +62,37 @@ function portfolioMetrics(portfolio, cachedTwr) {
         { id: 'cash', label: 'מזומן', value: cash, color: '#ad85ff' },
     ].filter(item => item.value > 0);
 
-    return { total, invested, cash, cost, returnPct, history, allocation };
+    return { total, invested, cash, cost, pensions, returnPct, history, allocation };
 }
 
-function financeMetrics(finance) {
-    if (!finance) return { income: 0, expenses: 0, freeCash: 0, assets: 0, liabilities: 0, netWorth: 0 };
-    const income = sum(finance.fixedIncomes, item => item.amount);
-    const expenses = sum(finance.fixedExpenses, item => item.amount);
+function financeMetrics(finance, cachedSummary) {
+    const empty = { income: 0, expenses: 0, freeCash: 0, assets: 0, liabilities: 0, netWorth: 0, month: null, hasCashflow: false };
+    if (!finance) return empty;
+
     const assets = sum(finance.netWorthAssets, item => item.value);
     const liabilities = sum(finance.netWorthLiabilities, item => item.value);
-    return { income, expenses, freeCash: income - expenses, assets, liabilities, netWorth: assets - liabilities };
+
+    // Prefer what finance.html actually rendered. Its month summary de-duplicates
+    // fixed templates against imported transactions and caps the tithe at real
+    // profit — rules this module has no business reimplementing.
+    if (cachedSummary && typeof cachedSummary.available === 'number') {
+        return {
+            income: number(cachedSummary.income),
+            expenses: number(cachedSummary.expenses),
+            freeCash: number(cachedSummary.available),
+            month: cachedSummary.month || null,
+            hasCashflow: true,
+            assets, liabilities, netWorth: assets - liabilities,
+        };
+    }
+
+    // Fallback until the finance page has been opened once: fixed templates only.
+    // Deliberately coarse — it ignores transactions, so it is an estimate, and
+    // hasCashflow stays false so the UI can say so.
+    const income = sum(finance.fixedIncomes, item => item.amount);
+    const expenses = sum(finance.fixedExpenses, item => item.amount);
+    const hasCashflow = Boolean(income || expenses);
+    return { income, expenses, freeCash: income - expenses, month: null, hasCashflow, assets, liabilities, netWorth: assets - liabilities };
 }
 
 // Standard annuity payment — mirrors pmt() in mortgage.html so the home card
@@ -172,9 +197,10 @@ function buildInsight({ finance, portfolio, mortgage }) {
 
 export function deriveMetrics(data = {}) {
     const portfolio = portfolioMetrics(data.portfolio, data.cachedTwr);
-    const finance = financeMetrics(data.finance);
+    const finance = financeMetrics(data.finance, data.cachedFinance);
     const mortgage = mortgageMetrics(data.mortgage);
-    const combinedNetWorth = finance.netWorth + portfolio.total;
+    // Net worth counts everything owned, pensions included.
+    const combinedNetWorth = finance.netWorth + portfolio.total + portfolio.pensions;
     const debtRatio = finance.income > 0 ? (mortgage.monthlyPayment / finance.income) * 100 : null;
     const hasData = Boolean(data.finance || data.portfolio || data.mortgage);
 
