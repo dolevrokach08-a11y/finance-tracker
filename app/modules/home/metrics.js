@@ -74,11 +74,19 @@ function portfolioMetrics(portfolio, cachedTwr) {
 }
 
 function financeMetrics(finance, cachedSummary) {
-    const empty = { income: 0, expenses: 0, freeCash: 0, assets: 0, liabilities: 0, netWorth: 0, month: null, hasCashflow: false };
+    const empty = { income: 0, expenses: 0, freeCash: 0, assets: 0, liabilities: 0, assetsByCategory: {}, netWorth: 0, month: null, hasCashflow: false };
     if (!finance) return empty;
 
     const assets = sum(finance.netWorthAssets, item => item.value);
     const liabilities = sum(finance.netWorthLiabilities, item => item.value);
+    // Kept per category so net worth can tell a hand-typed portfolio or pension
+    // figure apart from a house or a car, and prefer the live value for the
+    // former without dropping the latter.
+    const assetsByCategory = {};
+    (Array.isArray(finance.netWorthAssets) ? finance.netWorthAssets : []).forEach(item => {
+        const key = String(item?.category || 'other').toLowerCase();
+        assetsByCategory[key] = (assetsByCategory[key] || 0) + number(item?.value);
+    });
 
     // Same rules finance.html applies, from the same file, so the two screens
     // agree on the first load rather than only after the finance page has been
@@ -93,7 +101,7 @@ function financeMetrics(finance, cachedSummary) {
             freeCash: summary.available,
             month,
             hasCashflow: summary.hasData,
-            assets, liabilities, netWorth: assets - liabilities,
+            assets, liabilities, assetsByCategory, netWorth: assets - liabilities,
         };
     }
 
@@ -101,7 +109,7 @@ function financeMetrics(finance, cachedSummary) {
     // it ignores transactions — so hasCashflow reflects whether it found anything.
     const income = sum(finance.fixedIncomes, item => item.amount);
     const expenses = sum(finance.fixedExpenses, item => item.amount);
-    return { income, expenses, freeCash: income - expenses, month: null, hasCashflow: Boolean(income || expenses), assets, liabilities, netWorth: assets - liabilities };
+    return { income, expenses, freeCash: income - expenses, month: null, hasCashflow: Boolean(income || expenses), assets, liabilities, assetsByCategory, netWorth: assets - liabilities };
 }
 
 // Standard annuity payment — mirrors pmt() in mortgage.html so the home card
@@ -208,8 +216,18 @@ export function deriveMetrics(data = {}) {
     const portfolio = portfolioMetrics(data.portfolio, data.cachedTwr);
     const finance = financeMetrics(data.finance, data.cachedFinance);
     const mortgage = mortgageMetrics(data.mortgage);
-    // Net worth counts everything owned, pensions included.
-    const combinedNetWorth = finance.netWorth + portfolio.total + portfolio.pensions;
+    // Count everything once. The finance page lets you type a portfolio or a
+    // pension in by hand, and those entries go stale the moment the real figure
+    // moves — so where the app tracks the live value, it replaces the typed one
+    // instead of being added on top of it. A house or a car has no live source
+    // and stays exactly as entered.
+    const manual = finance.assetsByCategory || {};
+    const livePortfolio = portfolio.total > 0;
+    const livePensions = portfolio.pensions > 0;
+    const supersededByLive = (livePortfolio ? number(manual.investments) : 0)
+        + (livePensions ? number(manual.pension) : 0);
+    const combinedNetWorth = finance.assets - supersededByLive - finance.liabilities
+        + portfolio.total + portfolio.pensions;
     const debtRatio = finance.income > 0 ? (mortgage.monthlyPayment / finance.income) * 100 : null;
     const hasData = Boolean(data.finance || data.portfolio || data.mortgage);
 
