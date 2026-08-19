@@ -869,6 +869,7 @@
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
+    <script src="shared/finance-summary.js" defer></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -6700,7 +6701,14 @@
 
         // Demo mode initialization
         if (_isDemoMode) {
-            data = window.__demoFinanceData();
+            // Prefer the seeded sandbox. The generator randomises several amounts
+            // on every call, so regenerating here gave this page a different month
+            // than the home screen was showing for the same demo session.
+            let seeded = null;
+            try { seeded = JSON.parse(localStorage.getItem('financeTrackerData') || 'null'); } catch (e) {}
+            data = (seeded && Array.isArray(seeded.transactions) && seeded.transactions.length)
+                ? seeded
+                : window.__demoFinanceData();
             ensureFinanceSettings();
             applyFinanceSettings();
 
@@ -7348,10 +7356,9 @@
             const month = getOverviewMonth();
             const sum = getMonthSummary(month);
 
-            // Publish for the home screen, the same way portfolio.html publishes
-            // portfolio_cachedTWR. getMonthSummary folds in template/transaction
-            // de-duplication, accrual shifting and the tithe cap — anything that
-            // re-derives a cash-flow figure elsewhere will drift from this page.
+            // Records which month is on screen here. The home card computes its
+            // own current month through the same shared rules, so this is a hint
+            // about focus, never the only source of the number.
             try {
                 localStorage.setItem('finance_cachedSummary', JSON.stringify({
                     month, basis: 'cash',
@@ -9413,6 +9420,10 @@
         }
 
         function getMonthSummary(month, basis = 'cash') {
+            // Cash basis is shared with the home screen — one implementation, so
+            // the two screens cannot disagree about the same month.
+            if (basis !== 'accrual' && window.FTFinance) return window.FTFinance.monthSummary(data, month);
+
             const monthOf = (t) => basis === 'accrual' ? computeAssignedMonth(t) : t.month;
             const monthIncomeTxs = data.transactions.filter(t=>monthOf(t)===month&&t.type==='income');
             const monthExpenseTxs = data.transactions.filter(t=>monthOf(t)===month&&t.type==='expense');

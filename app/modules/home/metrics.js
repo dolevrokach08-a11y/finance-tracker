@@ -72,27 +72,28 @@ function financeMetrics(finance, cachedSummary) {
     const assets = sum(finance.netWorthAssets, item => item.value);
     const liabilities = sum(finance.netWorthLiabilities, item => item.value);
 
-    // Prefer what finance.html actually rendered. Its month summary de-duplicates
-    // fixed templates against imported transactions and caps the tithe at real
-    // profit — rules this module has no business reimplementing.
-    if (cachedSummary && typeof cachedSummary.available === 'number') {
+    // Same rules finance.html applies, from the same file, so the two screens
+    // agree on the first load rather than only after the finance page has been
+    // visited once.
+    const rules = typeof globalThis !== 'undefined' ? globalThis.FTFinance : null;
+    if (rules) {
+        const month = cachedSummary?.month || rules.currentMonthKey();
+        const summary = rules.monthSummary(finance, month);
         return {
-            income: number(cachedSummary.income),
-            expenses: number(cachedSummary.expenses),
-            freeCash: number(cachedSummary.available),
-            month: cachedSummary.month || null,
-            hasCashflow: true,
+            income: summary.inc,
+            expenses: summary.exp,
+            freeCash: summary.available,
+            month,
+            hasCashflow: summary.hasData,
             assets, liabilities, netWorth: assets - liabilities,
         };
     }
 
-    // Fallback until the finance page has been opened once: fixed templates only.
-    // Deliberately coarse — it ignores transactions, so it is an estimate, and
-    // hasCashflow stays false so the UI can say so.
+    // Only if the shared rules failed to load: fixed templates alone. Coarse —
+    // it ignores transactions — so hasCashflow reflects whether it found anything.
     const income = sum(finance.fixedIncomes, item => item.amount);
     const expenses = sum(finance.fixedExpenses, item => item.amount);
-    const hasCashflow = Boolean(income || expenses);
-    return { income, expenses, freeCash: income - expenses, month: null, hasCashflow, assets, liabilities, netWorth: assets - liabilities };
+    return { income, expenses, freeCash: income - expenses, month: null, hasCashflow: Boolean(income || expenses), assets, liabilities, netWorth: assets - liabilities };
 }
 
 // Standard annuity payment — mirrors pmt() in mortgage.html so the home card

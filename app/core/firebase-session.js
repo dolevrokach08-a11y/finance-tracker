@@ -26,10 +26,13 @@ function readJSON(key, fallback = null) {
 
 function readLocalData(demo = false) {
     if (demo) {
+        // Read the seeded sandbox first. The generators randomise several amounts
+        // on every call, so generating here made this screen disagree with the
+        // legacy pages, which read what seedDemoStorage() wrote once.
         return {
-            finance: generateDemoFinanceData(),
-            portfolio: generateDemoPortfolioData(),
-            mortgage: generateDemoMortgageData(),
+            finance: readJSON('financeTrackerData', null) || generateDemoFinanceData(),
+            portfolio: readJSON('portfolio', null) || generateDemoPortfolioData(),
+            mortgage: readJSON('mortgageState', null) || generateDemoMortgageData(),
             cachedTwr: null,
             // The demo sandbox is isolated localStorage, so a summary written
             // there by finance.html describes the demo data — same contract as
