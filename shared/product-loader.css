@@ -133,18 +133,7 @@
   gap: 12px;
 }
 
-.product-boot-brand > span {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 1px solid rgba(var(--boot-accent-rgb), .48);
-  border-radius: 13px 13px 20px 13px;
-  color: var(--boot-accent);
-  background: rgba(var(--boot-accent-rgb), .065);
-  box-shadow: inset 0 0 24px rgba(var(--boot-accent-rgb), .045);
-  font: 700 1.45rem/1 "Space Grotesk", "JetBrains Mono", monospace;
-}
+.product-boot-brand > .allmon-mark { --allmon-size: 42px; }
 
 .product-boot-brand > div,
 .product-boot-module {
@@ -152,7 +141,7 @@
   gap: 3px;
 }
 
-.product-boot-brand strong { color: var(--boot-text); font-size: .95rem; line-height: 1; }
+.product-boot-brand strong { color: var(--boot-text); font: 700 .95rem/1 "Space Grotesk", "Heebo", sans-serif; letter-spacing: .075em; direction: ltr; }
 .product-boot-brand small,
 .product-boot-module span {
   color: var(--boot-muted);
@@ -232,6 +221,14 @@
   box-shadow: 0 16px 45px rgba(0,0,0,.32);
   font: 700 1.65rem/1 "JetBrains Mono", "Space Grotesk", monospace;
 }
+
+.product-boot-orbit > .allmon-mark {
+  --allmon-size: 92px;
+  position: relative;
+  z-index: 3;
+}
+
+.product-boot-orbit > .allmon-mark .allmon-mark__sonar { display: none; }
 
 .product-boot-copy {
   display: grid;
@@ -428,7 +425,7 @@ body[data-theme="light"] .product-boot-orbit > b { background: rgba(255,255,252,
 
 .product-boot-screen .product-boot-frame::after { display: none; }
 .product-boot-screen .product-boot-header { padding-bottom: 12px; }
-.product-boot-screen .product-boot-brand > span { width: 36px; height: 36px; border-radius: 11px 11px 16px 11px; font-size: 1.15rem; }
+.product-boot-screen .product-boot-brand > .allmon-mark { --allmon-size: 36px; }
 .product-boot-screen .product-boot-brand strong { font-size: .82rem; }
 .product-boot-screen .product-boot-module strong { font-size: .62rem; }
 
@@ -452,6 +449,7 @@ body[data-theme="light"] .product-boot-orbit > b { background: rgba(255,255,252,
   font-size: .82rem;
   box-shadow: 0 8px 20px rgba(0,0,0,.22);
 }
+.product-boot-screen .product-boot-orbit > .allmon-mark { --allmon-size: 48px; }
 
 .product-boot-screen .product-boot-copy { justify-items: start; gap: 6px; text-align: right; }
 .product-boot-screen .product-boot-copy > span { font-size: .48rem; }
@@ -480,6 +478,7 @@ body[data-theme="light"] .product-boot-orbit > b { background: rgba(255,255,252,
   .product-boot-screen .product-boot-stage { grid-template-columns: 62px minmax(0, 1fr); gap: 13px; min-height: 116px; padding: 0; justify-items: stretch; }
   .product-boot-screen .product-boot-orbit { width: 60px; align-self: center; }
   .product-boot-screen .product-boot-orbit > b { width: 36px; height: 36px; font-size: .7rem; }
+  .product-boot-screen .product-boot-orbit > .allmon-mark { --allmon-size: 42px; }
   .product-boot-screen .product-boot-copy { justify-items: start; text-align: right; }
   .product-boot-screen .product-boot-copy > strong { font-size: clamp(1.08rem, 6vw, 1.4rem); }
   .product-boot-screen .product-boot-copy > small { text-align: right; }

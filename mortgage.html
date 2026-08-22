@@ -3,11 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מחשבון משכנתא מקצועי</title>
+<title>ALLMON — תכנון משכנתא</title>
+<meta name="theme-color" content="#08090c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ALLMON">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="shared/theme.css">
+<link rel="stylesheet" href="shared/brand.css">
 <link rel="stylesheet" href="shared-theme.css">
 <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
 <link rel="modulepreload" href="./firebase-config.js">
@@ -49,7 +57,10 @@ nav{
   height:56px;position:sticky;top:0;z-index:100;
   backdrop-filter:blur(12px);transition:var(--transition);
 }
-.logo{font-size:16px;font-weight:800;display:flex;align-items:center;gap:10px;letter-spacing:-.01em;}
+.logo{font-size:16px;font-weight:800;display:flex;align-items:center;gap:9px;letter-spacing:-.01em;}
+.logo-copy{display:grid;gap:2px;line-height:1;}
+.logo-copy strong{font:700 13px/1 'Space Grotesk',sans-serif;letter-spacing:.075em;direction:ltr;}
+.logo-copy small{color:var(--text3);font-size:9px;font-weight:700;letter-spacing:.02em;}
 .logo-icon{
   width:28px;height:28px;background:var(--accent);border-radius:8px;
   display:flex;align-items:center;justify-content:center;
@@ -365,7 +376,7 @@ tr:hover td{background:var(--bg-elevated);}
 <div class="toast" id="toast"></div>
 
 <nav>
-  <div class="logo"><div class="logo-icon">מ</div>מחשבון משכנתא</div>
+  <div class="logo"><span class="allmon-mark allmon-mark--sm" aria-hidden="true"><img class="allmon-mark__core" src="icons/allmon-mark.png" alt=""><span class="allmon-mark__sonar"></span></span><span class="logo-copy"><strong>ALLMON</strong><small>תכנון משכנתא</small></span></div>
   <div class="nav-center">
     <button class="nav-tab active" onclick="showPage('p-current',this)">משכנתא נוכחית</button>
     <button class="nav-tab" onclick="showPage('p-builder',this)">בניית תמהיל</button>

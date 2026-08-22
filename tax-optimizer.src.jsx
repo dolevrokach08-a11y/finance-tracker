@@ -1781,7 +1781,7 @@ function App() {
           <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(0,0,0,0.15)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.05)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: "hsl(215, 12%, 52%)" }}>יחס ברוטו/נטו</span>
-              <InfoTip text={"הנתונים מהמעקב הפיננסי הם נטו (מה שנכנס לחשבון). יחס זה מכפיל את הנטו לברוטו משוער.\n\nלחלופין — העלה תלושי משכורת למעלה לחישוב מדויק.\n\n• 1.00 = כבר ברוטו\n• 1.07 = ללא מס (רק ביטוח לאומי+בריאות)\n• 1.20 = מדרגת 10%\n• 1.26 = מדרגת 14%"} />
+              <InfoTip text={"הנתונים מ-ALLMON הם נטו (מה שנכנס לחשבון). יחס זה מכפיל את הנטו לברוטו משוער.\n\nלחלופין — העלה תלושי משכורת למעלה לחישוב מדויק.\n\n• 1.00 = כבר ברוטו\n• 1.07 = ללא מס (רק ביטוח לאומי+בריאות)\n• 1.20 = מדרגת 10%\n• 1.26 = מדרגת 14%"} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <div>

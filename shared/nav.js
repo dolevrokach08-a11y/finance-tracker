@@ -72,17 +72,14 @@ const NAV_CSS = `
   font-size: 9px;
   font-weight: 700;
 }
-.shared-nav-brand-mark {
-  display: grid;
-  place-items: center;
-  width: 43px;
-  height: 43px;
-  border: 1px solid rgba(201, 255, 71, 0.4);
-  border-radius: 14px 5px 14px 5px;
-  background: rgba(201, 255, 71, 0.08);
-  color: var(--shared-nav-accent);
-  font: 700 19px/1 'Space Grotesk', sans-serif;
-  box-shadow: 0 0 24px rgba(201, 255, 71, 0.08);
+.shared-nav-brand .allmon-mark { --allmon-size: 44px; }
+.shared-nav-brand-label {
+  overflow: hidden;
+  max-width: 100%;
+  font: 700 9px/1 'Space Grotesk', sans-serif;
+  letter-spacing: .13em;
+  text-overflow: ellipsis;
+  direction: ltr;
 }
 .shared-nav-links {
   display: grid;
@@ -279,7 +276,7 @@ export function injectNav(currentPage = '', syncSlotId = 'syncWidgetSlot') {
   nav.setAttribute('aria-label', 'ניווט ראשי');
   nav.innerHTML = `
     <div class="shared-nav-right">
-      <span class="shared-nav-brand"><span class="shared-nav-brand-mark">F</span><span>המעקב</span></span>
+      <span class="shared-nav-brand"><span class="allmon-mark allmon-mark--sm" aria-hidden="true"><img class="allmon-mark__core" src="icons/allmon-mark.png" alt=""><span class="allmon-mark__sonar"></span></span><span class="shared-nav-brand-label">ALLMON</span></span>
       <div class="shared-nav-links">${links}</div>
     </div>
     <button class="shared-nav-theme" id="shared-nav-theme" type="button" title="החלפת מצב תצוגה" aria-label="החלפת מצב תצוגה">

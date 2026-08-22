@@ -3,16 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>התחברות - ניהול פיננסי</title>
+    <title>ALLMON — כניסה למרחב הפיננסי</title>
     <script src="shared/user-storage.js"></script>
     
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#08090c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Finance">
+    <meta name="apple-mobile-web-app-title" content="ALLMON">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -21,6 +22,7 @@
 
     <!-- Shared design tokens (dark default + light overrides) -->
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/brand.css">
     <script>
         // Respect the shared theme key before first paint
         if (localStorage.getItem('theme') === 'light') {
@@ -184,9 +186,12 @@
 </head>
 <body>
     <section class="login-story" aria-labelledby="loginStoryTitle">
-        <div class="story-brand">
-            <span class="story-mark">F</span>
-            <span><strong>המעקב</strong><small>FINANCIAL OS</small></span>
+        <div class="story-brand allmon-brand-lockup">
+            <span class="allmon-mark allmon-mark--md" aria-hidden="true">
+                <img class="allmon-mark__core" src="icons/allmon-mark.png" alt="">
+                <span class="allmon-mark__sonar"></span>
+            </span>
+            <span class="allmon-wordmark"><strong>ALLMON</strong><small>FINANCIAL OS</small></span>
         </div>
         <div class="story-copy">
             <p>כל ההחלטות. מרחב אחד.</p>
@@ -205,7 +210,7 @@
     </section>
     <div class="login-container">
         <span class="login-kicker">כניסה למרחב האישי</span>
-        <h1 class="brand">המעקב הפיננסי</h1>
+        <h1 class="brand"><span class="allmon-mark allmon-mark--sm" aria-hidden="true"><img class="allmon-mark__core" src="icons/allmon-mark.png" alt=""><span class="allmon-mark__sonar"></span></span><span dir="ltr">ALLMON</span></h1>
         <p class="subtitle">תיק השקעות, תשואות והשוואה למדדים — התחבר כדי לגשת למערכת שלך</p>
 
         <button class="google-btn" id="googleSignInBtn">

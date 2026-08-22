@@ -122,7 +122,8 @@ html[data-theme="light"] .story-node { background: rgba(250,251,246,.85); }
 .login-container::before { width: 42%; height: 1px; background: linear-gradient(90deg, transparent, var(--login-accent), transparent); }
 .login-kicker { display: block; margin-bottom: 11px; color: var(--login-accent); font-size: 9px; font-weight: 700; letter-spacing: .04em; }
 h1.brand { color: var(--login-text); font-size: clamp(24px, 3vw, 31px); letter-spacing: -.04em; }
-h1.brand::before { width: 7px; height: 7px; background: var(--login-accent); box-shadow: 0 0 14px rgba(201,255,71,.7); }
+h1.brand::before { display: none; }
+h1.brand > span:last-child { font-family: "Space Grotesk", sans-serif; font-weight: 700; letter-spacing: .075em; }
 .subtitle { max-width: 330px; margin: 2px auto 34px; color: var(--login-muted); font-size: 12px; line-height: 1.65; }
 .google-btn { min-height: 51px; border-color: var(--login-line); border-radius: 13px; background: rgba(255,255,255,.025); color: var(--login-text); font-size: 13px; }
 .google-btn:hover { border-color: rgba(201,255,71,.42); background: rgba(201,255,71,.055); box-shadow: 0 0 28px rgba(201,255,71,.08); }

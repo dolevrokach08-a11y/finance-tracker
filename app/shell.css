@@ -138,12 +138,15 @@ a { color: inherit; }
 
 .rail-brand {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    min-height: 52px;
+    gap: 6px;
+    min-height: 78px;
     padding: 0 0 16px;
     border-bottom: 1px solid var(--shell-line);
 }
+.rail-brand .allmon-mark { --allmon-size: 46px; }
 
 .brand-mark {
     position: relative;
@@ -171,15 +174,15 @@ a { color: inherit; }
     opacity: .35;
 }
 
-.brand-copy { display: none; }
-.brand-copy strong { font-size: 18px; line-height: 1.05; letter-spacing: -.03em; }
+.brand-copy { display: grid; justify-items: center; gap: 2px; min-width: 0; text-align: center; }
+.brand-copy strong { font-size: 10px; line-height: 1; letter-spacing: .12em; }
 .brand-copy small {
-    margin-top: 4px;
+    margin-top: 1px;
     color: var(--shell-muted);
-    font: 600 9px/1 "Space Grotesk", sans-serif;
-    letter-spacing: .17em;
+    font: 600 5.5px/1 "Space Grotesk", sans-serif;
+    letter-spacing: .12em;
     direction: ltr;
-    text-align: right;
+    text-align: center;
 }
 .brand-edition { display: none; }
 
@@ -426,7 +429,7 @@ kbd {
 }
 .shell-loader > div:last-child { display: flex; flex-direction: column; }
 .shell-loader strong { color: var(--shell-text); font-size: 15px; }
-.shell-loader span { margin-top: 5px; font-size: 11px; }
+.shell-loader > div:last-child span { margin-top: 5px; font-size: 11px; }
 .loader-sigil { position: relative; width: 54px; height: 54px; }
 .loader-sigil span { position: absolute; inset: 0; margin: auto; border: 1px solid rgba(var(--shell-accent-rgb), .24); border-radius: 50%; animation: orbit-loader 1.8s linear infinite; }
 .loader-sigil span:nth-child(2) { inset: 10px; border-color: rgba(var(--shell-accent-rgb), .45); animation-direction: reverse; animation-duration: 1.2s; }

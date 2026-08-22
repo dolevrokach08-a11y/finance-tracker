@@ -6,14 +6,17 @@
     <meta name="theme-color" content="#08090c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="description" content="מרכז שליטה פיננסי אישי — תיק השקעות, תזרים, משכנתא ומס במקום אחד.">
-    <title>המעקב — מרכז השליטה הפיננסי</title>
+    <meta name="apple-mobile-web-app-title" content="ALLMON">
+    <meta name="description" content="ALLMON — מרכז שליטה פיננסי אישי לתיק השקעות, תזרים, משכנתא ומס.">
+    <title>ALLMON — מרכז השליטה הפיננסי</title>
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/brand.css">
     <link rel="stylesheet" href="app/shell.css">
     <link rel="stylesheet" href="app/modules/home/home.css">
     <script>
@@ -39,9 +42,12 @@
     <div class="app-shell">
         <aside class="shell-rail" aria-label="ניווט ראשי">
             <div class="rail-brand">
-                <span class="brand-mark" aria-hidden="true"><span>F</span></span>
-                <span class="brand-copy">
-                    <strong>המעקב</strong>
+                <span class="allmon-mark allmon-mark--md" aria-hidden="true">
+                    <img class="allmon-mark__core" src="icons/allmon-mark.png" alt="">
+                    <span class="allmon-mark__sonar"></span>
+                </span>
+                <span class="brand-copy allmon-wordmark">
+                    <strong>ALLMON</strong>
                     <small>FINANCIAL OS</small>
                 </span>
                 <span class="brand-edition">01</span>
@@ -128,7 +134,10 @@
 
             <section class="shell-workspace" id="app-outlet" tabindex="-1" aria-live="polite" aria-busy="true">
                 <div class="shell-loader" id="shellLoader" role="status">
-                    <div class="loader-sigil" aria-hidden="true"><span></span><span></span><span></span></div>
+                    <span class="allmon-mark allmon-mark--lg" aria-hidden="true">
+                        <img class="allmon-mark__core" src="icons/allmon-mark.png" alt="">
+                        <span class="allmon-mark__sonar"></span>
+                    </span>
                     <div>
                         <strong>מחבר את התמונה המלאה</strong>
                         <span>הנתונים שלך נאספים למרחב עבודה אחד</span>

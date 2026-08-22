@@ -3,26 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מעקב כספי חכם</title>
+    <title>ALLMON — תזרים מזומנים</title>
     
     <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#0f1419">
+    <meta name="theme-color" content="#08090c">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Finance">
+    <meta name="apple-mobile-web-app-title" content="ALLMON">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
     
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 
     <!-- Shared master tokens — single source of truth. Loaded BEFORE the inline :root
          below so finance's intentional overrides (e.g. smaller --radius-lg/xl) still win,
          while inheriting the full token set (named colors, shadow scale, transitions,
          easing, icon sizes) that shared-theme.css utilities rely on. -->
     <link rel="stylesheet" href="shared/theme.css">
+    <link rel="stylesheet" href="shared/brand.css">
 
     <style>
         /* CRITICAL - Load before everything */
@@ -895,11 +897,11 @@
         <div class="product-boot-grid" aria-hidden="true"></div>
         <div class="product-boot-frame" role="status" aria-live="polite">
             <header class="product-boot-header">
-                <div class="product-boot-brand"><span>F</span><div><strong>המעקב</strong><small>FINANCIAL OS</small></div></div>
+                <div class="product-boot-brand"><span class="allmon-mark allmon-mark--md" aria-hidden="true"><img class="allmon-mark__core" src="icons/allmon-mark.png" alt=""><span class="allmon-mark__sonar"></span></span><div><strong>ALLMON</strong><small>FINANCIAL OS</small></div></div>
                 <div class="product-boot-module"><span>MODULE 01</span><strong>CASHFLOW</strong></div>
             </header>
             <section class="product-boot-stage">
-                <div id="loadingSpinner" class="product-boot-orbit" aria-hidden="true"><i></i><i></i><i></i><b>01</b></div>
+                <div id="loadingSpinner" class="product-boot-orbit" aria-hidden="true"><i></i><i></i><i></i><span class="allmon-mark allmon-mark--lg"><img class="allmon-mark__core" src="icons/allmon-mark.png" alt=""><span class="allmon-mark__sonar"></span></span></div>
                 <div class="product-boot-copy">
                     <span>CASHFLOW / SYNC SEQUENCE</span>
                     <strong id="loadingText">מרכיב את תמונת התזרים</strong>

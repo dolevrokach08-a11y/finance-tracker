@@ -1,4 +1,4 @@
-// Service Worker for Finance Tracker PWA
+// Service Worker for ALLMON PWA
 //
 // Bump SHELL_CACHE on every deploy that ships changed HTML/JS — the activate
 // handler purges the old cache, guaranteeing the new shell replaces any stale
@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v41';
+const SHELL_CACHE = 'finance-tracker-v42';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -35,14 +35,18 @@ const PRECACHE = [
   'mortgage.html',
   'tax-optimizer.html',
   'shared/theme.css',
+  'shared/brand.css',
   'shared-theme.css',
   'shared/user-storage.js',
   'shared/data.js',
   'shared/load-script.js',
   'shared/nav.js',
   'manifest.json',
+  'icons/allmon-mark.png',
   'icons/icon-192.png',
-  'icons/icon-512.png'
+  'icons/icon-512.png',
+  'icons/icon-maskable-192.png',
+  'icons/icon-maskable-512.png'
 ].map(p => SCOPE + p);
 // portfolio.html (842KB) and finance.html (648KB) are deliberately NOT precached:
 // pulling 1.5MB of HTML during install competes for bandwidth with the page the

@@ -1,7 +1,7 @@
 {
-  "name": "המעקב — מרכז שליטה פיננסי",
-  "short_name": "המעקב",
-  "description": "תיק השקעות, תזרים, משכנתא ומס במרחב עבודה אחד",
+  "name": "ALLMON — מרכז שליטה פיננסי",
+  "short_name": "ALLMON",
+  "description": "כל הכסף במקום אחד — השקעות, תזרים, משכנתא ומס",
   "start_url": "/finance-tracker/app.html#/home",
   "scope": "/finance-tracker/",
   "display": "standalone",
@@ -13,13 +13,25 @@
       "src": "icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
