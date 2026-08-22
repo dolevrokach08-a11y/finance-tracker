@@ -1,0 +1,164 @@
+/* ALLMON shared identity ----------------------------------------------------
+   The production mark is intentionally split in two layers: the four-domain
+   core is a stable image, while the sonar orbit is CSS so it can move without
+   rotating the financial domains themselves. */
+
+:root {
+  --allmon-orbit: rgba(213, 255, 71, .78);
+  --allmon-orbit-soft: rgba(213, 255, 71, .13);
+  --allmon-wordmark: #f4f5ef;
+  --allmon-tagline: #8d949e;
+}
+
+[data-theme="light"] {
+  --allmon-orbit: rgba(88, 124, 7, .72);
+  --allmon-orbit-soft: rgba(111, 158, 0, .12);
+  --allmon-wordmark: #151912;
+  --allmon-tagline: #687064;
+}
+
+.allmon-brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  direction: ltr;
+}
+
+.allmon-mark {
+  --allmon-size: 46px;
+  position: relative;
+  isolation: isolate;
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: var(--allmon-size);
+  height: var(--allmon-size);
+  place-items: center;
+  direction: ltr;
+}
+
+.allmon-mark__core {
+  position: absolute;
+  z-index: 2;
+  inset: 8%;
+  display: block;
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+  pointer-events: none;
+  filter: saturate(1.03) drop-shadow(0 0 calc(var(--allmon-size) * .08) rgba(194, 255, 35, .16));
+  animation: allmon-energy 4.8s ease-in-out infinite;
+}
+
+.allmon-mark__sonar {
+  position: absolute;
+  z-index: 1;
+  inset: 1%;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: allmon-sonar-spin 11s linear infinite;
+}
+
+.allmon-mark__sonar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 28deg,
+    transparent 0 14deg,
+    color-mix(in srgb, var(--allmon-orbit) 24%, transparent) 22deg,
+    var(--allmon-orbit) 62deg,
+    color-mix(in srgb, var(--allmon-orbit) 58%, transparent) 126deg,
+    color-mix(in srgb, var(--allmon-orbit) 22%, transparent) 262deg,
+    transparent 292deg 360deg
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 1.35px), #000 calc(100% - 1.05px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 1.35px), #000 calc(100% - 1.05px));
+  filter: drop-shadow(0 0 4px var(--allmon-orbit-soft));
+}
+
+.allmon-mark__sonar::after {
+  content: "";
+  position: absolute;
+  top: 8.5%;
+  right: 17%;
+  width: max(3px, calc(var(--allmon-size) * .085));
+  aspect-ratio: 1;
+  border: 1px solid var(--allmon-orbit);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--allmon-wordmark) 0 28%, transparent 32%);
+  box-shadow: 0 0 0 2px var(--allmon-orbit-soft), 0 0 8px var(--allmon-orbit-soft);
+}
+
+.allmon-mark::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  width: max(2px, calc(var(--allmon-size) * .055));
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 0 0 0 var(--allmon-orbit-soft);
+  transform: translate(-50%, -50%);
+  animation: allmon-sensor-pulse 2.8s ease-out infinite;
+}
+
+.allmon-wordmark {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  color: var(--allmon-wordmark);
+  text-align: left;
+  line-height: 1;
+}
+
+.allmon-wordmark strong {
+  overflow: hidden;
+  font: 700 1rem/1 "Space Grotesk", "Heebo", sans-serif;
+  letter-spacing: .075em;
+  text-overflow: ellipsis;
+}
+
+.allmon-wordmark small {
+  color: var(--allmon-tagline);
+  font: 700 .46rem/1 "Space Grotesk", "Heebo", sans-serif;
+  letter-spacing: .18em;
+  white-space: nowrap;
+}
+
+.allmon-mark--xs { --allmon-size: 30px; }
+.allmon-mark--sm { --allmon-size: 38px; }
+.allmon-mark--md { --allmon-size: 48px; }
+.allmon-mark--lg { --allmon-size: 76px; }
+.allmon-mark--xl { --allmon-size: 132px; }
+
+.allmon-mark--static .allmon-mark__core,
+.allmon-mark--static .allmon-mark__sonar,
+.allmon-mark--static::after {
+  animation: none;
+}
+
+@keyframes allmon-sonar-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes allmon-energy {
+  0%, 100% { filter: saturate(1.02) brightness(1) drop-shadow(0 0 calc(var(--allmon-size) * .07) rgba(194, 255, 35, .14)); }
+  50% { filter: saturate(1.09) brightness(1.055) drop-shadow(0 0 calc(var(--allmon-size) * .11) rgba(194, 255, 35, .22)); }
+}
+
+@keyframes allmon-sensor-pulse {
+  0% { box-shadow: 0 0 0 0 var(--allmon-orbit-soft); opacity: 1; }
+  55%, 100% { box-shadow: 0 0 0 calc(var(--allmon-size) * .14) transparent; opacity: .78; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .allmon-mark__core,
+  .allmon-mark__sonar,
+  .allmon-mark::after {
+    animation: none !important;
+  }
+}
