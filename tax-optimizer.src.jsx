@@ -1206,6 +1206,25 @@ function App() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [payslipEarner]);
 
+  // The gross slider stands for a monthly average, so after any save it has to be
+  // recomputed from every payslip of that earner in that year: several employers in
+  // one month sum into that month, and the average is across months — not across
+  // payslips. Reading a single payslip's gross into the slider understated a month
+  // that has more than one.
+  const applyEarnerAverage = useCallback((earner, year) => {
+    const slips = (window.__payslipData?.payslips || []).filter(p =>
+      p.earner === earner && p.month && p.month.startsWith(year + '-') && p.gross
+    );
+    if (slips.length === 0) return;
+    const byMonth = {};
+    for (const p of slips) byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+    const monthTotals = Object.values(byMonth);
+    const avgGross = monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length;
+    const rounded = Math.round(avgGross / 250) * 250;
+    if (earner === 'father') setFM(rounded);
+    else if (earner === 'mother') setMM(rounded);
+  }, []);
+
   const confirmForm106Upload = useCallback(async () => {
     if (!pendingPayslip || !pendingPayslip._isForm106) return;
     const earner = pendingPayslip.earner || payslipEarner;
@@ -1239,25 +1258,13 @@ function App() {
       setPayslips([...window.__payslipData.payslips]);
       setPendingPayslip(null);
       setPayslipStatus(`טופס 106 נשמר — ${savedCount} חודשים`);
-      // Auto-update slider: calculate total average across ALL payslips for this earner+year
-      const allSlips = (window.__payslipData.payslips || []).filter(p =>
-        p.earner === earner && p.month && p.month.startsWith(year + '-') && p.gross
-      );
-      if (allSlips.length > 0) {
-        const byMonth = {};
-        for (const p of allSlips) byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
-        const monthTotals = Object.values(byMonth);
-        const avgGross = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
-        const rounded = Math.round(avgGross / 250) * 250;
-        if (earner === 'father') setFM(rounded);
-        else if (earner === 'mother') setMM(rounded);
-      }
+      applyEarnerAverage(earner, year);
       setTimeout(() => setPayslipStatus(''), 3000);
     } else {
       setPayslipStatus('שגיאה בשמירה');
       setTimeout(() => setPayslipStatus(''), 3000);
     }
-  }, [pendingPayslip, payslipEarner]);
+  }, [pendingPayslip, payslipEarner, applyEarnerAverage]);
 
   const confirmPayslipUpload = useCallback(async () => {
     if (!pendingPayslip) return;
@@ -1281,27 +1288,27 @@ function App() {
       deductions: pendingPayslip.deductions || {},
       earner: pendingPayslip.earner || payslipEarner || '',
       fileName: pendingPayslip.fileName,
+      // A hand-typed entry has no file behind it, so it must not replace an existing
+      // payslip for the same month — see the identity rule in __savePayslip.
+      ...(pendingPayslip._typedByHand ? { source: 'manual' } : {}),
       time: new Date().toISOString()
     };
 
     setPayslipStatus('שומר...');
     const ok = await window.__savePayslip(payslip);
     if (ok) {
-      setPayslips([...window.__payslipData.payslips]);
+      const saved = window.__payslipData.payslips;
+      const sameMonth = saved.filter(p => p.month === payslip.month && p.earner === payslip.earner);
+      setPayslips([...saved]);
       setPendingPayslip(null);
-      setPayslipStatus('נשמר בהצלחה');
-      // Auto-update gross slider from payslip data
-      if (payslip.gross) {
-        const rounded = Math.round(payslip.gross / 250) * 250;
-        if (payslip.earner === 'father') setFM(rounded);
-        else if (payslip.earner === 'mother') setMM(rounded);
-      }
-      setTimeout(() => setPayslipStatus(''), 2000);
+      setPayslipStatus(sameMonth.length > 1 ? `נשמר — ${sameMonth.length} תלושים לחודש ${monthKey}` : 'נשמר בהצלחה');
+      if (payslip.gross && payslip.earner) applyEarnerAverage(payslip.earner, monthKey.slice(0, 4));
+      setTimeout(() => setPayslipStatus(''), 2500);
     } else {
       setPayslipStatus('שגיאה בשמירה');
       setTimeout(() => setPayslipStatus(''), 3000);
     }
-  }, [pendingPayslip]);
+  }, [pendingPayslip, payslipEarner, applyEarnerAverage]);
 
   const handleDeletePayslip = useCallback(async (id) => {
     if (!confirm('למחוק את התלוש?')) return;
@@ -1562,7 +1569,7 @@ function App() {
                   העלה קובץ
                   <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" onChange={handlePayslipFile} style={{ display: "none" }} />
                 </label>
-                <button onClick={() => setPendingPayslip({ _manualEntry: true, fileName: 'הזנה ידנית', deductions: {} })} style={{
+                <button onClick={() => setPendingPayslip({ _manualEntry: true, _typedByHand: true, fileName: 'הזנה ידנית', deductions: {} })} style={{
                   padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
                   border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "hsl(215, 12%, 52%)"
                 }}>הזנה ידנית</button>
@@ -1742,10 +1749,15 @@ function App() {
               <div className="tax-payslip-history">
                 <div style={{ fontSize: 11, fontWeight: 600, color: "hsl(215, 12%, 52%)", marginBottom: 4 }}>תלושים ({payslips.length}):</div>
                 <div className="tax-payslip-list" style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 150, overflowY: "auto" }}>
-                  {payslips.sort((a,b) => (b.month||'').localeCompare(a.month||'')).map(p => (
+                  {[...payslips].sort((a,b) => (b.month||'').localeCompare(a.month||'') || (a.fileName||'').localeCompare(b.fileName||'')).map(p => (
                     <div className="tax-payslip-row" key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(0,0,0,0.15)", borderRadius: 6, padding: "4px 10px", fontSize: 11 }}>
-                      <span style={{ color: "hsl(215, 12%, 52%)" }}>
-                        {p.month} {p.earner === 'father' ? '👨' : p.earner === 'mother' ? '👩' : ''}
+                      {/* The file name is what tells two payslips of the same month apart
+                          (two employers), so it is part of the row, not a tooltip. */}
+                      <span style={{ color: "hsl(215, 12%, 52%)", display: "flex", flexDirection: "column", minWidth: 0 }}>
+                        <span>{p.month} {p.earner === 'father' ? '👨' : p.earner === 'mother' ? '👩' : ''}</span>
+                        {p.fileName && (
+                          <span title={p.fileName} style={{ fontSize: 9, opacity: 0.6, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.fileName}</span>
+                        )}
                       </span>
                       <span>
                         <span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>₪{p.gross?.toLocaleString() || '?'}</strong>

@@ -194,15 +194,20 @@ a { color: var(--accent); }
     const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
     if (!data.payslips) data.payslips = [];
 
-    // For form106: only replace entries with same month+earner+fileName (allows multiple employers)
-    // For regular payslips: replace entries with same month+earner (excluding form106 entries)
-    if (payslip.source === 'form106') {
+    // A payslip's identity is month + earner + source + fileName. Re-uploading the
+    // same file replaces its entry; a second employer's payslip for the same month
+    // is a different file, so it is kept alongside the first. (Until 2026-08-23 the
+    // key for regular payslips was month + earner alone, so every extra payslip in
+    // a month silently overwrote the previous one — and the yearly average, which
+    // sums per month, only ever saw one employer.)
+    // Hand-typed entries carry no real file name, so they never replace anything —
+    // each one is its own row and is removed with the delete button.
+    if (payslip.source !== 'manual') {
       data.payslips = data.payslips.filter(p =>
-        !(p.month === payslip.month && p.earner === payslip.earner && p.fileName === payslip.fileName)
-      );
-    } else {
-      data.payslips = data.payslips.filter(p =>
-        !(p.month === payslip.month && p.earner === payslip.earner && p.source !== 'form106')
+        !(p.month === payslip.month &&
+          p.earner === payslip.earner &&
+          (p.source || '') === (payslip.source || '') &&
+          p.fileName === payslip.fileName)
       );
     }
     data.payslips.push(payslip);
