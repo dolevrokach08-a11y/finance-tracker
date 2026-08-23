@@ -26,7 +26,12 @@ import presetReact from '@babel/preset-react';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
 
-const sha = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
+// Line endings belong to the checkout, not to the source. Git hands Windows
+// CRLF and Linux LF for the same commit, so hashing the raw bytes made the
+// freshness stamp disagree across machines: a build on either platform
+// re-stamped the output, and CI could never agree with a stamp written on
+// Windows. Normalising first makes the hash describe content, not platform.
+const sha = s => createHash('sha256').update(String(s).replace(/\r\n/g, '\n')).digest('hex').slice(0, 16);
 const read = p => readFileSync(join(ROOT, p), 'utf8');
 
 function header(sourceName, hash) {
