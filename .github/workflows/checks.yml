@@ -1,0 +1,79 @@
+# The repo already carries its own checks; until now nothing ran them except a
+# pre-commit hook that only exists in clones where someone remembered to run
+# `git config core.hooksPath tools/hooks`. It was not armed in a worktree
+# created during this project, and a stale generated file went unnoticed as a
+# result. main deploys straight to GitHub Pages, so a bad commit is live.
+name: checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The invariant step compares against the previous commit, which a
+          # depth-1 checkout does not have.
+          fetch-depth: 2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Only tools/ has dependencies (babel, for the tax bundle). The app itself
+      # has none — it ships as plain files.
+      - name: Install build tooling
+        run: npm --prefix tools ci
+
+      # The two committed build outputs must match their sources. They are
+      # committed because Pages deploys the repo as-is, which also means a stale
+      # one ships silently: the tax page runs old code, a missing Tailwind class
+      # just fails to style.
+      - name: Generated files are current
+        run: node tools/build-assets.mjs --check
+
+      # A Tailwind class with no rule produces a layout break, not an error, so
+      # nothing else catches it.
+      - name: Tailwind coverage
+        run: node tools/check-tailwind-coverage.mjs
+
+      - name: Demo isolation
+        run: node tests/demo-isolation.test.mjs
+
+      # Cheap guards for the mistakes this repo has actually made, rather than a
+      # general-purpose linter.
+      - name: Repo invariants
+        run: |
+          fail=0
+
+          # firebase-config.js is skip-worktree locally and carries dev-only
+          # guards there. The committed copy must stay free of them.
+          if grep -q 'ftLocalDev' firebase-config.js; then
+            echo "::error file=firebase-config.js::local dev guards must not be committed"
+            fail=1
+          fi
+
+          # tools/README.md marks these as local-run-only.
+          for f in vite.config.js package.json; do
+            if git diff --quiet HEAD~1 -- "$f" 2>/dev/null; then :; else
+              echo "::warning file=$f::local-only file changed — see tools/README.md"
+            fi
+          done
+
+          # The service worker purges caches by name, so a shell change that
+          # keeps the old name leaves users on stale code.
+          if git diff --name-only HEAD~1 2>/dev/null | grep -qE '^(app/|shared/)|\.html$'; then
+            if git diff --quiet HEAD~1 -- sw.js 2>/dev/null; then
+              echo "::warning file=sw.js::shell files changed but SHELL_CACHE was not bumped"
+            fi
+          fi
+
+          exit $fail
