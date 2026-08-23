@@ -78,6 +78,13 @@ git config core.hooksPath tools/hooks
 
 **לעולם לא `--no-verify`.**
 
+### סודות — לא בדפדפן
+
+מפתח Anthropic של העוזר יושב ב-Cloudflare Worker (`/api/ai/chat`), לא ב-`localStorage`.
+הדפדפן מזדהה עם ה-Firebase ID token שכבר יש לו. **אל תחזיר מפתח לקוד לקוח** —
+גם לא "רק לבדיקה". התחברות היא Google popup פתוח, ולכן טוקן תקין הוא לא אישור
+להוציא כסף: `AI_ALLOWED_UIDS` ב-Worker הוא השער.
+
 ### קבצים שהם הרצה מקומית בלבד
 
 `package.json` · `vite.config.js` · `package-lock.json` · `run-dev.cmd`
@@ -145,6 +152,7 @@ commits קטנים וקריאים. הודעת commit מסבירה **למה**, ל
 node tools/build-assets.mjs --check
 node tools/check-tailwind-coverage.mjs
 node tests/demo-isolation.test.mjs
+node tests/ai-endpoint.test.mjs
 ```
 
 ובדפדפן, במצב הדגמה, **בכל חמשת המסכים**:
@@ -193,6 +201,7 @@ node tools/build-assets.mjs         # לבנות מיוצרים
 node tools/build-assets.mjs --check # לוודא טריות
 node tools/check-tailwind-coverage.mjs
 node tests/demo-isolation.test.mjs
+node tests/ai-endpoint.test.mjs
 ```
 
 מצב הדגמה: `login.html` ← כפתור ההדגמה. נתונים פיקטיביים, מבודדים מהחשבון האמיתי,
