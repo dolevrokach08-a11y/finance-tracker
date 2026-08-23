@@ -48,6 +48,12 @@ jobs:
       - name: Demo isolation
         run: node tests/demo-isolation.test.mjs
 
+      # The AI endpoint spends money. Its gate is a Firebase signature check
+      # plus a uid allowlist, and both are verified here against a real RS256
+      # token minted in the test.
+      - name: AI endpoint gate
+        run: node tests/ai-endpoint.test.mjs
+
       # Cheap guards for the mistakes this repo has actually made, rather than a
       # general-purpose linter.
       - name: Repo invariants

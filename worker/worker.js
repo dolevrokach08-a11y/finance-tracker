@@ -208,6 +208,117 @@ async function handleTransactionsApi(request, env, url, CORS) {
   return json({ error: 'not found' }, 404);
 }
 
+// ── AI assistant proxy ─────────────────────────────────────────────────────
+// The assistant used to call api.anthropic.com straight from the page, reading
+// the Anthropic key out of localStorage and sending it as `x-api-key`. That put
+// a billable secret in the browser: any XSS, any extension with storage access,
+// any shared machine could walk off with it.
+//
+// The key lives here now as a Worker secret and never reaches the client. The
+// browser proves who it is with the Firebase ID token it already holds.
+//
+// Sign-in is a Google popup, open to anyone with a Google account, so a VALID
+// TOKEN IS NOT PERMISSION TO SPEND MONEY. AI_ALLOWED_UIDS is the real gate; with
+// it unset this route stays shut.
+const AI_MODELS = new Set([
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
+  'claude-opus-4-8'
+]);
+
+const AI_MAX_TOKENS = 4096;
+const AI_MAX_MESSAGES = 20;
+// The system prompt carries the whole portfolio and finance document, so this
+// has to be generous; it exists to stop someone pushing megabytes through.
+const AI_MAX_BODY_BYTES = 512 * 1024;
+
+// Best-effort throttle. Isolates are per-colo and short-lived, so this is a
+// speed bump against a runaway loop, not a billing guarantee — the guarantee is
+// the uid allowlist plus a spend limit set in the Anthropic console.
+const AI_RATE_LIMIT = { max: 40, windowMs: 60 * 60 * 1000 };
+const _aiCalls = new Map();
+
+function aiRateLimited(uid) {
+  const now = Date.now();
+  const hits = (_aiCalls.get(uid) || []).filter(t => now - t < AI_RATE_LIMIT.windowMs);
+  if (hits.length >= AI_RATE_LIMIT.max) { _aiCalls.set(uid, hits); return true; }
+  hits.push(now);
+  _aiCalls.set(uid, hits);
+  return false;
+}
+
+async function handleAiChat(request, env, origin, CORS) {
+  const json = (obj, status = 200) =>
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+  if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  // The global gate lets through requests with no Origin, because the price
+  // proxy and the scraper are server-to-server callers that never send one.
+  // This route has no such caller — it is only ever reached from a page — so a
+  // missing Origin here means something that is not our site, and this is the
+  // one route where a request costs money.
+  if (!isAllowedOrigin(origin)) return json({ error: 'origin required' }, 403);
+  // Distinct from 403 on purpose: the client falls back to its old local mode
+  // on 503, and only tells the user they lack access on 403.
+  if (!env.ANTHROPIC_API_KEY) return json({ error: 'ai_not_configured' }, 503);
+
+  const uid = await uidFromRequest(request, env);
+  if (!uid) return json({ error: 'unauthorized' }, 401);
+
+  const allowed = String(env.AI_ALLOWED_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!allowed.includes(uid)) return json({ error: 'ai_not_enabled_for_user' }, 403);
+
+  if (aiRateLimited(uid)) return json({ error: 'rate_limited' }, 429);
+
+  const raw = await request.text();
+  if (raw.length > AI_MAX_BODY_BYTES) return json({ error: 'payload too large' }, 413);
+  let body;
+  try { body = JSON.parse(raw); } catch { return json({ error: 'invalid json' }, 400); }
+
+  const model = AI_MODELS.has(body && body.model) ? body.model : 'claude-sonnet-4-6';
+  const messages = Array.isArray(body && body.messages) ? body.messages.slice(-AI_MAX_MESSAGES) : null;
+  if (!messages || !messages.length) return json({ error: 'missing messages' }, 400);
+  for (const m of messages) {
+    if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') {
+      return json({ error: 'bad message shape' }, 400);
+    }
+  }
+
+  // Only these fields are forwarded. Anything else the caller sends — tools, a
+  // different endpoint, extra headers — is dropped rather than proxied blind.
+  const upstream = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: Math.min(Number(body && body.max_tokens) || AI_MAX_TOKENS, AI_MAX_TOKENS),
+      ...(body && typeof body.system === 'string' && body.system ? { system: body.system } : {}),
+      messages
+    })
+  });
+
+  const data = await upstream.json().catch(() => null);
+  if (!upstream.ok) {
+    // Always 502 outwards: a bare 401 here would look like the user's own
+    // Firebase token expired, when it is the account's key that was rejected.
+    // The upstream status stays in the body for diagnosis.
+    return json({
+      error: (data && data.error && data.error.message) || 'upstream error',
+      upstreamStatus: upstream.status
+    }, 502);
+  }
+
+  const text = Array.isArray(data && data.content)
+    ? data.content.filter(b => b && b.type === 'text').map(b => b.text).join('')
+    : '';
+  return json({ text, model, usage: (data && data.usage) || null });
+}
+
 export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin');
@@ -229,6 +340,11 @@ export default {
     // ── Max transaction ingestion API (D1-backed) ───────────────────────────
     if (requestUrl.pathname.startsWith('/api/transactions/')) {
       return handleTransactionsApi(request, env, requestUrl, CORS_HEADERS);
+    }
+
+    // ── AI assistant (the Anthropic key lives in the Worker, not the page) ──
+    if (requestUrl.pathname === '/api/ai/chat') {
+      return handleAiChat(request, env, origin, CORS_HEADERS);
     }
 
     // Everything below is the read-only Yahoo / CPI proxy — GET only.

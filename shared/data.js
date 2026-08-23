@@ -28,6 +28,11 @@
         return WORKER_BASE + '/api/transactions';
     }
 
+    // The assistant's Anthropic key lives in the Worker, not in the page.
+    function aiApi() {
+        return WORKER_BASE + '/api/ai/chat';
+    }
+
     // ── Portfolio document schema ───────────────────────────────────────
     const DEFAULT_GROUPS = [
         { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
@@ -147,6 +152,7 @@
         WORKER_BASE,
         proxyUrl,
         pendingApi,
+        aiApi,
         DEFAULT_GROUPS,
         normalizePortfolio,
         canLoadLocal,

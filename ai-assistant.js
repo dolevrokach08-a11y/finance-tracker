@@ -40,10 +40,20 @@ class FinancialAIAssistant {
         this.container = null;
         this.settingsOpen = false;
         this.onAction = options.onAction || (() => {});
+        // 'worker' | 'key' | null-until-a-call-has-been-made.
+        this.transport = null;
+        this.hasAuth = false;
+        this._userPromise = null;
 
         this._injectStyles();
         this._createDOM();
         this._bindEvents();
+        // Cheap: firebase-config is already loaded on every non-demo page, and
+        // getIdToken serves a cached token until it expires.
+        this._authToken().then(token => {
+            this.hasAuth = !!token;
+            this._updateStatus();
+        });
     }
 
     // ---- Styles ----
@@ -444,7 +454,7 @@ class FinancialAIAssistant {
                 </div>
             </div>
             <div class="ai-settings-panel" id="aiSettingsPanel">
-                <label for="aiApiKeyInput">Claude API Key</label>
+                <label for="aiApiKeyInput">Claude API Key <span style="opacity:.7;font-weight:400">— לא נדרש יותר, המפתח יושב בשרת</span></label>
                 <input type="password" id="aiApiKeyInput" placeholder="sk-ant-api03-..." value="${maskedKey}" autocomplete="off">
                 <label for="aiModelSelect">מודל</label>
                 <select id="aiModelSelect">
@@ -571,9 +581,13 @@ class FinancialAIAssistant {
         try {
             // Re-read the key: user storage may have swapped accounts since construction
             this.apiKey = localStorage.getItem('ai_api_key') || null;
+            // The Worker holds the Anthropic key now, so being signed in is
+            // enough. A key still sitting in this browser is the old path, kept
+            // alive only until it is cleared from Settings.
+            const token = await this._authToken();
             let response;
-            if (this.apiKey) {
-                response = await this._callClaudeAPI(text);
+            if (token || this.apiKey) {
+                response = await this._callClaudeAPI(text, token);
             } else {
                 response = await this._localAnalysis(text);
             }
@@ -581,13 +595,20 @@ class FinancialAIAssistant {
             this._addMessage('assistant', response);
         } catch (err) {
             typingEl.remove();
-            this._addMessage('assistant', 'מצטער, אירעה שגיאה. נסה שוב.');
+            // Errors we raised ourselves already say something actionable;
+            // anything else is a surprise and gets the generic line.
+            this._addMessage('assistant', err && err.userFacing
+                ? err.message
+                : 'מצטער, אירעה שגיאה. נסה שוב.');
             console.error('AI Assistant error:', err);
         }
 
         this.isTyping = false;
         this.sendBtn.disabled = false;
-        this.statusEl.textContent = 'מוכן';
+        // This element doubles as the activity indicator, so restore the real
+        // connection state rather than a generic word — otherwise 'חושב...' is
+        // replaced by 'מוכן' and which transport answered is never visible.
+        this._updateStatus();
     }
 
     _addMessage(role, content) {
@@ -804,7 +825,7 @@ ${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v
     }
 
     // ---- Claude API Integration ----
-    async _callClaudeAPI(userMessage) {
+    async _callClaudeAPI(userMessage, token) {
         const financeData = this.getFinanceData();
         const portfolioData = this.getPortfolioData();
 
@@ -873,6 +894,126 @@ ${dataSection}
 - אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים
 - אם TWR מראה '—' — ציין למשתמש שעליו לפתוח את טאב "סיכום" פעם אחת כדי שה-TWR יחושב וייקושש`;
 
+        const payload = {
+            model: this.model,
+            max_tokens: 4096,
+            system: systemPrompt,
+            messages: [
+                ...this.messages.slice(-10).map(m => ({
+                    role: m.role,
+                    content: m.content
+                })),
+                { role: 'user', content: userMessage }
+            ]
+        };
+
+        if (token) {
+            const viaWorker = await this._viaWorker(payload, token);
+            // null means "this Worker has no key yet" — the only case worth
+            // falling through for. Every other answer is a real answer.
+            if (viaWorker !== null) return viaWorker;
+        }
+        return this._viaBrowserKey(payload);
+    }
+
+    // ---- Transport ----
+    //
+    // The key used to live in localStorage and leave the browser as
+    // `x-api-key`. Anything that could read storage on this origin — an
+    // injected script, an extension, a shared machine — could take it and spend
+    // it. It sits in the Cloudflare Worker now; the page proves who it is with
+    // the Firebase ID token it already holds for everything else.
+    //
+    // The old path stays as a fallback so the assistant keeps answering until
+    // the Worker secret is set. Clearing the key in Settings retires it.
+
+    /**
+     * The signed-in user. Auth state resolves asynchronously, and the assistant
+     * is usually constructed before it settles, so `auth.currentUser` is often
+     * still null at that moment — waiting once here is the difference between
+     * "signed in" and a header that claims local mode.
+     */
+    _resolveUser() {
+        if (this._userPromise) return this._userPromise;
+        this._userPromise = (async () => {
+            // Dynamic import: the demo path deliberately never loads Firebase.
+            const mod = await import('./firebase-config.js');
+            if (mod.auth && mod.auth.currentUser) return mod.auth.currentUser;
+            return new Promise(resolve => {
+                let settled = false;
+                let stop = null;
+                const finish = user => {
+                    if (settled) return;
+                    settled = true;
+                    if (typeof stop === 'function') stop();
+                    resolve(user || null);
+                };
+                // A ceiling, so a misconfigured Firebase cannot hang a send.
+                const timer = setTimeout(() => finish(null), 5000);
+                stop = mod.onAuthStateChanged(mod.auth, user => {
+                    clearTimeout(timer);
+                    finish(user);
+                });
+                // The callback can fire before `stop` is assigned above.
+                if (settled && typeof stop === 'function') stop();
+            });
+        })();
+        return this._userPromise;
+    }
+
+    /** Firebase ID token, or null when signed out / in demo mode. */
+    async _authToken() {
+        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('demoMode') === 'true') return null;
+        try {
+            const user = await this._resolveUser();
+            return user ? await user.getIdToken() : null;
+        } catch (err) {
+            console.warn('[ai] no auth token available', err);
+            return null;
+        }
+    }
+
+    /** @returns {Promise<string|null>} text, or null when the Worker has no key. */
+    async _viaWorker(payload, token) {
+        const endpoint = (window.FTData && window.FTData.aiApi)
+            ? window.FTData.aiApi()
+            : 'https://finance-proxy.dolevrokach08.workers.dev/api/ai/chat';
+
+        let response;
+        try {
+            response = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify(payload)
+            });
+        } catch (err) {
+            // Network-level failure. Fall through to whatever the browser has.
+            console.warn('[ai] worker unreachable', err);
+            return null;
+        }
+
+        if (response.ok) {
+            this.transport = 'worker';
+            this._updateStatus();
+            const data = await response.json();
+            return data.text || '';
+        }
+
+        if (response.status === 503) return null; // no ANTHROPIC_API_KEY set yet
+        const detail = await response.json().catch(() => ({}));
+        throw this._userError(
+            response.status === 403 ? 'החשבון הזה לא מורשה להשתמש בעוזר. צריך להוסיף את המזהה שלו ל-AI_ALLOWED_UIDS ב-Worker.' :
+            response.status === 429 ? 'יותר מדי בקשות לעוזר. נסה שוב בעוד כמה דקות.' :
+            response.status === 401 ? 'ההתחברות פגה. רענן את הדף והתחבר שוב.' :
+            `שגיאה מהשרת (${response.status}): ${String(detail.error || '').slice(0, 200)}`
+        );
+    }
+
+    /** The legacy path: a key still stored in this browser. */
+    async _viaBrowserKey(payload) {
+        if (!this.apiKey) {
+            throw this._userError('העוזר לא מחובר ל-Claude. צריך להגדיר ANTHROPIC_API_KEY ב-Worker.');
+        }
         const response = await fetch('https://api.anthropic.com/v1/messages', {
             method: 'POST',
             headers: {
@@ -881,18 +1022,7 @@ ${dataSection}
                 'anthropic-version': '2023-06-01',
                 'anthropic-dangerous-direct-browser-access': 'true'
             },
-            body: JSON.stringify({
-                model: this.model,
-                max_tokens: 4096,
-                system: systemPrompt,
-                messages: [
-                    ...this.messages.slice(-10).map(m => ({
-                        role: m.role,
-                        content: m.content
-                    })),
-                    { role: 'user', content: userMessage }
-                ]
-            })
+            body: JSON.stringify(payload)
         });
 
         if (!response.ok) {
@@ -900,8 +1030,16 @@ ${dataSection}
             throw new Error(`API Error ${response.status}: ${errText.slice(0, 200)}`);
         }
 
+        this.transport = 'key';
+        this._updateStatus();
         const data = await response.json();
         return data.content[0].text;
+    }
+
+    _userError(message) {
+        const err = new Error(message);
+        err.userFacing = true;
+        return err;
     }
 
     // ---- Local Analysis (No API Key) ----
@@ -1395,13 +1533,15 @@ ${dataSection}
 
     _updateStatus() {
         if (!this.statusEl) return;
-        if (this.apiKey) {
-            this.statusEl.className = 'ai-chat-status connected';
-            this.statusEl.textContent = 'Claude API מחובר';
-        } else {
-            this.statusEl.className = 'ai-chat-status local';
-            this.statusEl.textContent = 'מצב מקומי';
-        }
+        // 'worker' and 'key' are only known after a call has actually gone out;
+        // before that, a signed-in user or a stored key means we expect one to
+        // succeed. Saying "מצב מקומי" while signed in would be wrong.
+        const connected = this.transport === 'worker' || this.transport === 'key'
+            || this.hasAuth || !!this.apiKey;
+        this.statusEl.className = connected ? 'ai-chat-status connected' : 'ai-chat-status local';
+        this.statusEl.textContent =
+            this.transport === 'key' ? 'Claude API (מפתח בדפדפן)' :
+            connected ? 'Claude API מחובר' : 'מצב מקומי';
     }
 
     _modelDisplayName() {

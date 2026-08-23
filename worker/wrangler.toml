@@ -22,3 +22,16 @@ database_id = "7fb7ed1c-d602-4558-9687-8194914fa99a"
 # Optional: restrict to your domain only
 # [vars]
 # ALLOWED_ORIGIN = "https://your-username.github.io"
+
+# ── AI assistant proxy (/api/ai/chat) ────────────────────────────────────
+# The Anthropic key is a secret, NOT a var, and must never be committed:
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#
+# A Firebase token only proves *who* you are, and sign-in is an open Google
+# popup — so the token is not permission to spend. AI_ALLOWED_UIDS is the gate:
+# a comma-separated list of Firebase uids allowed to use the endpoint. With it
+# unset the route answers 403 to everyone.
+#   npx wrangler secret put AI_ALLOWED_UIDS
+#
+# Set a monthly spend limit in the Anthropic console too. It is the only cap
+# that holds if everything else here is wrong.
