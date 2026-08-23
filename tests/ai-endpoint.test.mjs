@@ -245,7 +245,31 @@ async function call(body, opts, env = ENV) {
     assert.equal(response.status, 403);
 }
 
-// ── 12. The throttle stops a runaway loop ───────────────────────────────────
+// ── 12. No Origin at all — a curl or a script, not our page ────────────────
+// The global gate allows these, because the price proxy and the scraper are
+// server-to-server callers. This route has no such caller.
+{
+    const token = await mintToken();
+    const response = await worker.fetch(new Request(ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(VALID_BODY),
+    }), ENV);
+    assert.equal(response.status, 403);
+
+    // …and the callers that legitimately have no Origin still get through the
+    // global gate. This one fails on its own auth (401), not on the origin,
+    // which is what proves the tightening stayed on the AI route.
+    const scraper = await worker.fetch(new Request(
+        'https://finance-proxy.example/api/transactions/pending', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer wrong-token' },
+            body: JSON.stringify({ transactions: [] }),
+        }), { ...ENV, DB: {}, INGESTION_TOKEN: 'right-token' });
+    assert.equal(scraper.status, 401, 'the scraper route must not start requiring an Origin');
+}
+
+// ── 13. The throttle stops a runaway loop ───────────────────────────────────
 // Last, because it burns the hourly budget for the uid it uses.
 {
     const uid = 'throttle-test-uid';
@@ -259,4 +283,4 @@ async function call(body, opts, env = ENV) {
     assert.ok(limited >= 5, `expected the throttle to bite, got ${limited} rejections`);
 }
 
-console.log('✓ ai endpoint: 12 checks passed');
+console.log('✓ ai endpoint: 13 checks passed');

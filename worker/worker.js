@@ -247,11 +247,18 @@ function aiRateLimited(uid) {
   return false;
 }
 
-async function handleAiChat(request, env, CORS) {
+async function handleAiChat(request, env, origin, CORS) {
   const json = (obj, status = 200) =>
     new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 
   if (request.method !== 'POST') return json({ error: 'method not allowed' }, 405);
+
+  // The global gate lets through requests with no Origin, because the price
+  // proxy and the scraper are server-to-server callers that never send one.
+  // This route has no such caller — it is only ever reached from a page — so a
+  // missing Origin here means something that is not our site, and this is the
+  // one route where a request costs money.
+  if (!isAllowedOrigin(origin)) return json({ error: 'origin required' }, 403);
   // Distinct from 403 on purpose: the client falls back to its old local mode
   // on 503, and only tells the user they lack access on 403.
   if (!env.ANTHROPIC_API_KEY) return json({ error: 'ai_not_configured' }, 503);
@@ -337,7 +344,7 @@ export default {
 
     // ── AI assistant (the Anthropic key lives in the Worker, not the page) ──
     if (requestUrl.pathname === '/api/ai/chat') {
-      return handleAiChat(request, env, CORS_HEADERS);
+      return handleAiChat(request, env, origin, CORS_HEADERS);
     }
 
     // Everything below is the read-only Yahoo / CPI proxy — GET only.
