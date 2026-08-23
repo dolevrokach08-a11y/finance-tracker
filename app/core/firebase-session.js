@@ -24,6 +24,16 @@ function readJSON(key, fallback = null) {
     }
 }
 
+// A cloud document carries the writer stamp alongside the account data. Only
+// the data belongs in localStorage — leaving the stamp in means the next save
+// pushes sync bookkeeping back up as if it were part of the portfolio.
+function cloudPayload(cloud) {
+    const copy = { ...(cloud || {}) };
+    const stampFields = (typeof globalThis !== 'undefined' && globalThis.FTDevice?.STAMP_FIELDS) || ['lastWriterId', 'lastWriterLabel'];
+    stampFields.forEach(field => { delete copy[field]; });
+    return copy;
+}
+
 function readLocalData(demo = false) {
     if (demo) {
         // Read the seeded sandbox first. The generators randomise several amounts
@@ -55,12 +65,24 @@ function withTimeout(promise, ms = 15000) {
     ]);
 }
 
+// The legacy pages stamp every cloud write with the writing browser's id, so
+// that conflict checks can ask "did a DIFFERENT device write this?" rather than
+// "did the timestamp move?" — the second question is also true for this
+// browser's own writes from a second tab or from tax-optimizer.html. This
+// module was asking the timestamp question and had no idea the stamp existed.
+function device() {
+    return typeof globalThis !== 'undefined' ? globalThis.FTDevice : null;
+}
+
 function canReplaceLocal(dataset, cloud) {
     const meta = readJSON(dataset.metaKey, null);
+    // Local edits that never reached the cloud always win; nothing below may
+    // overwrite them.
     if (meta?.hasUnsyncedChanges) return false;
+
     const cloudModified = cloud?.lastModified || null;
     if (cloudModified && meta?.localLastModified && cloudModified <= meta.localLastModified) return false;
-    if (!cloudModified && localStorage.getItem(dataset.localKey) === JSON.stringify(cloud)) return false;
+    if (!cloudModified && localStorage.getItem(dataset.localKey) === JSON.stringify(cloudPayload(cloud))) return false;
     return true;
 }
 
@@ -86,6 +108,7 @@ export async function createFirebaseSession(store) {
 
         let changed = false;
         let successfulReads = 0;
+        let foreignWrite = false;
         await Promise.all(DATASETS.map(async dataset => {
             try {
                 const reference = firebase.doc(firebase.db, 'users', currentUser.uid, dataset.collection, 'data');
@@ -94,7 +117,10 @@ export async function createFirebaseSession(store) {
                 if (!snapshot.exists()) return;
                 const cloud = snapshot.data();
                 if (!canReplaceLocal(dataset, cloud)) return;
-                localStorage.setItem(dataset.localKey, JSON.stringify(cloud));
+                // Unstamped docs predate the stamp; treat them as ours rather
+                // than raising a false alarm about a device that may not exist.
+                if (cloud?.lastWriterId && !device()?.wroteIt(cloud)) foreignWrite = true;
+                localStorage.setItem(dataset.localKey, JSON.stringify(cloudPayload(cloud)));
                 if (cloud.lastModified) {
                     localStorage.setItem(dataset.metaKey, JSON.stringify({
                         localLastModified: cloud.lastModified,
@@ -111,7 +137,14 @@ export async function createFirebaseSession(store) {
         const updatedAt = successfulReads ? Date.now() : store.getState().cloud?.updatedAt || null;
         store.setState({
             ...(changed ? { data: readLocalData(false) } : {}),
-            cloud: { status: successfulReads ? 'ready' : 'offline', updatedAt },
+            cloud: {
+                status: successfulReads ? 'ready' : 'offline',
+                updatedAt,
+                // Read-only screen, so there is nothing to reconcile — but the
+                // user should be able to tell that what changed under them came
+                // from somewhere else.
+                fromAnotherDevice: changed && foreignWrite,
+            },
         }, changed ? 'cloud:refreshed' : 'cloud:settled');
     }
 
