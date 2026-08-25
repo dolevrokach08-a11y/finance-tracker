@@ -902,7 +902,10 @@ tr:hover td{background:var(--bg-elevated);}
             </div>
             <div class="field">
               <div class="f-label">מחיר מכירה (₪)</div>
-              <input type="number" id="tax-shevach-sell" value="" placeholder="מחיר מכירה" oninput="updateTax()">
+              <!-- saveMortgage() is explicit here: this value lives in mortgageState,
+                   and it used to be persisted only as a side effect of the save that
+                   updateCurrentSummary() ran on the next render. -->
+              <input type="number" id="tax-shevach-sell" value="" placeholder="מחיר מכירה" oninput="updateTax();saveMortgage()">
             </div>
           </div>
         </div>
@@ -1756,7 +1759,8 @@ function editTranche(i, field, value) {
   }
   reproject();
   renderCurrentTranches();
-  updateCurrentSummary();   // already persists — see the saveMortgage() at its end
+  updateCurrentSummary();
+  saveMortgage();
 }
 window.editTranche = editTranche;
 
@@ -1832,6 +1836,7 @@ function addCurrentTranche() {
   reproject();
   renderCurrentTranches();
   updateCurrentSummary();
+  saveMortgage();
   showToast('מסלול חדש נוסף');
 }
 function removeCurrentTranche(id) {
@@ -1840,6 +1845,7 @@ function removeCurrentTranche(id) {
   reproject();
   renderCurrentTranches();
   updateCurrentSummary();
+  saveMortgage();
 }
 function resetToMyMortgage() {
   // BROKEN, and was before this change: MY_MORTGAGE is not defined anywhere in this
@@ -1954,8 +1960,15 @@ function updateCurrentSummary() {
   // Update affordability ratio
   updateAffordabilityRatio();
 
-  // Save everything (localStorage + Firebase + mortgageData for Net Worth)
-  saveMortgage();
+  // Refresh the net-worth mirror but do NOT save. This function is a render — it runs
+  // on page load and on every switch back to this tab — and it used to end in
+  // saveMortgage(), so merely opening the page wrote to the cloud and bumped
+  // lastModified. That is what made a second device report a phantom conflict against
+  // a doc this browser had itself just touched, and it is the same trap portfolio.html
+  // had removed from its init(). Persisting now belongs to the handlers that actually
+  // change something; writeNetWorthMirror() is localStorage only, so the home page
+  // still sees the rolled-forward balance without any cloud write.
+  writeNetWorthMirror();
 }
 
 
