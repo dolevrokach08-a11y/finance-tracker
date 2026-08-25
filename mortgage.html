@@ -1195,6 +1195,39 @@ function ymDiff(from, to) {
 // How far a rate reset pushes the next one out, by tranche type.
 const RESET_INTERVAL = { var5: 60, var1: 12 };
 
+// How many payments of `payment` it takes to clear `pv` — the inverse of pmt().
+// Infinity when the payment does not cover the monthly interest, because then the
+// balance never falls and there is no answer to report.
+function nper(rateAnnual, payment, pv) {
+  if (!(payment > 0) || !(pv > 0)) return 0;
+  const mr = rateAnnual / 12 / 100;
+  if (mr <= 0) return pv / payment;
+  if (payment <= pv * mr) return Infinity;
+  return -Math.log(1 - pv * mr / payment) / Math.log(1 + mr);
+}
+
+// The monthly payment of a Spitzer loan is a contract term fixed at origination, not
+// something to re-derive. Recomputing it from (balance, remaining months) reproduces
+// the real figure ONLY while those two sit exactly on the theoretical schedule — and
+// a loan that has ever had a payment deferred, rescheduled or rounded by the bank
+// never does. So when a tranche carries the payment as the bank states it, that
+// number wins, and the remaining term is derived from it instead (the opposite
+// direction from before). Tranches without it — the builder's, the refinance
+// what-ifs — fall back to the old computation and are unaffected.
+function livePayment(t) {
+  // The ||360 mirrors the guard the graph/cliff schedule loops already carried for
+  // tranches that reach them without a term.
+  return t && t.payment > 0 ? t.payment : pmt(t.rate, t.months || 360, t.principal);
+}
+
+// Remaining term implied by the stated payment. Only the anchor needs this; once
+// derived, the roll-forward just counts it down.
+function liveMonths(a) {
+  if (!(a.payment > 0)) return a.months;
+  const n = nper(a.rate, a.payment, a.principal);
+  return isFinite(n) ? Math.max(1, Math.ceil(n)) : a.months;
+}
+
 // Rolls one tranche from its anchor month to `toYM` along the Spitzer schedule the
 // loan is actually on: the payment is fixed for the period, so it is computed once
 // from the anchor and each month's interest is carved out of it — the same shape as
@@ -1206,14 +1239,18 @@ const RESET_INTERVAL = { var5: 60, var1: 12 };
 //   • _noAnchor   — no asOf, so there is nothing to roll forward from
 //   • the loan simply runs out of balance or months
 function projectTranche(a, toYM) {
-  const t = { ...a, _advanced: 0, _projectedTo: a.asOf };
+  // The term is derived from the stated payment when there is one, so a tranche whose
+  // balance sits off the theoretical schedule reports the term it will actually run
+  // rather than the bank's scheduled-payment counter.
+  const months0 = liveMonths(a);
+  const t = { ...a, months: months0, _advanced: 0, _projectedTo: a.asOf };
   if (!isValidYM(a.asOf)) { t._noAnchor = true; return t; }
   const want = ymDiff(a.asOf, toYM);
   if (want <= 0) return t;
 
-  const payment = pmt(a.rate, a.months, a.principal);
+  const payment = livePayment({ ...a, months: months0 });
   const mr = a.rate / 12 / 100;
-  let bal = a.principal, left = a.months, done = 0;
+  let bal = a.principal, left = months0, done = 0;
 
   while (done < want && left > 0 && bal > 0) {
     // The payment for a given month is made at that month's rate, so the roll stops
@@ -1311,7 +1348,7 @@ window.saveMortgage = saveMortgage;
 function writeNetWorthMirror() {
   try {
     const total = currentTranches.reduce((s,t)=>s+t.principal,0);
-    const monthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+    const monthly = currentTranches.reduce((s,t)=>s+livePayment(t),0);
     localStorage.setItem('mortgageData', JSON.stringify({
       propertyValue: parseFloat(mortgageState.propertyValue) || 0,
       loanAmount: total,
@@ -1748,7 +1785,10 @@ function editTranche(i, field, value) {
   // and then re-date it to the month being typed, rolling the same payments twice.
   if (field !== 'asOf' && field !== 'nextReset') foldProjection(i);
 
-  a[field] = value;
+  // Clearing the payment field hands the term back to the user rather than storing a
+  // zero that liveMonths() would have to keep stepping around.
+  if (field === 'payment' && !(value > 0)) delete a.payment;
+  else a[field] = value;
   // A balance or term typed by hand is this month's truth by definition.
   if (field === 'principal' || field === 'months') a.asOf = ymNow();
   // Entering the post-reset rate is the answer to a blocked roll-forward: the fold
@@ -1809,11 +1849,16 @@ function renderCurrentTranches() {
           <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
         </div>
         <div class="field" style="margin:0">
-          <div class="f-label">חודשים נותרים</div>
-          <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
+          <div class="f-label">החזר חודשי (₪)</div>
+          <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
+                 onchange="editTranche(${i},'payment',+this.value)">
         </div>
       </div>
       <div class="tranche-grid">
+        <div class="field" style="margin:0">
+          <div class="f-label">חודשים נותרים${a.payment > 0 ? ' <span style="font-weight:400;opacity:.6">מחושב</span>' : ''}</div>
+          <input type="number" value="${t.months}" ${a.payment > 0 ? 'disabled title="נגזר מההחזר החודשי — מחק אותו כדי להזין ידנית"' : `onchange="editTranche(${i},'months',+this.value)"`}>
+        </div>
         <div class="field" style="margin:0">
           <div class="f-label">נכון לחודש</div>
           <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">
@@ -1877,7 +1922,7 @@ function updateAffordabilityRatio() {
   localStorage.setItem('mortgage_monthly_income', income);
   const total = currentTranches.reduce((s, t) => s + t.principal, 0);
   if (!total) return;
-  const monthly = currentTranches.reduce((s, t) => s + pmt(t.rate, t.months, t.principal), 0);
+  const monthly = currentTranches.reduce((s, t) => s + livePayment(t), 0);
   const ratio = (monthly / income) * 100;
 
   ratioEl.textContent = ratio.toFixed(1) + '%';
@@ -1905,7 +1950,7 @@ function updateAffordabilityRatio() {
 function updateCurrentSummary() {
   const total = currentTranches.reduce((s,t)=>s+t.principal,0);
   if(!total) return;
-  const monthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+  const monthly = currentTranches.reduce((s,t)=>s+livePayment(t),0);
   const wavg = weightedRate(currentTranches);
   const totalInt = currentTranches.reduce((s,t)=>s+totalInterest(t.rate,t.months,t.principal),0);
 
@@ -1948,7 +1993,7 @@ function updateCurrentSummary() {
       if(balances[i]<=0) return;
       const mr=t.rate/12/100;
       const intPart=balances[i]*mr;
-      const mp=pmt(t.rate,t.months,t.principal);
+      const mp=livePayment(t);
       const prinPart=Math.min(mp-intPart, balances[i]);
       balances[i]=Math.max(0,balances[i]-prinPart);
       totPmt+=mp; totInt+=intPart; totPrin+=prinPart; totBal+=balances[i];
@@ -1983,7 +2028,7 @@ function updateEarlyRepay() {
   if(!currentTranches.length) return;
 
   const total = currentTranches.reduce((s,t)=>s+t.principal,0);
-  const currentMonthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+  const currentMonthly = currentTranches.reduce((s,t)=>s+livePayment(t),0);
   const currentTotalInterest = currentTranches.reduce((s,t)=>s+totalInterest(t.rate,t.months,t.principal),0);
 
   let newTranches = currentTranches.map(t=>({...t}));
@@ -2122,7 +2167,7 @@ function updateBuilder() {
   if(!builderTranches.length) return;
   const tranches = builderTranches.map(t=>({...t, principal: total*t.pct/100, months:t.months||months}));
   const totalPct = builderTranches.reduce((s,t)=>s+t.pct,0);
-  const monthly = tranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+  const monthly = tranches.reduce((s,t)=>s+livePayment(t),0);
   const wavg = weightedRate(tranches);
   const totalInt = tranches.reduce((s,t)=>s+totalInterest(t.rate,t.months,t.principal),0);
   const varPct = tranches.filter(t=>['prime','var5','var1'].includes(t.type)).reduce((s,t)=>s+t.pct,0);
@@ -2450,7 +2495,7 @@ function updateStress() {
   if(!currentTranches.length) return;
 
   const scenarios = [-1.0, -0.5, 0, +0.5, +1.0, +1.5, +2.0, +2.5, +3.0];
-  const currentMonthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
+  const currentMonthly = currentTranches.reduce((s,t)=>s+livePayment(t),0);
 
   let tableHTML = '<div class="stress-grid">';
   tableHTML += '<div class="stress-cell stress-header">שינוי ריבית</div>';
@@ -2688,7 +2733,7 @@ function updateGraph() {
         const rate=(['prime','var5','var1'].includes(t.type)?t.rate+rateChange:t.rate);
         const mr=Math.max(0,rate)/12/100;
         const intP=bals[i]*mr;
-        const pmtM=pmt(t.rate,t.months||360,t.principal);
+        const pmtM=livePayment(t);
         const prinP=Math.min(pmtM-intP, bals[i]);
         bals[i]=Math.max(0,bals[i]-prinP);
         totalPmt+=pmtM; totalInt+=intP;
@@ -2709,7 +2754,7 @@ function updateGraph() {
         const rate=(['prime','var5','var1'].includes(t.type)?t.rate+rateChange:t.rate);
         const mr=Math.max(0, rate)/12/100;
         const intP=bals[i]*mr;
-        const pmtM=pmt(t.rate,t.months||360,t.principal);
+        const pmtM=livePayment(t);
         const prinP=Math.min(pmtM-intP, bals[i]);
         bals[i]=Math.max(0,bals[i]-prinP);
         mp+=pmtM; mint+=intP;
@@ -2733,7 +2778,7 @@ function updateGraph() {
         const rate=(['prime','var5','var1'].includes(t.type)?t.rate+rateChange:t.rate);
         const mr=Math.max(0,rate)/12/100;
         const intP=bals[i]*mr;
-        const pmtM=pmt(t.rate,t.months||360,t.principal);
+        const pmtM=livePayment(t);
         const prinP = Math.min(pmtM-intP, bals[i]);
         bals[i]=Math.max(0,bals[i]-prinP);
         totBal+=bals[i]; mPmt+=pmtM; mInt+=intP;
@@ -2759,7 +2804,7 @@ function updateGraph() {
   for(let m=1;m<=Math.min(120,maxMonths);m++) tranches.forEach((t,i)=>{
     if(bals10[i]<=0) return;
     const mr=t.rate/12/100; const intP=bals10[i]*mr;
-    const prinP = Math.min(pmt(t.rate,t.months||360,t.principal)-intP, bals10[i]);
+    const prinP = Math.min(livePayment(t)-intP, bals10[i]);
     bals10[i]=Math.max(0,bals10[i]-prinP);
   });
   document.getElementById('g-10yr').textContent='₪'+fmtShort(bals10.reduce((s,b)=>s+b,0));
@@ -2773,7 +2818,7 @@ function updateGraph() {
     tranches.forEach((t,i)=>{
       if(balsM[i]<=0) return;
       const mr=t.rate/12/100; const intP=balsM[i]*mr;
-      const pmtM=pmt(t.rate,t.months||360,t.principal);
+      const pmtM=livePayment(t);
       const prinP = Math.min(pmtM-intP, balsM[i]);
       balsM[i]=Math.max(0,balsM[i]-prinP);
       totBal+=balsM[i];
