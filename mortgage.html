@@ -140,7 +140,7 @@ nav{
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .f-label{font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500;display:flex;justify-content:space-between;align-items:center;}
 .f-label .f-val{color:var(--accent);font-weight:700;font-size:12px;font-family:'Space Grotesk','Heebo',sans-serif;}
-input[type=number],input[type=text],select{
+input[type=number],input[type=text],input[type=month],select{
   width:100%;background:var(--bg-elevated);border:1px solid var(--border2);
   border-radius:var(--r);color:var(--text);font-family:'Heebo',sans-serif;
   font-size:13px;padding:9px 12px;outline:none;
@@ -166,6 +166,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 .tranche:hover{border-color:hsla(142,60%,50%,0.2);}
 .tranche-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
 .tranche-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.tranche-grid + .tranche-grid{margin-top:10px;}
+/* Says how current a tranche's figures are. An auto-advanced balance that looks
+   hand-entered is worse than one that admits what it is. */
+.proj-note{font-size:10px;color:var(--text2);margin-top:9px;line-height:1.5;}
+.proj-note.proj-warn{color:var(--amber,#f5a623);font-weight:600;}
 .t-num{
   width:22px;height:22px;border-radius:50%;background:var(--accent);
   color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;
@@ -1155,6 +1160,88 @@ const DEFAULT_TRANCHES = [
   {id:2, name:'קבועה לא צמודה', type:'fix', rate:5.60, principal:196485, months:340}
 ];
 
+// ═══════════════════════ TIME PROJECTION ═══════════════════════
+// A stored tranche is an ANCHOR, not a live figure: the balance read off a bank
+// statement plus `asOf`, the month it was true for. Today's numbers are derived
+// from it on every render and never written back.
+//
+// Deriving rather than materialising is deliberate. A monthly write on page load
+// would bump the cloud doc from whichever device happened to open the page, which
+// is exactly the phantom-conflict trap portfolio.html fell into when init() ended
+// in a save. It also means the balance the user typed from the bank is never
+// overwritten, and re-deriving is idempotent — no rounding accumulates, because
+// every render recomputes from the same anchor rather than from last month's
+// result.
+//
+// `pmt` is a hoisted function declaration further down, so it is callable here.
+const isValidYM = ym => typeof ym === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(ym);
+function ymNow() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function ymAdd(ym, n) {
+  const [y, m] = ym.split('-').map(Number);
+  const t = y * 12 + (m - 1) + n;
+  return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`;
+}
+function ymDiff(from, to) {
+  const [fy, fm] = from.split('-').map(Number), [ty, tm] = to.split('-').map(Number);
+  return (ty * 12 + tm) - (fy * 12 + fm);
+}
+
+// How far a rate reset pushes the next one out, by tranche type.
+const RESET_INTERVAL = { var5: 60, var1: 12 };
+
+// Rolls one tranche from its anchor month to `toYM` along the Spitzer schedule the
+// loan is actually on: the payment is fixed for the period, so it is computed once
+// from the anchor and each month's interest is carved out of it — the same shape as
+// calcSpitzer(), one month at a time.
+//
+// It stops early and says so rather than inventing a number:
+//   • _needsRate  — the next payment falls on or after a rate reset, and the
+//                   post-reset rate is not knowable from here
+//   • _noAnchor   — no asOf, so there is nothing to roll forward from
+//   • the loan simply runs out of balance or months
+function projectTranche(a, toYM) {
+  const t = { ...a, _advanced: 0, _projectedTo: a.asOf };
+  if (!isValidYM(a.asOf)) { t._noAnchor = true; return t; }
+  const want = ymDiff(a.asOf, toYM);
+  if (want <= 0) return t;
+
+  const payment = pmt(a.rate, a.months, a.principal);
+  const mr = a.rate / 12 / 100;
+  let bal = a.principal, left = a.months, done = 0;
+
+  while (done < want && left > 0 && bal > 0) {
+    // The payment for a given month is made at that month's rate, so the roll stops
+    // the moment the next payment would land on or after the reset month.
+    if (isValidYM(a.nextReset) && ymDiff(a.nextReset, ymAdd(a.asOf, done)) >= 0) { t._needsRate = true; break; }
+    const interest = bal * mr;
+    const principalPart = payment - interest;
+    // A payment that does not even cover the interest is not amortising anything;
+    // rolling it forward would quietly grow the balance instead of shrinking it.
+    if (principalPart <= 0) { t._notAmortising = true; break; }
+    bal = Math.max(0, bal - Math.min(principalPart, bal));
+    left--; done++;
+  }
+
+  t.principal = Math.round(bal);
+  t.months = left;
+  t._advanced = done;
+  t._projectedTo = ymAdd(a.asOf, done);
+  t._stale = done < want && bal > 0 && left > 0;
+  // An index-linked balance grows with the CPI, and there is no CPI feed in this
+  // app. The amortisation below is real, the indexation on top of it is missing —
+  // so the figure is understated and has to say so.
+  if (a.type === 'cpi' && done > 0) t._noIndexation = true;
+  return t;
+}
+
+function projectAll(anchors, toYM) {
+  const to = toYM || ymNow();
+  return anchors.map(a => projectTranche(a, to));
+}
+
 // Single state object — like portfolio/finance pattern
 let mortgageState = (function() {
   try {
@@ -1169,20 +1256,56 @@ let mortgageState = (function() {
   };
 })();
 
-let currentTranches = mortgageState.tranches;
+// anchorTranches is what the user typed and what gets persisted; currentTranches is
+// the same set rolled forward to this month, and is what every calculation on this
+// page reads. Keeping the derived array under the old name means the ~40 read sites
+// across the summary, graph, stress, cliff, refi and penalty pages keep working and
+// all now speak about today rather than about whenever the figures were last typed.
+let anchorTranches = mortgageState.tranches;
+let currentTranches = projectAll(anchorTranches);
 let builderTranches = [];
-let nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+let nextId = Math.max(10, ...anchorTranches.map(t=>t.id||0)) + 1;
 window.mortgageState = mortgageState;
 
+function reproject() { currentTranches = projectAll(anchorTranches); }
+
+// Folds the roll-forward back into the anchor, so the anchor describes the same
+// loan at a later month. Used before an edit: without it, typing a new balance
+// while `months` still held the anchor-month count would silently hand the loan
+// back the months it had already paid off.
+function foldProjection(i) {
+  const a = anchorTranches[i], p = currentTranches[i];
+  if (!a || !p || p._noAnchor || !p._advanced) return;
+  a.principal = p.principal;
+  a.months = p.months;
+  a.asOf = p._projectedTo;
+}
+
 function saveMortgage() {
-  // Collect all state from UI
-  mortgageState.tranches = currentTranches;
+  // Collect all state from UI. What persists is the anchor — the figures the user
+  // entered and the month they were true for — never the roll-forward, which is
+  // recomputed on load.
+  mortgageState.tranches = anchorTranches;
   mortgageState.propertyValue = document.getElementById('equity-property-val')?.value || '';
   mortgageState.taxPropertyValue = document.getElementById('tax-property-val')?.value || '';
   mortgageState.taxShevachSell = document.getElementById('tax-shevach-sell')?.value || '';
 
   try { localStorage.setItem('mortgageState', JSON.stringify(mortgageState)); } catch(e) {}
-  // Also sync mortgageData for Net Worth cross-system
+  writeNetWorthMirror();
+  // Save to Firebase
+  if (typeof window._saveToFirebase === 'function') {
+    window._saveToFirebase(mortgageState);
+  }
+  window.mortgageState = mortgageState;
+}
+window.saveMortgage = saveMortgage;
+
+// The mortgageData mirror the home page reads for net worth. Split out of
+// saveMortgage so it can also be refreshed on load: the roll-forward changes the
+// balance without anyone editing anything, and the home page would otherwise keep
+// showing the figure from the last time a tranche was touched. localStorage only —
+// the cloud write stays in saveMortgage, because opening a page must not write to it.
+function writeNetWorthMirror() {
   try {
     const total = currentTranches.reduce((s,t)=>s+t.principal,0);
     const monthly = currentTranches.reduce((s,t)=>s+pmt(t.rate,t.months,t.principal),0);
@@ -1197,20 +1320,17 @@ function saveMortgage() {
       lastUpdate: new Date().toISOString()
     }));
   } catch(e) {}
-  // Save to Firebase
-  if (typeof window._saveToFirebase === 'function') {
-    window._saveToFirebase(mortgageState);
-  }
-  window.mortgageState = mortgageState;
 }
-window.saveMortgage = saveMortgage;
 
 // Called by Firebase module when data loads from cloud
 window.loadFirebaseData = function(state) {
   if (!state || !state.tranches) return;
 
-  // Compare tranches content only (ignore lastModified etc.)
-  const localTranches = JSON.stringify(currentTranches);
+  // Compare tranches content only (ignore lastModified etc.). This has to compare
+  // ANCHORS: currentTranches is rolled forward to this month, so comparing it would
+  // differ from the stored copy on every visit after the first and reload the page
+  // from the cloud every time.
+  const localTranches = JSON.stringify(anchorTranches);
   const cloudTranches = JSON.stringify(state.tranches);
   const localProp = document.getElementById('equity-property-val')?.value || '';
   const cloudProp = state.propertyValue || '';
@@ -1221,8 +1341,9 @@ window.loadFirebaseData = function(state) {
   }
 
   mortgageState = state;
-  currentTranches = mortgageState.tranches;
-  nextId = Math.max(10, ...currentTranches.map(t=>t.id||0)) + 1;
+  anchorTranches = mortgageState.tranches;
+  reproject();
+  nextId = Math.max(10, ...anchorTranches.map(t=>t.id||0)) + 1;
 
   // Restore UI values
   const propEl = document.getElementById('equity-property-val');
@@ -1244,6 +1365,7 @@ window.loadFirebaseData = function(state) {
 
   // Update localStorage backup
   try { localStorage.setItem('mortgageState', JSON.stringify(mortgageState)); } catch(e) {}
+  writeNetWorthMirror();
 };
 
 // Sync both property value inputs + save
@@ -1608,14 +1730,65 @@ function renderCurrentPage() {
   updateEarlyRepay();
 }
 
+// Editing a tranche always folds the roll-forward into the anchor first, so the
+// anchor moves to the month it was rolled to instead of losing the payments made
+// since. A balance or term typed by hand then re-anchors to this month — typing
+// those means "this is the real figure, now", which is also how a user corrects
+// drift against a bank statement.
+function editTranche(i, field, value) {
+  const a = anchorTranches[i];
+  if (!a) return;
+  const wasBlocked = !!(currentTranches[i] && currentTranches[i]._needsRate);
+
+  // asOf and nextReset describe the anchor itself rather than the loan's figures,
+  // so they are set straight onto it. Folding first would move the balance to today
+  // and then re-date it to the month being typed, rolling the same payments twice.
+  if (field !== 'asOf' && field !== 'nextReset') foldProjection(i);
+
+  a[field] = value;
+  // A balance or term typed by hand is this month's truth by definition.
+  if (field === 'principal' || field === 'months') a.asOf = ymNow();
+  // Entering the post-reset rate is the answer to a blocked roll-forward: the fold
+  // above parked the anchor on the reset month, so pushing the reset out by one
+  // interval lets the roll continue from there at the new rate.
+  if (field === 'rate' && wasBlocked && isValidYM(a.nextReset)) {
+    a.nextReset = ymAdd(a.nextReset, RESET_INTERVAL[a.type] || 60);
+  }
+  reproject();
+  renderCurrentTranches();
+  updateCurrentSummary();   // already persists — see the saveMortgage() at its end
+}
+window.editTranche = editTranche;
+
+// One line per tranche saying how current its figures are — an auto-advanced
+// balance that looks hand-entered is worse than one that admits what it is.
+function projectionNote(t) {
+  if (t._noAnchor) return `<div class="proj-note proj-warn">⚠ אין תאריך עוגן — קבע "נכון לחודש" כדי שהיתרה תתעדכן לבד</div>`;
+  const bits = [];
+  if (t._advanced > 0) bits.push(`עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}`);
+  else bits.push(`נכון ל-${t.asOf}`);
+  if (t._noIndexation) bits.push('ללא הצמדה למדד');
+  const warn = t._needsRate
+    ? `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`
+    : t._notAmortising
+      ? `<div class="proj-note proj-warn">⚠ ההחזר אינו מכסה את הריבית — היתרה לא גולגלה</div>`
+      : t._stale
+        ? `<div class="proj-note proj-warn">⚠ הגלגול נעצר ב-${t._projectedTo}</div>`
+        : '';
+  return `<div class="proj-note">${bits.join(' · ')}</div>${warn}`;
+}
+
 function renderCurrentTranches() {
   const el = document.getElementById('current-tranches');
-  el.innerHTML = currentTranches.map((t,i) => `
+  el.innerHTML = currentTranches.map((t,i) => {
+    const a = anchorTranches[i] || {};
+    const isVar = t.type === 'var5' || t.type === 'var1';
+    return `
     <div class="tranche">
       <div class="tranche-head">
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="t-num">${i+1}</div>
-          <select onchange="currentTranches[${i}].type=this.value;renderCurrentTranches();updateCurrentSummary()" style="width:130px">
+          <select onchange="editTranche(${i},'type',this.value)" style="width:130px">
             ${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}
           </select>
           <span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span>
@@ -1625,33 +1798,53 @@ function renderCurrentTranches() {
       <div class="tranche-grid">
         <div class="field" style="margin:0">
           <div class="f-label">יתרת קרן (₪)</div>
-          <input type="number" value="${t.principal}" onchange="currentTranches[${i}].principal=+this.value;updateCurrentSummary()">
+          <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
         </div>
         <div class="field" style="margin:0">
           <div class="f-label">ריבית %</div>
-          <input type="number" step="0.01" value="${t.rate}" onchange="currentTranches[${i}].rate=+this.value;updateCurrentSummary()">
+          <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
         </div>
         <div class="field" style="margin:0">
           <div class="f-label">חודשים נותרים</div>
-          <input type="number" value="${t.months}" onchange="currentTranches[${i}].months=+this.value;updateCurrentSummary()">
+          <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
         </div>
       </div>
-    </div>`).join('');
+      <div class="tranche-grid">
+        <div class="field" style="margin:0">
+          <div class="f-label">נכון לחודש</div>
+          <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">
+        </div>
+        ${isVar ? `
+        <div class="field" style="margin:0">
+          <div class="f-label">עדכון ריבית הבא</div>
+          <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
+        </div>` : ''}
+      </div>
+      ${projectionNote(t)}
+    </div>`;
+  }).join('');
 }
 
 function addCurrentTranche() {
-  currentTranches.push({id:nextId++,name:'מסלול חדש',type:'fix',rate:5.0,principal:100000,months:240});
+  // Anchored to this month: figures typed now are true now, so the roll-forward
+  // starts from zero elapsed months rather than from an unknown past.
+  anchorTranches.push({id:nextId++,name:'מסלול חדש',type:'fix',rate:5.0,principal:100000,months:240,asOf:ymNow()});
+  reproject();
   renderCurrentTranches();
   updateCurrentSummary();
   showToast('מסלול חדש נוסף');
 }
 function removeCurrentTranche(id) {
-  if(currentTranches.length<=1) { showToast('חייב להישאר לפחות מסלול אחד'); return; }
-  currentTranches = currentTranches.filter(t=>t.id!==id);
+  if(anchorTranches.length<=1) { showToast('חייב להישאר לפחות מסלול אחד'); return; }
+  anchorTranches = anchorTranches.filter(t=>t.id!==id);
+  reproject();
   renderCurrentTranches();
   updateCurrentSummary();
 }
 function resetToMyMortgage() {
+  // BROKEN, and was before this change: MY_MORTGAGE is not defined anywhere in this
+  // file, so the "איפוס" button throws a ReferenceError here and does nothing.
+  // Reported rather than fixed — what it should reset to is a question for the owner.
   currentTranches = JSON.parse(JSON.stringify(MY_MORTGAGE));
   renderCurrentTranches();
   updateCurrentSummary();
