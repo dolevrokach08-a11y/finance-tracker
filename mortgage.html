@@ -170,6 +170,9 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 /* Says how current a tranche's figures are. An auto-advanced balance that looks
    hand-entered is worse than one that admits what it is. */
 .proj-note{font-size:10px;color:var(--text2);margin-top:9px;line-height:1.5;}
+/* Section caption inside a tranche — separates the signed terms from today's state. */
+.tranche-sub{font-size:10px;font-weight:600;color:var(--text2);opacity:.75;margin:12px 0 6px;}
+.tranche-grid + .tranche-sub{margin-top:14px;}
 .proj-note.proj-warn{color:var(--amber,#f5a623);font-weight:600;}
 .t-num{
   width:22px;height:22px;border-radius:50%;background:var(--accent);
@@ -1214,18 +1217,49 @@ function nper(rateAnnual, payment, pv) {
 // number wins, and the remaining term is derived from it instead (the opposite
 // direction from before). Tranches without it — the builder's, the refinance
 // what-ifs — fall back to the old computation and are unaffected.
+// The origination terms — amount borrowed, original term, and the month of the first
+// payment — are the only description of a loan that never goes stale. Given them the
+// payment follows exactly and forever, which is why they are preferred over every
+// other source here: pmt(5.55%, 360, 399,000) reproduces this mortgage's stated
+// 2,278.01 to the agora, and will still reproduce it in ten years with nothing typed
+// in between. A payment entered by hand is the next best thing, and recomputing from
+// the current balance is the last resort it always was.
+function hasOrigin(t) {
+  return t && t.origPrincipal > 0 && t.origMonths > 0 && isValidYM(t.startYM);
+}
 function livePayment(t) {
+  if (hasOrigin(t)) return pmt(t.rate, t.origMonths, t.origPrincipal);
   // The ||360 mirrors the guard the graph/cliff schedule loops already carried for
   // tranches that reach them without a term.
   return t && t.payment > 0 ? t.payment : pmt(t.rate, t.months || 360, t.principal);
 }
 
-// Remaining term implied by the stated payment. Only the anchor needs this; once
-// derived, the roll-forward just counts it down.
+// Remaining term implied by the payment. Only the anchor needs this; once derived,
+// the roll-forward just counts it down.
 function liveMonths(a) {
-  if (!(a.payment > 0)) return a.months;
-  const n = nper(a.rate, a.payment, a.principal);
+  const pay = livePayment(a);
+  if (!(pay > 0) || !(a.principal > 0)) return a.months;
+  if (!hasOrigin(a) && !(a.payment > 0)) return a.months;
+  const n = nper(a.rate, pay, a.principal);
   return isFinite(n) ? Math.max(1, Math.ceil(n)) : a.months;
+}
+
+// Which point in the loan's life the roll starts from.
+//
+// Origination is the default, and it needs nothing kept up to date: the first-payment
+// month plus today's date say how many payments have been made, and the schedule says
+// what that leaves. But a schedule is a model, and a real loan drifts off it — this
+// mortgage sits ~1,334 above where 25 clean payments would put it, because of how it
+// was actually drawn and serviced. So a balance copied off a statement, when there is
+// one, wins over the model for the months after it: it is measured rather than
+// predicted. The payment still comes from origination either way.
+function effectiveAnchor(a) {
+  const origin = hasOrigin(a)
+    ? { ...a, principal: a.origPrincipal, months: a.origMonths, asOf: a.startYM, _fromOrigin: true }
+    : null;
+  const pinned = a.principal > 0 && isValidYM(a.asOf) ? { ...a, _fromOrigin: false } : null;
+  if (origin && pinned) return ymDiff(origin.asOf, pinned.asOf) > 0 ? pinned : origin;
+  return pinned || origin || a;
 }
 
 // Rolls one tranche from its anchor month to `toYM` along the Spitzer schedule the
@@ -1238,45 +1272,75 @@ function liveMonths(a) {
 //                   post-reset rate is not knowable from here
 //   • _noAnchor   — no asOf, so there is nothing to roll forward from
 //   • the loan simply runs out of balance or months
-function projectTranche(a, toYM) {
-  // The term is derived from the stated payment when there is one, so a tranche whose
-  // balance sits off the theoretical schedule reports the term it will actually run
-  // rather than the bank's scheduled-payment counter.
+function projectTranche(input, toYM) {
+  const a = effectiveAnchor(input);
+  // The term is derived from the payment, so a tranche whose balance sits off the
+  // theoretical schedule reports the term it will actually run rather than the bank's
+  // scheduled-payment counter.
   const months0 = liveMonths(a);
-  const t = { ...a, months: months0, _advanced: 0, _projectedTo: a.asOf };
-  if (!isValidYM(a.asOf)) { t._noAnchor = true; return t; }
-  const want = ymDiff(a.asOf, toYM);
-  if (want <= 0) return t;
+  const t = { ...a, months: months0, _advanced: 0, _projectedTo: a.asOf, _anchorMonth: a.asOf };
 
-  const payment = livePayment({ ...a, months: months0 });
-  const mr = a.rate / 12 / 100;
-  let bal = a.principal, left = months0, done = 0;
-
-  while (done < want && left > 0 && bal > 0) {
-    // The payment for a given month is made at that month's rate, so the roll stops
-    // the moment the next payment would land on or after the reset month.
-    if (isValidYM(a.nextReset) && ymDiff(a.nextReset, ymAdd(a.asOf, done)) >= 0) { t._needsRate = true; break; }
-    const interest = bal * mr;
-    const principalPart = payment - interest;
-    // A payment that does not even cover the interest is not amortising anything;
-    // rolling it forward would quietly grow the balance instead of shrinking it.
-    if (principalPart <= 0) { t._notAmortising = true; break; }
-    bal = Math.max(0, bal - Math.min(principalPart, bal));
-    left--; done++;
+  if (!isValidYM(a.asOf)) {
+    t._noAnchor = true;
+    return withOriginSummary(t, input, toYM);
   }
 
-  t.principal = Math.round(bal);
-  t.months = left;
-  t._advanced = done;
-  t._projectedTo = ymAdd(a.asOf, done);
-  t._stale = done < want && bal > 0 && left > 0;
-  // An index-linked balance grows with the CPI, and there is no CPI feed in this
-  // app. The amortisation below is real, the indexation on top of it is missing —
-  // so the figure is understated and has to say so.
-  if (a.type === 'cpi' && done > 0) t._noIndexation = true;
-  return t;
+  const want = ymDiff(a.asOf, toYM);
+  if (want > 0) {
+    const payment = livePayment(a);
+    const mr = a.rate / 12 / 100;
+    let bal = a.principal, left = months0, done = 0;
+
+    while (done < want && left > 0 && bal > 0) {
+      // The payment for a given month is made at that month's rate, so the roll stops
+      // the moment the next payment would land on or after the reset month.
+      if (isValidYM(a.nextReset) && ymDiff(a.nextReset, ymAdd(a.asOf, done)) >= 0) { t._needsRate = true; break; }
+      const interest = bal * mr;
+      const principalPart = payment - interest;
+      // A payment that does not even cover the interest is not amortising anything;
+      // rolling it forward would quietly grow the balance instead of shrinking it.
+      if (principalPart <= 0) { t._notAmortising = true; break; }
+      bal = Math.max(0, bal - Math.min(principalPart, bal));
+      left--; done++;
+    }
+
+    t.principal = Math.round(bal);
+    t.months = left;
+    t._advanced = done;
+    t._projectedTo = ymAdd(a.asOf, done);
+    t._stale = done < want && bal > 0 && left > 0;
+    // An index-linked balance grows with the CPI, and there is no CPI feed in this
+    // app. The amortisation below is real, the indexation on top of it is missing —
+    // so the figure is understated and has to say so.
+    if (a.type === 'cpi' && done > 0) t._noIndexation = true;
+  }
+
+  return withOriginSummary(t, input, toYM);
 }
 
+// How far through the loan you are, counted from the first payment rather than from
+// whenever the figures were last touched — the question the origination terms exist to
+// answer. Applied on every exit from projectTranche, including the ones that do no
+// rolling at all: pinning this month's statement balance is the commonest case there
+// is, and it must not be the case that reports no progress.
+function withOriginSummary(t, input, toYM) {
+  if (!hasOrigin(input)) return t;
+  const payment = livePayment(input);
+  const paid = Math.max(0, Math.min(input.origMonths, ymDiff(input.startYM, toYM)));
+  t._paidCount = paid;
+  t._origMonths = input.origMonths;
+  t._paidSoFar = Math.round(paid * payment);
+  t._leftToPay = Math.round((t.months || 0) * payment);
+  // With a statement balance pinned as well, the two disagree by however far the real
+  // loan has drifted from its schedule. That gap is worth showing rather than hiding:
+  // it is the part the model cannot know.
+  if (!t._fromOrigin) {
+    const modelled = projectTranche(
+      { ...input, principal: undefined, asOf: undefined, payment: undefined }, toYM);
+    if (!modelled._noAnchor) t._origGap = Math.round(t.principal - modelled.principal);
+  }
+  return t;
+}
 function projectAll(anchors, toYM) {
   const to = toYM || ymNow();
   return anchors.map(a => projectTranche(a, to));
@@ -1316,6 +1380,10 @@ function reproject() { currentTranches = projectAll(anchorTranches); }
 function foldProjection(i) {
   const a = anchorTranches[i], p = currentTranches[i];
   if (!a || !p || p._noAnchor || !p._advanced) return;
+  // Never fold an origination-driven tranche. Its whole point is that nothing is
+  // stored between the signing terms and today; writing this month's modelled
+  // balance into it would turn a derivation back into a snapshot that ages.
+  if (hasOrigin(a)) return;
   a.principal = p.principal;
   a.months = p.months;
   a.asOf = p._projectedTo;
@@ -1783,11 +1851,13 @@ function editTranche(i, field, value) {
   // asOf and nextReset describe the anchor itself rather than the loan's figures,
   // so they are set straight onto it. Folding first would move the balance to today
   // and then re-date it to the month being typed, rolling the same payments twice.
-  if (field !== 'asOf' && field !== 'nextReset') foldProjection(i);
+  const ANCHOR_META = ['asOf','nextReset','startYM','origPrincipal','origMonths'];
+  if (!ANCHOR_META.includes(field)) foldProjection(i);
 
   // Clearing the payment field hands the term back to the user rather than storing a
   // zero that liveMonths() would have to keep stepping around.
-  if (field === 'payment' && !(value > 0)) delete a.payment;
+  if (!(value > 0) && ['payment','origPrincipal','origMonths'].includes(field)) delete a[field];
+  else if (field === 'startYM' && !isValidYM(value)) delete a.startYM;
   else a[field] = value;
   // A balance or term typed by hand is this month's truth by definition.
   if (field === 'principal' || field === 'months') a.asOf = ymNow();
@@ -1821,9 +1891,15 @@ function projectionNote(t) {
   if (t._advanced > 0) bits.push(`עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}`);
   else bits.push(`נכון ל-${t.asOf}`);
   if (t._noIndexation) bits.push('ללא הצמדה למדד');
-  if (t.payment > 0) bits.push('החזר מהבנק');
+  if (t._origMonths) bits.push(`שולמו ${t._paidCount} מתוך ${t._origMonths} · נותרו ${t.months}`);
+  if (t._origMonths) bits.push(`שולם עד היום ₪${fmtShort(t._paidSoFar)} · נותר ₪${fmtShort(t._leftToPay)}`);
+  if (t._origMonths) bits.push('החזר מתנאי ההלוואה');
+  else if (t.payment > 0) bits.push('החזר מהבנק');
   else if (t._paymentStale) bits.push('החזר מחושב מחדש אחרי עדכון הריבית');
   else bits.push('החזר מחושב');
+  if (typeof t._origGap === 'number' && Math.abs(t._origGap) >= 1) {
+    bits.push(`יתרה מהבנק, ${t._origGap > 0 ? 'גבוהה' : 'נמוכה'} ב-₪${fmtShort(Math.abs(t._origGap))} מהלוח`);
+  }
   const warn = t._needsRate
     ? `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`
     : t._paymentStale
@@ -1841,6 +1917,15 @@ function renderCurrentTranches() {
   el.innerHTML = currentTranches.map((t,i) => {
     const a = anchorTranches[i] || {};
     const isVar = t.type === 'var5' || t.type === 'var1';
+    const origin = hasOrigin(a);
+    // With origination on file every live figure is derived, so the inputs describe
+    // the loan as it was signed and the outputs are read-only. Without it the card
+    // stays exactly as it was, so existing tranches are untouched.
+    const derived = (label, value, title) =>
+      `<div class="field" style="margin:0">
+         <div class="f-label">${label} <span style="font-weight:400;opacity:.6">מחושב</span></div>
+         <input type="number" value="${value}" disabled title="${title}">
+       </div>`;
     return `
     <div class="tranche">
       <div class="tranche-head">
@@ -1853,41 +1938,76 @@ function renderCurrentTranches() {
         </div>
         <button class="btn btn-danger btn-sm" onclick="removeCurrentTranche(${t.id})">✕</button>
       </div>
+
+      <div class="tranche-sub">פרטי ההלוואה המקורית — נרשמים פעם אחת</div>
       <div class="tranche-grid">
         <div class="field" style="margin:0">
-          <div class="f-label">יתרת קרן (₪)</div>
-          <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
+          <div class="f-label">סכום ההלוואה (₪)</div>
+          <input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000"
+                 onchange="editTranche(${i},'origPrincipal',+this.value)">
         </div>
+        <div class="field" style="margin:0">
+          <div class="f-label">תקופה מקורית (חודשים)</div>
+          <input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360"
+                 onchange="editTranche(${i},'origMonths',+this.value)">
+        </div>
+        <div class="field" style="margin:0">
+          <div class="f-label">חודש התשלום הראשון</div>
+          <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
+        </div>
+      </div>
+
+      <div class="tranche-grid">
         <div class="field" style="margin:0">
           <div class="f-label">ריבית %</div>
           <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
         </div>
-        <div class="field" style="margin:0">
-          <div class="f-label">החזר חודשי (₪)</div>
-          <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
-                 onchange="editTranche(${i},'payment',+this.value)">
-        </div>
-      </div>
-      <div class="tranche-grid">
-        <div class="field" style="margin:0">
-          <div class="f-label">חודשים נותרים${a.payment > 0 ? ' <span style="font-weight:400;opacity:.6">מחושב</span>' : ''}</div>
-          <input type="number" value="${t.months}" ${a.payment > 0 ? 'disabled title="נגזר מההחזר החודשי — מחק אותו כדי להזין ידנית"' : `onchange="editTranche(${i},'months',+this.value)"`}>
-        </div>
-        <div class="field" style="margin:0">
-          <div class="f-label">נכון לחודש</div>
-          <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">
-        </div>
+        ${origin
+          ? derived('החזר חודשי (₪)', livePayment(a).toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית')
+          : `<div class="field" style="margin:0">
+               <div class="f-label">החזר חודשי (₪)</div>
+               <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
+                      onchange="editTranche(${i},'payment',+this.value)">
+             </div>`}
         ${isVar ? `
         <div class="field" style="margin:0">
           <div class="f-label">עדכון ריבית הבא</div>
           <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
         </div>` : ''}
       </div>
+
+      <div class="tranche-sub">מצב היום${origin ? '' : ' — יתרה נכון לחודש שתציין'}</div>
+      <div class="tranche-grid">
+        ${origin
+          ? derived('יתרת קרן (₪)', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
+          : `<div class="field" style="margin:0">
+               <div class="f-label">יתרת קרן (₪)</div>
+               <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
+             </div>`}
+        ${origin || a.payment > 0
+          ? derived('חודשים נותרים', t.months, 'נגזר מההחזר ומהיתרה')
+          : `<div class="field" style="margin:0">
+               <div class="f-label">חודשים נותרים</div>
+               <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
+             </div>`}
+        <div class="field" style="margin:0">
+          <div class="f-label">${origin ? 'יתרה מדף הבנק — לא חובה' : 'נכון לחודש'}</div>
+          <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)"
+                 title="${origin ? 'ציין חודש והזן יתרה מדויקת מהבנק כדי לעקוף את הלוח' : ''}">
+        </div>
+      </div>
+      ${origin && isValidYM(a.asOf) ? `
+      <div class="tranche-grid">
+        <div class="field" style="margin:0">
+          <div class="f-label">יתרה בפועל בחודש הזה (₪)</div>
+          <input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק"
+                 onchange="editTranche(${i},'principal',+this.value)">
+        </div>
+      </div>` : ''}
       ${projectionNote(t)}
     </div>`;
   }).join('');
 }
-
 function addCurrentTranche() {
   // Anchored to this month: figures typed now are true now, so the roll-forward
   // starts from zero elapsed months rather than from an unknown past.
