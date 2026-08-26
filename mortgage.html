@@ -188,6 +188,21 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 /* Section caption inside a tranche — separates the signed terms from today's state. */
 .tranche-sub{font-size:10px;font-weight:600;color:var(--text2);opacity:.75;margin:12px 0 6px;}
 .tranche-grid + .tranche-sub{margin-top:14px;}
+/* A collapsed tranche is one compact readout row; the form lives behind it.
+   Scoped to #current-tranches: the builder, methods and penalty pages reuse
+   .tranche/.tranche-head for cards that are not collapsible, and must not pick up
+   a pointer cursor for a click that does nothing. */
+#current-tranches .tranche-head{cursor:pointer;user-select:none;gap:10px;margin-bottom:0;}
+#current-tranches .tranche.is-open .tranche-head{margin-bottom:4px;}
+#current-tranches .t-sum{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;padding-inline-start:30px;}
+#current-tranches .t-sum__main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+#current-tranches .t-sum__rate{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;}
+#current-tranches .t-sum__bal{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;margin-inline-start:auto;}
+#current-tranches .t-sum__meta{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+#current-tranches .t-sum .t-num{position:absolute;inset-inline-start:14px;top:14px;}
+#current-tranches .t-chevron{font-size:9px;color:var(--text2);flex-shrink:0;}
+#current-tranches .tranche-body{border-top:1px solid var(--border2);margin-top:10px;padding-top:4px;cursor:default;}
+#current-tranches .tranche-foot{display:flex;justify-content:flex-end;margin-top:12px;}
 .proj-note.proj-warn{color:var(--amber,#f5a623);font-weight:600;}
 .t-num{
   width:22px;height:22px;border-radius:50%;background:var(--accent);
@@ -1923,33 +1938,47 @@ window.editTranche = editTranche;
 
 // One line per tranche saying how current its figures are — an auto-advanced
 // balance that looks hand-entered is worse than one that admits what it is.
-function projectionNote(t) {
+// Anything the user has to act on. Always rendered, open or collapsed — a warning
+// you have to expand a card to discover is not a warning.
+function projectionWarn(t) {
   if (t._noAnchor) return `<div class="proj-note proj-warn">⚠ אין תאריך עוגן — קבע "נכון לחודש" כדי שהיתרה תתעדכן לבד</div>`;
+  if (t._needsRate) return `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`;
+  if (t._paymentStale) return `<div class="proj-note proj-warn">⚠ הריבית עודכנה — ההחזר מחושב כעת. עדכן אותו מדף הבנק כדי לחזור לדיוק מלא</div>`;
+  if (t._notAmortising) return `<div class="proj-note proj-warn">⚠ ההחזר אינו מכסה את הריבית — היתרה לא גולגלה</div>`;
+  if (t._stale) return `<div class="proj-note proj-warn">⚠ הגלגול נעצר ב-${t._projectedTo}</div>`;
+  return '';
+}
+
+// Where each figure came from and how far along the loan is. Shown only when the
+// card is open: the collapsed summary already carries the payment, the progress and
+// the remaining term, and repeating them was most of what made a closed card tall.
+function projectionDetail(t) {
+  if (t._noAnchor) return '';
   const bits = [];
-  if (t._advanced > 0) bits.push(`עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}`);
-  else bits.push(`נכון ל-${t.asOf}`);
+  bits.push(t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}` : `נכון ל-${t.asOf}`);
   if (t._noIndexation) bits.push('ללא הצמדה למדד');
-  if (t._origMonths) bits.push(`שולמו ${t._paidCount} מתוך ${t._origMonths} · נותרו ${t.months}`);
   if (t._origMonths) bits.push(`שולם עד היום ₪${fmtShort(t._paidSoFar)} · נותר ₪${fmtShort(t._leftToPay)}`);
+  // Where the payment came from. These are alternatives to each other; the charge
+  // day is not, so it stands on its own.
   if (t._origMonths) bits.push('החזר מתנאי ההלוואה');
-  if (t.payDay >= 1) bits.push(`חיוב ב-${t.payDay} לחודש`);
   else if (t.payment > 0) bits.push('החזר מהבנק');
   else if (t._paymentStale) bits.push('החזר מחושב מחדש אחרי עדכון הריבית');
   else bits.push('החזר מחושב');
+  if (t.payDay >= 1) bits.push(`חיוב ב-${t.payDay} לחודש`);
   if (typeof t._origGap === 'number' && Math.abs(t._origGap) >= 1) {
     bits.push(`יתרה מהבנק, ${t._origGap > 0 ? 'גבוהה' : 'נמוכה'} ב-₪${fmtShort(Math.abs(t._origGap))} מהלוח`);
   }
-  const warn = t._needsRate
-    ? `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`
-    : t._paymentStale
-      ? `<div class="proj-note proj-warn">⚠ הריבית עודכנה — ההחזר מחושב כעת. עדכן אותו מדף הבנק כדי לחזור לדיוק מלא</div>`
-    : t._notAmortising
-      ? `<div class="proj-note proj-warn">⚠ ההחזר אינו מכסה את הריבית — היתרה לא גולגלה</div>`
-      : t._stale
-        ? `<div class="proj-note proj-warn">⚠ הגלגול נעצר ב-${t._projectedTo}</div>`
-        : '';
-  return `<div class="proj-note">${bits.join(' · ')}</div>${warn}`;
+  return `<div class="proj-note">${bits.join(' · ')}</div>`;
 }
+// Which tranches are open for editing. The signing terms are typed once and then
+// only read, so a card is a compact readout by default and the input fields appear
+// on request. UI state only: never persisted, never synced.
+const expandedTranches = new Set();
+function toggleTranche(id) {
+  if (expandedTranches.has(id)) expandedTranches.delete(id); else expandedTranches.add(id);
+  renderCurrentTranches();   // no save — this changes nothing about the mortgage
+}
+window.toggleTranche = toggleTranche;
 
 function renderCurrentTranches() {
   const el = document.getElementById('current-tranches');
@@ -1957,6 +1986,8 @@ function renderCurrentTranches() {
     const a = anchorTranches[i] || {};
     const isVar = t.type === 'var5' || t.type === 'var1';
     const origin = hasOrigin(a);
+    const open = expandedTranches.has(t.id);
+    const pay = livePayment(a);
     // With origination on file every live figure is derived, so the inputs describe
     // the loan as it was signed and the outputs are read-only. Without it the card
     // stays exactly as it was, so existing tranches are untouched.
@@ -1965,89 +1996,114 @@ function renderCurrentTranches() {
          <div class="f-label">${label} <span class="f-derived">מחושב</span></div>
          <input type="number" value="${value}" disabled title="${title}">
        </div>`;
+
+    // The summary reads the same derived values the detail shows. It does not
+    // recompute anything.
+    const summary = [
+      `₪${fmtShort(pay)} לחודש`,
+      t._origMonths ? `שולמו ${t._paidCount}/${t._origMonths}` : null,
+      `נותרו ${t.months} חודשים`
+    ].filter(Boolean).join(' · ');
+
     return `
-    <div class="tranche">
-      <div class="tranche-head">
-        <div style="display:flex;align-items:center;gap:8px;">
+    <div class="tranche${open ? ' is-open' : ''}">
+      <div class="tranche-head" onclick="toggleTranche(${t.id})" title="${open ? 'סגירה' : 'עריכת פרטי המסלול'}">
+        <div class="t-sum">
           <div class="t-num">${i+1}</div>
-          <select onchange="editTranche(${i},'type',this.value)" style="width:130px">
-            ${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}
-          </select>
-          <span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span>
+          <div class="t-sum__main">
+            <span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span>
+            <span class="t-sum__rate">${t.rate}%</span>
+            <strong class="t-sum__bal">₪${fmtShort(t.principal)}</strong>
+          </div>
+          <div class="t-sum__meta">${summary}</div>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="removeCurrentTranche(${t.id})">✕</button>
+        <span class="t-chevron" aria-hidden="true">${open ? '▲' : '▼'}</span>
       </div>
 
-      <div class="tranche-sub">פרטי ההלוואה המקורית — נרשמים פעם אחת</div>
-      <div class="tranche-grid">
-        <div class="field" style="margin:0">
-          <div class="f-label">סכום מקורי ₪</div>
-          <input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000"
-                 onchange="editTranche(${i},'origPrincipal',+this.value)">
+      ${!open ? '' : `
+      <div class="tranche-body" onclick="event.stopPropagation()">
+        <div class="tranche-sub">סוג המסלול</div>
+        <div class="tranche-grid">
+          <div class="field" style="margin:0">
+            <div class="f-label">מסלול</div>
+            <select onchange="editTranche(${i},'type',this.value)">
+              ${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field" style="margin:0">
+            <div class="f-label">ריבית %</div>
+            <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
+          </div>
+          ${isVar ? `
+          <div class="field" style="margin:0">
+            <div class="f-label">עדכון ריבית</div>
+            <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
+          </div>` : ''}
         </div>
-        <div class="field" style="margin:0">
-          <div class="f-label">תקופה בחודשים</div>
-          <input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360"
-                 onchange="editTranche(${i},'origMonths',+this.value)">
-        </div>
-        <div class="field" style="margin:0">
-          <div class="f-label">תשלום ראשון</div>
-          <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
-        </div>
-        <div class="field" style="margin:0">
-          <div class="f-label">יום החיוב בחודש</div>
-          <input type="number" min="1" max="31" value="${a.payDay >= 1 ? a.payDay : ''}" placeholder="למשל 10"
-                 title="היום שבו החיוב יוצא בפועל. בלעדיו נספר תשלום כבר בתחילת החודש."
-                 onchange="editTranche(${i},'payDay',+this.value)">
-        </div>
-      </div>
 
-      <div class="tranche-grid">
-        <div class="field" style="margin:0">
-          <div class="f-label">ריבית %</div>
-          <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
+        <div class="tranche-sub">פרטי ההלוואה המקורית — נרשמים פעם אחת</div>
+        <div class="tranche-grid">
+          <div class="field" style="margin:0">
+            <div class="f-label">סכום מקורי ₪</div>
+            <input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000"
+                   onchange="editTranche(${i},'origPrincipal',+this.value)">
+          </div>
+          <div class="field" style="margin:0">
+            <div class="f-label">תקופה בחודשים</div>
+            <input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360"
+                   onchange="editTranche(${i},'origMonths',+this.value)">
+          </div>
+          <div class="field" style="margin:0">
+            <div class="f-label">תשלום ראשון</div>
+            <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
+          </div>
+          <div class="field" style="margin:0">
+            <div class="f-label">יום החיוב בחודש</div>
+            <input type="number" min="1" max="31" value="${a.payDay >= 1 ? a.payDay : ''}" placeholder="למשל 10"
+                   title="היום שבו החיוב יוצא בפועל. בלעדיו נספר תשלום כבר בתחילת החודש."
+                   onchange="editTranche(${i},'payDay',+this.value)">
+          </div>
+          ${origin ? '' : `
+          <div class="field" style="margin:0">
+            <div class="f-label">החזר חודשי ₪</div>
+            <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
+                   onchange="editTranche(${i},'payment',+this.value)">
+          </div>`}
         </div>
-        ${origin
-          ? derived('החזר חודשי ₪', livePayment(a).toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית')
-          : `<div class="field" style="margin:0">
-               <div class="f-label">החזר חודשי ₪</div>
-               <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
-                      onchange="editTranche(${i},'payment',+this.value)">
-             </div>`}
-        ${isVar ? `
-        <div class="field" style="margin:0">
-          <div class="f-label">עדכון ריבית</div>
-          <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
-        </div>` : ''}
-      </div>
 
-      <div class="tranche-sub">מצב היום${origin ? ' — מחושב מתנאי ההלוואה ומהתאריך' : ' — יתרה נכון לחודש שתציין'}</div>
-      <div class="tranche-grid">
-        ${origin
-          ? derived('יתרת קרן ₪', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
-          : `<div class="field" style="margin:0">
-               <div class="f-label">יתרת קרן ₪</div>
-               <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
-             </div>`}
-        ${origin || a.payment > 0
-          ? derived('חודשים נותרים', t.months, 'נגזר מההחזר ומהיתרה')
-          : `<div class="field" style="margin:0">
-               <div class="f-label">חודשים נותרים</div>
-               <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
-             </div>`}
-        <div class="field" style="margin:0">
-          <div class="f-label">${origin ? 'עדכון מהבנק' : 'נכון לחודש'}</div>
-          <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)"
-                 title="${origin ? 'ציין חודש והזן יתרה מדויקת מהבנק כדי לעקוף את הלוח' : ''}">
+        <div class="tranche-sub">מצב היום${origin ? ' — מחושב מתנאי ההלוואה ומהתאריך' : ' — יתרה נכון לחודש שתציין'}</div>
+        <div class="tranche-grid">
+          ${origin ? derived('החזר חודשי ₪', pay.toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית') : ''}
+          ${origin
+            ? derived('יתרת קרן ₪', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
+            : `<div class="field" style="margin:0">
+                 <div class="f-label">יתרת קרן ₪</div>
+                 <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
+               </div>`}
+          ${origin || a.payment > 0
+            ? derived('חודשים נותרים', t.months, 'נגזר מההחזר ומהיתרה')
+            : `<div class="field" style="margin:0">
+                 <div class="f-label">חודשים נותרים</div>
+                 <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
+               </div>`}
+          <div class="field" style="margin:0">
+            <div class="f-label">${origin ? 'עדכון מהבנק' : 'נכון לחודש'}</div>
+            <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)"
+                   title="${origin ? 'ציין חודש והזן יתרה מדויקת מהבנק כדי לעקוף את הלוח' : ''}">
+          </div>
+          ${origin && isValidYM(a.asOf) ? `
+          <div class="field" style="margin:0">
+            <div class="f-label">יתרה בחודש זה ₪</div>
+            <input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק"
+                   onchange="editTranche(${i},'principal',+this.value)">
+          </div>` : ''}
         </div>
-        ${origin && isValidYM(a.asOf) ? `
-        <div class="field" style="margin:0">
-          <div class="f-label">יתרה בחודש זה ₪</div>
-          <input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק"
-                 onchange="editTranche(${i},'principal',+this.value)">
-        </div>` : ''}
-      </div>
-      ${projectionNote(t)}
+        ${projectionDetail(t)}
+        <div class="tranche-foot">
+          <button class="btn btn-danger btn-sm" onclick="removeCurrentTranche(${t.id})">הסרת המסלול</button>
+        </div>
+      </div>`}
+      ${projectionWarn(t)}
     </div>`;
   }).join('');
 }
