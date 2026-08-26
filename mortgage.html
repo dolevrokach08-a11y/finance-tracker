@@ -138,10 +138,13 @@ nav{
 
 .field{margin-bottom:14px;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.f-label{font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500;display:flex;justify-content:space-between;align-items:center;}
+.f-label{font-size:11px;color:var(--text2);margin-bottom:5px;font-weight:500;display:flex;justify-content:space-between;align-items:center;gap:6px;min-height:15px;}
+/* Tranche labels are short enough to hold one line; keeping them there is what
+   keeps the inputs in a row aligned with each other. */
+.tranche-grid .f-label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;}
 .f-label .f-val{color:var(--accent);font-weight:700;font-size:12px;font-family:'Space Grotesk','Heebo',sans-serif;}
 input[type=number],input[type=text],input[type=month],select{
-  width:100%;background:var(--bg-elevated);border:1px solid var(--border2);
+  width:100%;min-width:0;background:var(--bg-elevated);border:1px solid var(--border2);
   border-radius:var(--r);color:var(--text);font-family:'Heebo',sans-serif;
   font-size:13px;padding:9px 12px;outline:none;
   transition:border-color .15s,box-shadow .15s;direction:ltr;text-align:right;
@@ -165,11 +168,23 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 }
 .tranche:hover{border-color:hsla(142,60%,50%,0.2);}
 .tranche-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
-.tranche-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+/* minmax(0,1fr) rather than 1fr: input[type=month] carries a wide intrinsic
+   minimum, and a plain 1fr track refuses to shrink under it — which collapsed
+   the number fields beside it to a few pixels. Fixed track count rather than
+   auto-fit so a row of two lines up with a row of three across every card. */
+.tranche-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px 12px;align-items:end;}
 .tranche-grid + .tranche-grid{margin-top:10px;}
 /* Says how current a tranche's figures are. An auto-advanced balance that looks
    hand-entered is worse than one that admits what it is. */
 .proj-note{font-size:10px;color:var(--text2);margin-top:9px;line-height:1.5;}
+/* A derived field is a readout, not a disabled control: the dashed border marks it
+   as computed, and opacity:1 keeps it as readable as the values around it instead of
+   taking the browser's greyed-out disabled treatment. (No background override here —
+   product-pages.css wins on that property, so setting it would be an inert line.) */
+.tranche-grid input:disabled{
+  border-style:dashed;color:var(--text);opacity:1;cursor:default;
+}
+.f-label .f-derived{font-weight:400;opacity:.55;font-size:10px;}
 /* Section caption inside a tranche — separates the signed terms from today's state. */
 .tranche-sub{font-size:10px;font-weight:600;color:var(--text2);opacity:.75;margin:12px 0 6px;}
 .tranche-grid + .tranche-sub{margin-top:14px;}
@@ -360,7 +375,7 @@ tr:hover td{background:var(--bg-elevated);}
   .four-col{grid-template-columns:repeat(2,1fr);}
   .summary-metrics-grid{grid-template-columns:repeat(2,1fr) !important;}
   .three-col{grid-template-columns:1fr;}
-  .tranche-grid{grid-template-columns:1fr;}
+  .tranche-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
   .sc-row{grid-template-columns:1fr;gap:0;}
   .sc-cell{border-bottom:1px solid var(--border);}
   .stress-grid{grid-template-columns:repeat(3,1fr);}
@@ -1923,7 +1938,7 @@ function renderCurrentTranches() {
     // stays exactly as it was, so existing tranches are untouched.
     const derived = (label, value, title) =>
       `<div class="field" style="margin:0">
-         <div class="f-label">${label} <span style="font-weight:400;opacity:.6">מחושב</span></div>
+         <div class="f-label">${label} <span class="f-derived">מחושב</span></div>
          <input type="number" value="${value}" disabled title="${title}">
        </div>`;
     return `
@@ -1942,17 +1957,17 @@ function renderCurrentTranches() {
       <div class="tranche-sub">פרטי ההלוואה המקורית — נרשמים פעם אחת</div>
       <div class="tranche-grid">
         <div class="field" style="margin:0">
-          <div class="f-label">סכום ההלוואה (₪)</div>
+          <div class="f-label">סכום מקורי ₪</div>
           <input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000"
                  onchange="editTranche(${i},'origPrincipal',+this.value)">
         </div>
         <div class="field" style="margin:0">
-          <div class="f-label">תקופה מקורית (חודשים)</div>
+          <div class="f-label">תקופה בחודשים</div>
           <input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360"
                  onchange="editTranche(${i},'origMonths',+this.value)">
         </div>
         <div class="field" style="margin:0">
-          <div class="f-label">חודש התשלום הראשון</div>
+          <div class="f-label">תשלום ראשון</div>
           <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
         </div>
       </div>
@@ -1963,25 +1978,25 @@ function renderCurrentTranches() {
           <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
         </div>
         ${origin
-          ? derived('החזר חודשי (₪)', livePayment(a).toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית')
+          ? derived('החזר חודשי ₪', livePayment(a).toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית')
           : `<div class="field" style="margin:0">
-               <div class="f-label">החזר חודשי (₪)</div>
+               <div class="f-label">החזר חודשי ₪</div>
                <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
                       onchange="editTranche(${i},'payment',+this.value)">
              </div>`}
         ${isVar ? `
         <div class="field" style="margin:0">
-          <div class="f-label">עדכון ריבית הבא</div>
+          <div class="f-label">עדכון ריבית</div>
           <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
         </div>` : ''}
       </div>
 
-      <div class="tranche-sub">מצב היום${origin ? '' : ' — יתרה נכון לחודש שתציין'}</div>
+      <div class="tranche-sub">מצב היום${origin ? ' — מחושב מתנאי ההלוואה ומהתאריך' : ' — יתרה נכון לחודש שתציין'}</div>
       <div class="tranche-grid">
         ${origin
-          ? derived('יתרת קרן (₪)', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
+          ? derived('יתרת קרן ₪', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
           : `<div class="field" style="margin:0">
-               <div class="f-label">יתרת קרן (₪)</div>
+               <div class="f-label">יתרת קרן ₪</div>
                <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
              </div>`}
         ${origin || a.payment > 0
@@ -1991,19 +2006,17 @@ function renderCurrentTranches() {
                <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
              </div>`}
         <div class="field" style="margin:0">
-          <div class="f-label">${origin ? 'יתרה מדף הבנק — לא חובה' : 'נכון לחודש'}</div>
+          <div class="f-label">${origin ? 'עדכון מהבנק' : 'נכון לחודש'}</div>
           <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)"
                  title="${origin ? 'ציין חודש והזן יתרה מדויקת מהבנק כדי לעקוף את הלוח' : ''}">
         </div>
-      </div>
-      ${origin && isValidYM(a.asOf) ? `
-      <div class="tranche-grid">
+        ${origin && isValidYM(a.asOf) ? `
         <div class="field" style="margin:0">
-          <div class="f-label">יתרה בפועל בחודש הזה (₪)</div>
+          <div class="f-label">יתרה בחודש זה ₪</div>
           <input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק"
                  onchange="editTranche(${i},'principal',+this.value)">
-        </div>
-      </div>` : ''}
+        </div>` : ''}
+      </div>
       ${projectionNote(t)}
     </div>`;
   }).join('');
