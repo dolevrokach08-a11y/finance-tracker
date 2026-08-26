@@ -1796,7 +1796,16 @@ function editTranche(i, field, value) {
   // interval lets the roll continue from there at the new rate.
   if (field === 'rate' && wasBlocked && isValidYM(a.nextReset)) {
     a.nextReset = ymAdd(a.nextReset, RESET_INTERVAL[a.type] || 60);
+    // The stated payment belonged to the OLD rate, so keeping it would price the
+    // rest of the loan off a number the bank has just replaced. At a reset the bank
+    // re-cuts the annuity over the remaining balance and term, which is what the
+    // fallback computes — and at that exact moment balance, term and rate are
+    // consistent again, so the fallback is right rather than merely close. It is
+    // still a computed figure, so the note asks for the bank's own.
+    if (a.payment > 0) { delete a.payment; a._paymentStale = true; }
   }
+  // Any hand-entered payment clears that flag: it is the bank's number again.
+  if (field === 'payment' && value > 0) delete a._paymentStale;
   reproject();
   renderCurrentTranches();
   updateCurrentSummary();
@@ -1812,8 +1821,13 @@ function projectionNote(t) {
   if (t._advanced > 0) bits.push(`עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}`);
   else bits.push(`נכון ל-${t.asOf}`);
   if (t._noIndexation) bits.push('ללא הצמדה למדד');
+  if (t.payment > 0) bits.push('החזר מהבנק');
+  else if (t._paymentStale) bits.push('החזר מחושב מחדש אחרי עדכון הריבית');
+  else bits.push('החזר מחושב');
   const warn = t._needsRate
     ? `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`
+    : t._paymentStale
+      ? `<div class="proj-note proj-warn">⚠ הריבית עודכנה — ההחזר מחושב כעת. עדכן אותו מדף הבנק כדי לחזור לדיוק מלא</div>`
     : t._notAmortising
       ? `<div class="proj-note proj-warn">⚠ ההחזר אינו מכסה את הריבית — היתרה לא גולגלה</div>`
       : t._stale
