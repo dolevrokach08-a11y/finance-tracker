@@ -1213,6 +1213,22 @@ function ymDiff(from, to) {
 // How far a rate reset pushes the next one out, by tranche type.
 const RESET_INTERVAL = { var5: 60, var1: 12 };
 
+// The month a loan has genuinely been paid through.
+//
+// An instalment leaves the account on a particular day — the 10th, on this mortgage —
+// not on the 1st. Counting by calendar month alone therefore books the current
+// month's payment the moment the month turns, which overstates progress by a whole
+// instalment for as long as the month is younger than the payment day: on the 3rd of
+// September the app would claim a September payment that is still a week away, and
+// the balance, the paid-so-far total and the remaining term would all be one step
+// ahead of reality. With no payment day recorded the old behaviour stands, so
+// nothing shifts under a tranche that has not been told one.
+function paidThrough(a, toYM, day) {
+  const pd = a && a.payDay;
+  if (!(pd >= 1 && pd <= 31)) return toYM;
+  return day >= pd ? toYM : ymAdd(toYM, -1);
+}
+
 // How many payments of `payment` it takes to clear `pv` — the inverse of pmt().
 // Infinity when the payment does not cover the monthly interest, because then the
 // balance never falls and there is no answer to report.
@@ -1287,8 +1303,12 @@ function effectiveAnchor(a) {
 //                   post-reset rate is not knowable from here
 //   • _noAnchor   — no asOf, so there is nothing to roll forward from
 //   • the loan simply runs out of balance or months
-function projectTranche(input, toYM) {
+function projectTranche(input, toYM, day) {
   const a = effectiveAnchor(input);
+  // Everything below measures against the month actually paid through, never the
+  // raw calendar month.
+  const d = day != null ? day : (toYM === ymNow() ? new Date().getDate() : 31);
+  toYM = paidThrough(input, toYM, d);
   // The term is derived from the payment, so a tranche whose balance sits off the
   // theoretical schedule reports the term it will actually run rather than the bank's
   // scheduled-payment counter.
@@ -1351,14 +1371,17 @@ function withOriginSummary(t, input, toYM) {
   // it is the part the model cannot know.
   if (!t._fromOrigin) {
     const modelled = projectTranche(
-      { ...input, principal: undefined, asOf: undefined, payment: undefined }, toYM);
+      { ...input, principal: undefined, asOf: undefined, payment: undefined }, toYM, 31);
     if (!modelled._noAnchor) t._origGap = Math.round(t.principal - modelled.principal);
   }
   return t;
 }
-function projectAll(anchors, toYM) {
+function projectAll(anchors, toYM, day) {
   const to = toYM || ymNow();
-  return anchors.map(a => projectTranche(a, to));
+  // Only the current month is judged against today's date; an explicitly requested
+  // past or future month is taken as fully paid.
+  const d = day != null ? day : (to === ymNow() ? new Date().getDate() : 31);
+  return anchors.map(a => projectTranche(a, to, d));
 }
 
 // Single state object — like portfolio/finance pattern
@@ -1866,12 +1889,12 @@ function editTranche(i, field, value) {
   // asOf and nextReset describe the anchor itself rather than the loan's figures,
   // so they are set straight onto it. Folding first would move the balance to today
   // and then re-date it to the month being typed, rolling the same payments twice.
-  const ANCHOR_META = ['asOf','nextReset','startYM','origPrincipal','origMonths'];
+  const ANCHOR_META = ['asOf','nextReset','startYM','origPrincipal','origMonths','payDay'];
   if (!ANCHOR_META.includes(field)) foldProjection(i);
 
   // Clearing the payment field hands the term back to the user rather than storing a
   // zero that liveMonths() would have to keep stepping around.
-  if (!(value > 0) && ['payment','origPrincipal','origMonths'].includes(field)) delete a[field];
+  if (!(value > 0) && ['payment','origPrincipal','origMonths','payDay'].includes(field)) delete a[field];
   else if (field === 'startYM' && !isValidYM(value)) delete a.startYM;
   else a[field] = value;
   // A balance or term typed by hand is this month's truth by definition.
@@ -1909,6 +1932,7 @@ function projectionNote(t) {
   if (t._origMonths) bits.push(`שולמו ${t._paidCount} מתוך ${t._origMonths} · נותרו ${t.months}`);
   if (t._origMonths) bits.push(`שולם עד היום ₪${fmtShort(t._paidSoFar)} · נותר ₪${fmtShort(t._leftToPay)}`);
   if (t._origMonths) bits.push('החזר מתנאי ההלוואה');
+  if (t.payDay >= 1) bits.push(`חיוב ב-${t.payDay} לחודש`);
   else if (t.payment > 0) bits.push('החזר מהבנק');
   else if (t._paymentStale) bits.push('החזר מחושב מחדש אחרי עדכון הריבית');
   else bits.push('החזר מחושב');
@@ -1969,6 +1993,12 @@ function renderCurrentTranches() {
         <div class="field" style="margin:0">
           <div class="f-label">תשלום ראשון</div>
           <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
+        </div>
+        <div class="field" style="margin:0">
+          <div class="f-label">יום החיוב בחודש</div>
+          <input type="number" min="1" max="31" value="${a.payDay >= 1 ? a.payDay : ''}" placeholder="למשל 10"
+                 title="היום שבו החיוב יוצא בפועל. בלעדיו נספר תשלום כבר בתחילת החודש."
+                 onchange="editTranche(${i},'payDay',+this.value)">
         </div>
       </div>
 
