@@ -457,9 +457,6 @@ tr:hover td{background:var(--bg-elevated);}
       <div class="card" style="margin-bottom:16px;">
         <div class="card-head">
           <span class="card-title">נתוני משכנתא קיימת</span>
-          <div style="display:flex;gap:6px;">
-            <button class="btn btn-ghost btn-sm" onclick="resetToMyMortgage()">איפוס</button>
-          </div>
         </div>
         <div class="card-body">
           <div id="current-tranches"></div>
@@ -2125,16 +2122,6 @@ function removeCurrentTranche(id) {
   updateCurrentSummary();
   saveMortgage();
 }
-function resetToMyMortgage() {
-  // BROKEN, and was before this change: MY_MORTGAGE is not defined anywhere in this
-  // file, so the "איפוס" button throws a ReferenceError here and does nothing.
-  // Reported rather than fixed — what it should reset to is a question for the owner.
-  currentTranches = JSON.parse(JSON.stringify(MY_MORTGAGE));
-  renderCurrentTranches();
-  updateCurrentSummary();
-  showToast('אופס למשכנתא המקורית');
-}
-
 function updateAffordabilityRatio() {
   const incomeInput = document.getElementById('monthly-income-input');
   const ratioEl = document.getElementById('affordability-ratio');
