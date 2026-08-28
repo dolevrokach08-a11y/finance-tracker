@@ -140,6 +140,16 @@
   --shadow-accent: 0 4px 20px rgba(111, 158, 0, 0.15);
 }
 
+/* Firebase Auth appends a 1px off-screen iframe directly under <body>. In an
+   RTL document, leaving its horizontal position implicit can place that pixel
+   beyond the document edge and create a small horizontal scroll at narrow
+   widths. Anchor only Firebase's auth iframe to the physical left edge; its
+   vertical off-screen position and authentication behavior stay untouched. */
+body > iframe[src*="/__/auth/iframe"] {
+  left: 0 !important;
+  right: auto !important;
+}
+
 /* ============================================================================
    Cross-document view transitions
    ----------------------------------------------------------------------------
