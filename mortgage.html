@@ -252,6 +252,16 @@ tr:last-child td{border-bottom:none;}
 tr:hover td{background:var(--bg-elevated);}
 .tr-highlight td{background:var(--accent-dim)!important;font-weight:600;}
 
+/* Keep the populated amortisation table readable on narrow screens without
+   letting its real min-content width widen the whole page. The surrounding
+   grid item must be allowed to shrink; the table then scrolls inside its card. */
+#p-current .two-col > *{min-width:0;}
+.amortization-scroll{
+  width:100%;max-width:100%;min-width:0;max-height:280px;
+  overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;
+}
+.amortization-table{min-width:360px;}
+
 .prog-bar{height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden;margin:4px 0;}
 .prog-fill{height:100%;border-radius:3px;transition:width .6s cubic-bezier(.4,0,.2,1);}
 
@@ -535,11 +545,11 @@ tr:hover td{background:var(--bg-elevated);}
         <div class="card-body" id="analysis-box"></div>
       </div>
 
-      <div class="card">
+      <div class="card amortization-card">
         <div class="card-head"><span class="card-title">לוח סילוקין — 24 חודשים ראשונים</span></div>
         <div class="card-body" style="padding:0;">
-          <div style="max-height:280px;overflow-y:auto;">
-            <table>
+          <div class="amortization-scroll" role="region" aria-label="טבלת לוח סילוקין — 24 חודשים ראשונים" tabindex="0">
+            <table class="amortization-table">
               <thead><tr><th>חודש</th><th>החזר</th><th>קרן</th><th>ריבית</th><th>יתרה</th></tr></thead>
               <tbody id="amort-table"></tbody>
             </table>
