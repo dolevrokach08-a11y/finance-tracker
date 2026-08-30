@@ -182,6 +182,11 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
    #current-tranches: .tranche and friends are reused by the builder, methods and
    penalty pages for cards that do not collapse, and an unscoped rule silently
    restyles those too. */
+/* The card is what the layout has to fit, not the window. #current-tranches sits in
+   the narrow column of .two-col — 368px wide even on a 1274px screen — so viewport
+   media queries never fired and viewport-relative type was sized for space the card
+   does not have. Everything responsive below keys off the container instead. */
+#current-tranches{container-type:inline-size;}
 #current-tranches .tranche-wrap{margin-bottom:10px;}
 #current-tranches .tranche{
   background:var(--bg-elevated);border:1px solid var(--border2);
@@ -252,9 +257,15 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 #current-tranches .metric-label em{font-style:normal;opacity:.6;font-weight:500;}
 #current-tranches .metric-value{
   display:block;overflow:hidden;margin-top:6px;color:var(--text);
-  font:700 clamp(17px,2.4vw,24px)/1 'Space Grotesk','Heebo',sans-serif;
+  font:700 17px/1 'Space Grotesk','Heebo',sans-serif;
   font-variant-numeric:tabular-nums;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:isolate;
+}
+/* ₪290,000 is eight glyphs; at 24px it needs 119px and the column offers 84. Sizing
+   it against the readout's own width keeps the design's scale on a wide card and
+   still fits the narrow one, instead of clipping the figure the card exists to show. */
+@supports (container-type:inline-size){
+  #current-tranches .metric-value{font-size:clamp(14px,4.8cqw,24px);}
 }
 #current-tranches .metric-note{display:block;margin-top:5px;color:var(--text3);font-size:9px;}
 
@@ -309,12 +320,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 }
 #current-tranches .finish-button:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);}
 
-/* The mockup's own breakpoints, ported rather than reinvented. The first pass at this
-   stacked the readout and dropped the field grid to one column, which made the open
-   card half again as tall as the design it was meant to implement. His version keeps
-   the three readouts side by side and the fields two-up, and wins the space back by
-   trimming padding and inlining the balance instead. */
-@media (max-width:760px){
+/* The mockup's breakpoints, ported — but keyed to the card rather than the window.
+   His shell caps the card at 640px, so his 760px viewport tier is really "card at or
+   below 640" and his 390px tier is "card around 375". In this page the card is 368px
+   on a full-size screen, so both tiers apply here and neither would ever have fired
+   from a media query. */
+@container (max-width:640px){
   #current-tranches .tranche-head{grid-template-columns:32px minmax(0,1fr) 22px;gap:9px;padding:12px;}
   #current-tranches .route-balance{grid-column:2;min-width:0;margin-top:-2px;text-align:right;}
   #current-tranches .route-balance strong{display:inline;font-size:16px;}
@@ -323,19 +334,17 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
   #current-tranches .editor{margin:0 8px 8px;}
   #current-tranches .live-metric{padding:12px 10px;}
   #current-tranches .metric-label em{display:none;}
-  #current-tranches .metric-value{font-size:clamp(18px,5.7vw,26px);}
   #current-tranches .field-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
   #current-tranches .advanced-panel > summary{grid-template-columns:minmax(0,1fr) 20px;}
   #current-tranches .advanced-summary{grid-column:1;grid-row:2;max-width:100%;text-align:start;}
   #current-tranches .advanced-panel > summary > .t-chevron{grid-column:2;grid-row:1/span 2;}
 }
-@media (max-width:390px){
+@container (max-width:420px){
   #current-tranches .route-title-row{gap:5px;}
   #current-tranches .route-badge{padding-inline:6px;}
   #current-tranches .live-metric{padding-inline:7px;}
   #current-tranches .metric-label{font-size:8px;}
-  #current-tranches .metric-value{font-size:18px;}
-  #current-tranches .metric-note{overflow:hidden;font-size:8px;text-overflow:ellipsis;}
+  #current-tranches .metric-note{overflow:hidden;font-size:8px;text-overflow:ellipsis;white-space:nowrap;}
   #current-tranches .editor-footer{align-items:stretch;flex-direction:column-reverse;gap:8px;}
   #current-tranches .finish-button{width:100%;}
   #current-tranches .danger-link{align-self:flex-start;}
