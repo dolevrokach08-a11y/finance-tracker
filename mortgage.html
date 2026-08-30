@@ -223,11 +223,12 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
   display:block;overflow:hidden;color:var(--text2);font-size:11px;
   text-overflow:ellipsis;white-space:nowrap;
 }
-#current-tranches .route-balance{min-width:100px;text-align:left;direction:ltr;unicode-bidi:isolate;}
+#current-tranches .route-balance{min-width:100px;text-align:left;}
 #current-tranches .route-balance strong{
   display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);
+  direction:ltr;unicode-bidi:isolate;
 }
-#current-tranches .route-balance span{display:block;font-size:9px;color:var(--text3);direction:rtl;}
+#current-tranches .route-balance span{display:block;font-size:9px;color:var(--text3);}
 #current-tranches .t-chevron{
   display:grid;place-items:center;width:20px;color:var(--text2);transition:transform .2s;
 }
@@ -259,7 +260,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
   display:block;overflow:hidden;margin-top:6px;color:var(--text);
   font:700 17px/1 'Space Grotesk','Heebo',sans-serif;
   font-variant-numeric:tabular-nums;text-overflow:ellipsis;white-space:nowrap;
-  direction:ltr;unicode-bidi:isolate;
+  direction:ltr;unicode-bidi:isolate;text-align:right;
 }
 /* ₪290,000 is eight glyphs; at 24px it needs 119px and the column offers 84. Sizing
    it against the readout's own width keeps the design's scale on a wide card and
@@ -295,7 +296,7 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 #current-tranches .advanced-title strong{display:block;font-size:11px;font-weight:700;color:var(--text);}
 #current-tranches .advanced-title span{display:block;margin-top:2px;font-size:9px;color:var(--text3);}
 #current-tranches .advanced-summary{
-  font-size:10px;color:var(--text2);text-align:left;direction:ltr;unicode-bidi:isolate;
+  font-size:10px;color:var(--text2);text-align:left;unicode-bidi:isolate;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;
 }
 #current-tranches .advanced-body{padding:0 13px 13px;}
