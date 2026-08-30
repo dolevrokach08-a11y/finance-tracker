@@ -25,6 +25,34 @@ const NAV_ICONS = {
   theme: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2m0 14v2M3 12h2m14 0h2M5.6 5.6 7 7m10 10 1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/><circle cx="12" cy="12" r="4"/></svg>',
 };
 
+// A second navigation can legitimately cancel a cross-document view transition
+// before its `ready` promise settles. The page change still completes, but Chrome
+// reports the expected cancellation as an unhandled AbortError unless the promise
+// is observed. Keep the restrained cross-fade and silence only that expected skip;
+// every other transition failure remains visible in the console.
+const isExpectedTransitionSkip = error =>
+  error?.name === 'AbortError' && error?.message === 'Transition was skipped';
+
+function observeViewTransition(transition) {
+  if (!transition?.ready) return;
+  transition.ready.catch(error => {
+    if (!isExpectedTransitionSkip(error)) {
+      console.error('View transition failed before it could start.', error);
+    }
+  });
+}
+
+window.addEventListener('pageswap', event => observeViewTransition(event.viewTransition));
+window.addEventListener('pagereveal', event => observeViewTransition(event.viewTransition));
+observeViewTransition(document.activeViewTransition);
+
+// `pagereveal` fires before deferred modules on some browser versions, so the
+// incoming transition cannot always be observed directly. This fallback is kept
+// deliberately exact and does not swallow fetch aborts or unrelated rejections.
+window.addEventListener('unhandledrejection', event => {
+  if (isExpectedTransitionSkip(event.reason)) event.preventDefault();
+});
+
 const NAV_CSS = `
 .shared-nav {
   --shared-nav-accent: #c9ff47;
