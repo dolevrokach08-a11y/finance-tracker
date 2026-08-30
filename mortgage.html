@@ -177,42 +177,180 @@ input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2);}
 /* Says how current a tranche's figures are. An auto-advanced balance that looks
    hand-entered is worse than one that admits what it is. */
 .proj-note{font-size:10px;color:var(--text2);margin-top:9px;line-height:1.5;}
-/* A derived field is a readout, not a disabled control: the dashed border marks it
-   as computed, and opacity:1 keeps it as readable as the values around it instead of
-   taking the browser's greyed-out disabled treatment. (No background override here —
-   product-pages.css wins on that property, so setting it would be an inert line.) */
-.tranche-grid input:disabled{
-  border-style:dashed;color:var(--text);opacity:1;cursor:default;
+/* ── Tranche card ─────────────────────────────────────────────────────────────
+   Ported from GPT's mockup at design/tranche-card.html. Every rule is scoped to
+   #current-tranches: .tranche and friends are reused by the builder, methods and
+   penalty pages for cards that do not collapse, and an unscoped rule silently
+   restyles those too. */
+/* The card is what the layout has to fit, not the window. #current-tranches sits in
+   the narrow column of .two-col — 368px wide even on a 1274px screen — so viewport
+   media queries never fired and viewport-relative type was sized for space the card
+   does not have. Everything responsive below keys off the container instead. */
+#current-tranches{container-type:inline-size;}
+#current-tranches .tranche-wrap{margin-bottom:10px;}
+#current-tranches .tranche{
+  background:var(--bg-elevated);border:1px solid var(--border2);
+  border-radius:var(--r2);margin:0;padding:0;position:relative;overflow:hidden;
+  transition:border-color .15s;
 }
-.f-label .f-derived{font-weight:400;opacity:.55;font-size:10px;}
-/* Section caption inside a tranche — separates the signed terms from today's state. */
-.tranche-sub{font-size:10px;font-weight:600;color:var(--text2);opacity:.75;margin:12px 0 6px;}
-.tranche-grid + .tranche-sub{margin-top:14px;}
-/* A collapsed tranche is one compact readout row; the form lives behind it.
-   Scoped to #current-tranches: the builder, methods and penalty pages reuse
-   .tranche/.tranche-head for cards that are not collapsible, and must not pick up
-   a pointer cursor for a click that does nothing. */
-/* The header is a real <button> so it is focusable and operable from the keyboard and
-   announces its expanded state. That means undoing the browser's button chrome, since
-   everything visual here comes from .tranche-head. */
+#current-tranches .tranche[open]{border-color:color-mix(in srgb,var(--route-color,var(--amber)) 32%,var(--border2));}
 #current-tranches .tranche-head{
-  cursor:pointer;user-select:none;gap:10px;margin-bottom:0;
-  appearance:none;-webkit-appearance:none;background:none;border:0;padding:0;
-  font:inherit;color:inherit;width:100%;text-align:inherit;
+  position:relative;display:grid;grid-template-columns:36px minmax(0,1fr) auto 20px;
+  align-items:center;gap:12px;min-height:76px;padding:14px 16px;margin:0;
+  cursor:pointer;user-select:none;list-style:none;outline:none;
 }
-#current-tranches .tranche-head:focus-visible{
-  outline:2px solid var(--accent);outline-offset:3px;border-radius:8px;
+#current-tranches .tranche-head::-webkit-details-marker{display:none;}
+#current-tranches .tranche-head:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;}
+#current-tranches .route-index{
+  display:grid;place-items:center;width:32px;height:32px;border-radius:50%;
+  border:1px solid color-mix(in srgb,var(--route-color,var(--amber)) 40%,var(--border2));
+  color:var(--route-color,var(--amber));
+  background:color-mix(in srgb,var(--route-color,var(--amber)) 10%,var(--bg-elevated));
+  font:800 11px/1 'Space Grotesk',monospace;
 }
-#current-tranches .tranche.is-open .tranche-head{margin-bottom:4px;}
-#current-tranches .t-sum{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;padding-inline-start:30px;}
-#current-tranches .t-sum__main{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-#current-tranches .t-sum__rate{font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums;}
-#current-tranches .t-sum__bal{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;margin-inline-start:auto;}
-#current-tranches .t-sum__meta{font-size:11px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-#current-tranches .t-sum .t-num{position:absolute;inset-inline-start:14px;top:14px;}
-#current-tranches .t-chevron{font-size:9px;color:var(--text2);flex-shrink:0;}
-#current-tranches .tranche-body{border-top:1px solid var(--border2);margin-top:10px;padding-top:4px;cursor:default;}
-#current-tranches .tranche-foot{display:flex;justify-content:flex-end;margin-top:12px;}
+#current-tranches .route-copy{min-width:0;}
+#current-tranches .route-title-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+#current-tranches .route-title{
+  overflow:hidden;color:var(--text);font-size:15px;font-weight:750;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+#current-tranches .route-badge{
+  flex:0 0 auto;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:800;
+  color:var(--route-color,var(--amber));
+  background:color-mix(in srgb,var(--route-color,var(--amber)) 12%,transparent);
+}
+#current-tranches .route-meta{
+  display:block;overflow:hidden;color:var(--text2);font-size:11px;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+#current-tranches .route-balance{min-width:100px;text-align:left;}
+#current-tranches .route-balance strong{
+  display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text);
+  direction:ltr;unicode-bidi:isolate;
+}
+#current-tranches .route-balance span{display:block;font-size:9px;color:var(--text3);}
+#current-tranches .t-chevron{
+  display:grid;place-items:center;width:20px;color:var(--text2);transition:transform .2s;
+}
+#current-tranches .t-chevron svg{width:12px;height:8px;}
+#current-tranches details[open] > summary > .t-chevron{transform:rotate(180deg);}
+
+#current-tranches .editor{margin:0 16px 14px;border-top:1px solid var(--border2);}
+#current-tranches .editor-topline{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  flex-wrap:wrap;padding:14px 2px 12px;
+}
+#current-tranches .section-kicker{margin:0;color:var(--text2);font-size:11px;font-weight:700;}
+#current-tranches .sync-state{color:var(--text3);font-size:10px;}
+
+/* The three figures the card exists to show, as readouts rather than disabled inputs —
+   they are outputs, and a greyed-out text box reads as an input someone switched off. */
+#current-tranches .live-readout{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:hidden;
+  border:1px solid var(--border2);border-radius:14px;
+  background:color-mix(in srgb,var(--bg-elevated) 84%,transparent);
+}
+#current-tranches .live-metric{min-width:0;padding:12px 14px;}
+#current-tranches .live-metric + .live-metric{border-inline-start:1px solid var(--border2);}
+#current-tranches .metric-label{
+  display:flex;align-items:center;gap:5px;color:var(--text3);font-size:9px;font-weight:700;
+}
+#current-tranches .metric-label em{font-style:normal;opacity:.6;font-weight:500;}
+#current-tranches .metric-value{
+  display:block;overflow:hidden;margin-top:6px;color:var(--text);
+  font:700 17px/1 'Space Grotesk','Heebo',sans-serif;
+  font-variant-numeric:tabular-nums;text-overflow:ellipsis;white-space:nowrap;
+  direction:ltr;unicode-bidi:isolate;text-align:right;
+}
+/* ₪290,000 is eight glyphs; at 24px it needs 119px and the column offers 84. Sizing
+   it against the readout's own width keeps the design's scale on a wide card and
+   still fits the narrow one, instead of clipping the figure the card exists to show. */
+@supports (container-type:inline-size){
+  #current-tranches .metric-value{font-size:clamp(14px,4.8cqw,24px);}
+}
+#current-tranches .metric-note{display:block;margin-top:5px;color:var(--text3);font-size:9px;}
+
+#current-tranches .editor-section{margin-top:16px;}
+#current-tranches .editor-section-head h2{margin:0;font-size:12px;font-weight:700;color:var(--text);}
+#current-tranches .editor-section-head p{margin:2px 0 10px;font-size:10px;color:var(--text3);}
+#current-tranches .field-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px 12px;
+}
+#current-tranches .mock-field{min-width:0;}
+#current-tranches .mock-field label{
+  display:block;margin-bottom:5px;color:var(--text2);font-size:10px;font-weight:500;
+}
+
+/* The signing terms: correct once, then read. Closed by default so they stop competing
+   with the fields that actually change. */
+#current-tranches .advanced-panel{
+  margin-top:16px;border:1px solid var(--border2);border-radius:12px;
+  background:color-mix(in srgb,var(--bg-elevated) 60%,transparent);
+}
+#current-tranches .advanced-panel > summary{
+  display:grid;grid-template-columns:minmax(0,1fr) auto 20px;align-items:center;gap:10px;
+  padding:11px 13px;cursor:pointer;list-style:none;outline:none;
+}
+#current-tranches .advanced-panel > summary::-webkit-details-marker{display:none;}
+#current-tranches .advanced-panel > summary:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;}
+#current-tranches .advanced-title strong{display:block;font-size:11px;font-weight:700;color:var(--text);}
+#current-tranches .advanced-title span{display:block;margin-top:2px;font-size:9px;color:var(--text3);}
+#current-tranches .advanced-summary{
+  font-size:10px;color:var(--text2);text-align:left;unicode-bidi:isolate;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:190px;
+}
+#current-tranches .advanced-body{padding:0 13px 13px;}
+
+#current-tranches .editor-footer{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  margin-top:14px;padding:12px 2px 0;border-top:1px solid var(--border2);
+}
+#current-tranches .danger-link,
+#current-tranches .finish-button{
+  min-height:36px;border-radius:10px;cursor:pointer;font-family:inherit;font-size:12px;
+}
+/* Removal stays reachable but stops competing with the everyday action. */
+#current-tranches .danger-link{
+  padding:0 6px;border:0;background:none;color:var(--text3);font-weight:500;
+}
+#current-tranches .danger-link:hover{color:var(--red);}
+#current-tranches .finish-button{
+  padding:0 18px;font-weight:700;color:var(--text);
+  border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border2));
+  background:color-mix(in srgb,var(--accent) 14%,transparent);
+}
+#current-tranches .finish-button:hover{background:color-mix(in srgb,var(--accent) 22%,transparent);}
+
+/* The mockup's breakpoints, ported — but keyed to the card rather than the window.
+   His shell caps the card at 640px, so his 760px viewport tier is really "card at or
+   below 640" and his 390px tier is "card around 375". In this page the card is 368px
+   on a full-size screen, so both tiers apply here and neither would ever have fired
+   from a media query. */
+@container (max-width:640px){
+  #current-tranches .tranche-head{grid-template-columns:32px minmax(0,1fr) 22px;gap:9px;padding:12px;}
+  #current-tranches .route-balance{grid-column:2;min-width:0;margin-top:-2px;text-align:right;}
+  #current-tranches .route-balance strong{display:inline;font-size:16px;}
+  #current-tranches .route-balance span{display:inline;margin:0 6px 0 0;}
+  #current-tranches .tranche-head > .t-chevron{grid-column:3;grid-row:1/span 2;}
+  #current-tranches .editor{margin:0 8px 8px;}
+  #current-tranches .live-metric{padding:12px 10px;}
+  #current-tranches .metric-label em{display:none;}
+  #current-tranches .field-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  #current-tranches .advanced-panel > summary{grid-template-columns:minmax(0,1fr) 20px;}
+  #current-tranches .advanced-summary{grid-column:1;grid-row:2;max-width:100%;text-align:start;}
+  #current-tranches .advanced-panel > summary > .t-chevron{grid-column:2;grid-row:1/span 2;}
+}
+@container (max-width:420px){
+  #current-tranches .route-title-row{gap:5px;}
+  #current-tranches .route-badge{padding-inline:6px;}
+  #current-tranches .live-metric{padding-inline:7px;}
+  #current-tranches .metric-label{font-size:8px;}
+  #current-tranches .metric-note{overflow:hidden;font-size:8px;text-overflow:ellipsis;white-space:nowrap;}
+  #current-tranches .editor-footer{align-items:stretch;flex-direction:column-reverse;gap:8px;}
+  #current-tranches .finish-button{width:100%;}
+  #current-tranches .danger-link{align-self:flex-start;}
+}
+}
 .proj-note.proj-warn{color:var(--amber,#f5a623);font-weight:600;}
 .t-num{
   width:22px;height:22px;border-radius:50%;background:var(--accent);
@@ -1987,15 +2125,31 @@ function projectionDetail(t) {
   }
   return `<div class="proj-note">${bits.join(' · ')}</div>`;
 }
-// Which tranches are open for editing. The signing terms are typed once and then
-// only read, so a card is a compact readout by default and the input fields appear
-// on request. UI state only: never persisted, never synced.
+// Which tranche is open for editing, and whether its origination panel is open with it.
+// The signing terms are typed once and then only read, so a card is a compact readout by
+// default and the form appears on request. Only one card opens at a time: three open
+// editors was the state that buried the figures the page exists to show.
+//
+// UI state only — never persisted, never synced, and toggling never saves. Which card
+// you happen to have open is not a fact about the mortgage.
 const expandedTranches = new Set();
+const advancedOpen = new Set();
+
 function toggleTranche(id) {
-  if (expandedTranches.has(id)) expandedTranches.delete(id); else expandedTranches.add(id);
-  renderCurrentTranches();   // no save — this changes nothing about the mortgage
+  const wasOpen = expandedTranches.has(id);
+  expandedTranches.clear();          // single-open accordion
+  advancedOpen.clear();              // a card reopens with its advanced panel closed
+  if (!wasOpen) expandedTranches.add(id);
+  renderCurrentTranches();
+}
+function toggleAdvanced(id) {
+  if (advancedOpen.has(id)) advancedOpen.delete(id); else advancedOpen.add(id);
+  renderCurrentTranches();
 }
 window.toggleTranche = toggleTranche;
+window.toggleAdvanced = toggleAdvanced;
+
+const CHEVRON = '<span class="t-chevron" aria-hidden="true"><svg viewBox="0 0 12 8" fill="none"><path d="m1 1 5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></span>';
 
 function renderCurrentTranches() {
   const el = document.getElementById('current-tranches');
@@ -2004,124 +2158,109 @@ function renderCurrentTranches() {
     const isVar = t.type === 'var5' || t.type === 'var1';
     const origin = hasOrigin(a);
     const open = expandedTranches.has(t.id);
+    const advOpen = advancedOpen.has(t.id);
     const pay = livePayment(a);
-    // With origination on file every live figure is derived, so the inputs describe
-    // the loan as it was signed and the outputs are read-only. Without it the card
-    // stays exactly as it was, so existing tranches are untouched.
-    const derived = (label, value, title) =>
-      `<div class="field" style="margin:0">
-         <div class="f-label">${label} <span class="f-derived">מחושב</span></div>
-         <input type="number" value="${value}" disabled title="${title}">
-       </div>`;
 
-    // The summary reads the same derived values the detail shows. It does not
-    // recompute anything.
-    const summary = [
+    const field = (label, input) =>
+      `<div class="mock-field"><label>${label}</label>${input}</div>`;
+    const metric = (label, value, note) =>
+      `<article class="live-metric">
+         <span class="metric-label">${label} <em>מחושב</em></span>
+         <strong class="metric-value">${value}</strong>
+         <span class="metric-note">${note}</span>
+       </article>`;
+
+    // The summary line reads the derived values; it does not recompute anything.
+    const meta = [
+      `${t.rate}%`,
       `₪${fmtShort(pay)} לחודש`,
-      t._origMonths ? `שולמו ${t._paidCount}/${t._origMonths}` : null,
       `נותרו ${t.months} חודשים`
-    ].filter(Boolean).join(' · ');
+    ].join(' · ');
+
+    // Where each live figure came from, said next to the figure itself.
+    const balanceNote = a.principal > 0 && isValidYM(a.asOf)
+      ? `יתרה מהבנק, ${a.asOf}` : origin ? 'מלוח הסילוקין' : 'כפי שהוזן';
+    const payNote = origin ? 'מתנאי ההלוואה'
+      : a.payment > 0 ? 'כפי שכתוב בבנק'
+      : t._paymentStale ? 'מחושב מחדש אחרי עדכון הריבית' : 'מחושב';
+    const monthsNote = t._origMonths ? `מתוך ${t._origMonths} חודשים` : 'לפי ההחזר והיתרה';
+
+    const advSummary = origin
+      ? `₪${fmtShort(a.origPrincipal)} · ${a.origMonths} חודשים · ${a.startYM}${a.payDay >= 1 ? ` · חיוב ב-${a.payDay}` : ''}`
+      : 'לא הוזנו — היתרה לא תתעדכן לבד';
 
     return `
-    <div class="tranche${open ? ' is-open' : ''}">
-      <button type="button" class="tranche-head" onclick="toggleTranche(${t.id})"
-              aria-expanded="${open}"${open ? ` aria-controls="tranche-body-${t.id}"` : ''}>
-        <div class="t-sum">
-          <div class="t-num">${i+1}</div>
-          <div class="t-sum__main">
-            <span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span>
-            <span class="t-sum__rate">${t.rate}%</span>
-            <strong class="t-sum__bal">₪${fmtShort(t.principal)}</strong>
-          </div>
-          <div class="t-sum__meta">${summary}</div>
-        </div>
-        <span class="t-chevron" aria-hidden="true">${open ? '▲' : '▼'}</span>
-      </button>
+    <div class="tranche-wrap">
+    <details class="tranche"${open ? ' open' : ''} style="--route-color:${TYPE_COLORS[t.type] || 'var(--amber)'}">
+      <summary class="tranche-head" onclick="event.preventDefault();toggleTranche(${t.id})">
+        <span class="route-index">${String(i+1).padStart(2,'0')}</span>
+        <span class="route-copy">
+          <span class="route-title-row">
+            <span class="route-title">${TYPE_LABELS[t.type]}</span>
+            <span class="route-badge">${isVar ? 'משתנה' : t.type === 'cpi' ? 'צמודה' : 'קבועה'}</span>
+          </span>
+          <span class="route-meta">${meta}</span>
+        </span>
+        <span class="route-balance"><strong>₪${fmtShort(t.principal)}</strong><span>יתרת קרן</span></span>
+        ${CHEVRON}
+      </summary>
 
-      ${!open ? '' : `
-      <div class="tranche-body" id="tranche-body-${t.id}">
-        <div class="tranche-sub">סוג המסלול</div>
-        <div class="tranche-grid">
-          <div class="field" style="margin:0">
-            <div class="f-label">מסלול</div>
-            <select onchange="editTranche(${i},'type',this.value)">
-              ${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}
-            </select>
-          </div>
-          <div class="field" style="margin:0">
-            <div class="f-label">ריבית %</div>
-            <input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">
-          </div>
-          ${isVar ? `
-          <div class="field" style="margin:0">
-            <div class="f-label">עדכון ריבית</div>
-            <input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">
-          </div>` : ''}
+      <div class="editor">
+        <div class="editor-topline">
+          <p class="section-kicker">מצב המסלול היום</p>
+          <span class="sync-state">${t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}` : t._noAnchor ? 'ממתין לתאריך עוגן' : `נכון ל-${t.asOf}`}</span>
         </div>
 
-        <div class="tranche-sub">פרטי ההלוואה המקורית — נרשמים פעם אחת</div>
-        <div class="tranche-grid">
-          <div class="field" style="margin:0">
-            <div class="f-label">סכום מקורי ₪</div>
-            <input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000"
-                   onchange="editTranche(${i},'origPrincipal',+this.value)">
-          </div>
-          <div class="field" style="margin:0">
-            <div class="f-label">תקופה בחודשים</div>
-            <input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360"
-                   onchange="editTranche(${i},'origMonths',+this.value)">
-          </div>
-          <div class="field" style="margin:0">
-            <div class="f-label">תשלום ראשון</div>
-            <input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">
-          </div>
-          <div class="field" style="margin:0">
-            <div class="f-label">יום החיוב בחודש</div>
-            <input type="number" min="1" max="31" value="${a.payDay >= 1 ? a.payDay : ''}" placeholder="למשל 10"
-                   title="היום שבו החיוב יוצא בפועל. בלעדיו נספר תשלום כבר בתחילת החודש."
-                   onchange="editTranche(${i},'payDay',+this.value)">
-          </div>
-          ${origin ? '' : `
-          <div class="field" style="margin:0">
-            <div class="f-label">החזר חודשי ₪</div>
-            <input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק"
-                   onchange="editTranche(${i},'payment',+this.value)">
-          </div>`}
-        </div>
+        <section class="live-readout" aria-label="נתוני המסלול הנוכחיים">
+          ${metric('יתרת קרן', '₪' + fmtShort(t.principal), balanceNote)}
+          ${metric('החזר חודשי', '₪' + fmtShort(pay), payNote)}
+          ${metric('חודשים נותרו', t.months, monthsNote)}
+        </section>
 
-        <div class="tranche-sub">מצב היום${origin ? ' — מחושב מתנאי ההלוואה ומהתאריך' : ' — יתרה נכון לחודש שתציין'}</div>
-        <div class="tranche-grid">
-          ${origin ? derived('החזר חודשי ₪', pay.toFixed(2), 'נגזר מסכום ההלוואה, התקופה והריבית') : ''}
-          ${origin
-            ? derived('יתרת קרן ₪', t.principal, a.principal > 0 ? 'יתרה מדף הבנק, מגולגלת קדימה' : 'נגזר מלוח הסילוקין')
-            : `<div class="field" style="margin:0">
-                 <div class="f-label">יתרת קרן ₪</div>
-                 <input type="number" value="${t.principal}" onchange="editTranche(${i},'principal',+this.value)">
-               </div>`}
-          ${origin || a.payment > 0
-            ? derived('חודשים נותרים', t.months, 'נגזר מההחזר ומהיתרה')
-            : `<div class="field" style="margin:0">
-                 <div class="f-label">חודשים נותרים</div>
-                 <input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">
-               </div>`}
-          <div class="field" style="margin:0">
-            <div class="f-label">${origin ? 'עדכון מהבנק' : 'נכון לחודש'}</div>
-            <input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)"
-                   title="${origin ? 'ציין חודש והזן יתרה מדויקת מהבנק כדי לעקוף את הלוח' : ''}">
+        <section class="editor-section">
+          <div class="editor-section-head">
+            <h2>עדכון שוטף</h2>
+            <p>רק הנתונים שעשויים להשתנות במהלך חיי המסלול</p>
           </div>
-          ${origin && isValidYM(a.asOf) ? `
-          <div class="field" style="margin:0">
-            <div class="f-label">יתרה בחודש זה ₪</div>
-            <input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק"
-                   onchange="editTranche(${i},'principal',+this.value)">
-          </div>` : ''}
-        </div>
+          <div class="field-grid">
+            ${field('סוג המסלול', `<select onchange="editTranche(${i},'type',this.value)">${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}</select>`)}
+            ${field('ריבית %', `<input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">`)}
+            ${isVar ? field('עדכון הריבית הבא', `<input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">`) : ''}
+            ${field(origin ? 'חודש עדכון מהבנק' : 'נכון לחודש', `<input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">`)}
+            ${isValidYM(a.asOf) ? field('יתרה בחודש זה ₪', `<input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק" onchange="editTranche(${i},'principal',+this.value)">`) : ''}
+            ${origin || a.payment > 0 ? '' : field('חודשים נותרים', `<input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">`)}
+          </div>
+        </section>
+
+        <details class="advanced-panel"${advOpen ? ' open' : ''}>
+          <summary onclick="event.preventDefault();toggleAdvanced(${t.id})">
+            <span class="advanced-title">
+              <strong>תנאי ההלוואה המקוריים</strong>
+              <span>נרשמים פעם אחת · פתח רק לתיקון</span>
+            </span>
+            <span class="advanced-summary">${advSummary}</span>
+            ${CHEVRON}
+          </summary>
+          <div class="advanced-body">
+            <div class="field-grid">
+              ${field('סכום מקורי ₪', `<input type="number" step="0.01" value="${a.origPrincipal > 0 ? a.origPrincipal : ''}" placeholder="למשל 399000" onchange="editTranche(${i},'origPrincipal',+this.value)">`)}
+              ${field('תקופה בחודשים', `<input type="number" value="${a.origMonths > 0 ? a.origMonths : ''}" placeholder="למשל 360" onchange="editTranche(${i},'origMonths',+this.value)">`)}
+              ${field('תשלום ראשון', `<input type="month" value="${isValidYM(a.startYM) ? a.startYM : ''}" onchange="editTranche(${i},'startYM',this.value)">`)}
+              ${field('יום החיוב בחודש', `<input type="number" min="1" max="31" value="${a.payDay >= 1 ? a.payDay : ''}" placeholder="למשל 10" onchange="editTranche(${i},'payDay',+this.value)">`)}
+              ${origin ? '' : field('החזר חודשי ₪', `<input type="number" step="0.01" value="${a.payment > 0 ? a.payment : ''}" placeholder="כפי שכתוב בבנק" onchange="editTranche(${i},'payment',+this.value)">`)}
+            </div>
+          </div>
+        </details>
+
         ${projectionDetail(t)}
-        <div class="tranche-foot">
-          <button class="btn btn-danger btn-sm" onclick="removeCurrentTranche(${t.id})">הסרת המסלול</button>
+
+        <div class="editor-footer">
+          <button type="button" class="danger-link" onclick="removeCurrentTranche(${t.id})">הסרת המסלול</button>
+          <button type="button" class="finish-button" onclick="toggleTranche(${t.id})">סיום עריכה</button>
         </div>
-      </div>`}
-      ${projectionWarn(t)}
+      </div>
+    </details>
+    ${projectionWarn(t)}
     </div>`;
   }).join('');
 }
