@@ -2867,6 +2867,18 @@ function accruedSinceCharge(p, rate, payDay) {
   return p * rate/100 * Math.floor((now - last)/86400000) / 365;
 }
 
+// סעיף 8(ב) לצו: הפחתה על העמלה שכבר חושבה לפי 3(3)/3(4), לפי ותק ההלוואה.
+// האחוזים והמבנה אומתו מול נוסח הצו באתר בנק ישראל — 8(ב) הוא שתי מדרגות, 20%
+// ואז 30%, והוא חל על התוצאה של בחירת החלופה ולא לפניה.
+//
+// סעיף 8(א), הלוואה משלימה, הוא ארבע מדרגות 10/20/30/40 — **לא מיושם**. אין
+// בנתונים סיווג שמאפשר לזהות הלוואה משלימה, וניחוש לטובת המשתמש מוריד עמלה
+// בשקט. מסלול משלים יקבל כאן את 8(ב), שהוא הכיוון הבטוח.
+function seniorityDiscount(ageMonths) {
+  if (ageMonths === null || ageMonths < 36) return 0;
+  return ageMonths < 60 ? 0.20 : 0.30;
+}
+
 // כמה חודשים נותרו עד תחנת שינוי הריבית, או 0 אם אין תחנה.
 function monthsToReset(t) {
   if (!isValidYM(t?.nextReset)) return 0;
@@ -2934,8 +2946,12 @@ function updatePenalty() {
     const pvA = pvFlows(a, flows);
     const ceiling = pvA - pvFlows(effAnnual(r), flows);
     const capped = c > 0 ? pvA - pvFlows(c, flows) : null;
-    const spreadFee = exempt ? 0
+    // ותק ההלוואה ידוע רק במסלול עם תנאי מקור; בלעדיו אין הפחתה ואין טענה עליה.
+    const ageMonths = t && t._origMonths ? t._paidCount : null;
+    const discount = seniorityDiscount(ageMonths);
+    const gross = exempt ? 0
       : Math.max(0, capped === null ? ceiling : Math.min(ceiling, capped));
+    const spreadFee = gross * (1 - discount);
     // בלי הריבית שבהעמדה אפשר לחשב רק את החלופה הראשונה, שהיא תקרה ולא העמלה.
     const partial = !exempt && capped === null && spreadFee > 0;
 
@@ -2944,20 +2960,16 @@ function updatePenalty() {
     // האמיתית, ואז "תקרה" הופכת להבטחה שקרית. במצב הזה לא נטענת שום טענה על גודל.
     const defaulted = !exempt && !aTyped && spreadFee > 0;
 
-    // סעיף 8 לצו מפחית את עמלת ההיוון לפי ותק ההלוואה. המדרגות לא מיושמות כאן
-    // במכוון: לא אימתתי אותן מול מקור שאפשר לבדוק, ומסמך הייחוס לא יכול לאמת
-    // אותן — ההלוואה שבו צעירה מכדי שתחול עליה הפחתה. טבלה לא מאומתת הייתה מורידה
-    // את העמלה בעשרות אחוזים בשקט, וזה הכיוון המסוכן: עמלה נמוכה מדי גורמת למחזור
-    // שלא משתלם. לכן במסלול ותיק מוצגת תקרה ונאמר שזו תקרה.
-    const ageMonths = t && t._origMonths ? t._paidCount : null;
-    const senior = !defaulted && !exempt && spreadFee > 0 && ageMonths !== null && ageMonths >= 36;
+    // ההפחתה שהוחלה מוצגת במפורש: היא מורידה מספר בעשרות אחוזים, ומשתמש צריך
+    // לראות שהיא קרתה כדי שיוכל לבדוק אותה מול הצעת הפירעון של הבנק.
+    const unknownAge = !defaulted && !exempt && spreadFee > 0 && ageMonths === null;
 
     const total = noticeFee + spreadFee;
     grandTotal += total;
 
     details += `<div style="margin-bottom:14px;"><div class="sec-title">הלוואה ${i+1} — ${(t && TYPE_LABELS[t.type])||''}</div>
       <div class="pen-row"><span>עמלת מדד ממוצע</span><span>${t && t.type==='cpi'?small('לא מחושב — מסלול צמוד'):'₪0'}</span></div>
-      <div class="pen-row"><span>עמלת היוון${exempt?' '+small('(פריים — פטור)'):defaulted?' '+small('(ריבית ברירת מחדל — לא העמלה)'):partial?' '+small('(תקרה — חסרה ממוצעת בהעמדה)'):senior?' '+small('(תקרה — הפחתת ותק לא מיושמת)'):''}</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
+      <div class="pen-row"><span>עמלת היוון${exempt?' '+small('(פריים — פטור)'):defaulted?' '+small('(ריבית ברירת מחדל — לא העמלה)'):partial?' '+small('(תקרה — חסרה ממוצעת בהעמדה)'):discount>0?' '+small(`(אחרי הפחתת ותק ${discount*100}%)`):unknownAge?' '+small('(הפחתת ותק לא נבדקה — חסרים תנאי מקור)'):''}</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
       <div class="pen-row"><span>עמלת העדר הודעה מוקדמת</span><span>₪${fmtShort(noticeFee)}</span></div>
       <div class="pen-row"><span>סה"כ הלוואה ${i+1}</span><span style="font-weight:700">₪${fmtShort(total)}</span></div>
     </div>`;
@@ -2967,7 +2979,7 @@ function updatePenalty() {
     <div class="pen-row"><span style="font-size:14px;font-weight:800">סה"כ עמלת פירעון + תפעול</span><span class="m-amber" style="font-size:18px;font-family:'Space Grotesk','Heebo',sans-serif">₪${fmtShort(grandTotal+60)}</span></div>
     <div class="tip" style="margin-top:8px;">* חיסכון אפשרי: הודעה מוקדמת 10 ימים חוסכת ₪${fmtShort(totalNoticeFee)}</div>
     <div class="tip" style="margin-top:6px;">* לחישוב אמיתי צריך שתי ריביות לכל מסלול — ממוצעת היום וממוצעת בהעמדה. בלעדיהן המספר מבוסס על ברירת מחדל ואינו העמלה, לא כלפי מעלה ולא כלפי מטה.</div>
-    <div class="tip" style="margin-top:6px;">* הפחתת הוותק שבסעיף 8 לצו אינה מיושמת. במסלול שעבר שלוש שנים העמלה כאן היא תקרה.</div>
+    <div class="tip" style="margin-top:6px;">* הפחתת הוותק שבסעיף 8(ב) לצו מוחלת — 20% מעל שלוש שנים, 30% מעל חמש. סעיף 8(א) להלוואה משלימה אינו מיושם, ולכן הלוואה כזאת תוצג כאן גבוה מדי.</div>
     <div class="tip" style="margin-top:6px;">* אומדן. הבנק מהוון לפי ימי התשלום בפועל ולפי הריבית הממוצעת שהוא מפרסם למסלול — המספר המחייב הוא זה שבדף פירוט ההלוואה שלו.</div>`;
 
   document.getElementById('penalty-detail').innerHTML = details;

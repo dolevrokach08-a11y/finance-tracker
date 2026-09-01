@@ -24,8 +24,8 @@ const grab = (a, b) => {
 };
 const src = grab('function pmt(r, n, pv)', 'function totalInterest')
           + grab('function effAnnual(nominal)', 'function renderPenaltyPage');
-const { pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge } =
-  new Function(src + '\n; return {pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge};')();
+const { pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge, seniorityDiscount } =
+  new Function(src + '\n; return {pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge, seniorityDiscount};')();
 
 let failures = 0;
 const ok = (cond, name, got = '') => {
@@ -113,5 +113,26 @@ ok(month > P * RATE / 100 * 27 / 365 && month < P * RATE / 100 * 32 / 365,
 ok(near(accruedSinceCharge(P * 2, RATE, dayAfter), month * 2, 0.01), 'it scales with the balance');
 ok(near(accruedSinceCharge(P, RATE * 2, dayAfter), month * 2, 0.01), 'and with the rate');
 ok(accruedSinceCharge(P, 0, dayAfter) === 0, 'a 0% tranche accrues nothing');
+
+// --- the seniority reduction in section 8(b), verified against the order itself ---
+// Two tiers, applied to the fee AFTER the alternative is chosen. The tranche's age is
+// only known when it has origination terms; without them nothing is deducted.
+ok(seniorityDiscount(null) === 0, 'an unknown age deducts nothing');
+ok(seniorityDiscount(0) === 0 && seniorityDiscount(35) === 0, 'under three years, nothing');
+ok(seniorityDiscount(36) === 0.2 && seniorityDiscount(59) === 0.2, 'three to five years, a fifth');
+ok(seniorityDiscount(60) === 0.3 && seniorityDiscount(400) === 0.3, 'five years and up, three tenths');
+// The boundaries are the point: an off-by-one here silently changes a fee by a fifth.
+ok(seniorityDiscount(35) !== seniorityDiscount(36), 'the first tier starts at exactly 36 months');
+ok(seniorityDiscount(59) !== seniorityDiscount(60), 'the second at exactly 60');
+
+// It scales the chosen alternative, not the gross of one of them.
+const net = capped.taken * (1 - seniorityDiscount(48));
+ok(near(net, capped.taken * 0.8), 'a four-year-old tranche pays four fifths of its fee',
+   net.toFixed(2));
+
+// 8(a), the supplementary-loan ladder, is deliberately absent: nothing in the data
+// classifies a loan as one, and guessing in the borrower's favour understates.
+ok(seniorityDiscount(12) === 0 && seniorityDiscount(24) === 0,
+   'the supplementary ladder is not applied at one or two years');
 
 process.exit(failures ? 1 : 0);
