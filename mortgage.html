@@ -2913,7 +2913,7 @@ function renderPenaltyPage() {
 function updatePenalty() {
   const marketRate = +document.getElementById('pen-market-rate').value||5.35;
   let details = '';
-  let grandTotal = 0, totalNoticeFee = 0;
+  let grandTotal = 0, totalNoticeFee = 0, anyDefaulted = false;
   const count = currentTranches.length;
   const small = s => `<span style="color:var(--text3);font-size:10px">${s}</span>`;
 
@@ -2959,6 +2959,7 @@ function updatePenalty() {
     // ריבית ממוצעת בלבד — עם ריבית ברירת מחדל שגויה היא יכולה לצאת נמוכה מהעמלה
     // האמיתית, ואז "תקרה" הופכת להבטחה שקרית. במצב הזה לא נטענת שום טענה על גודל.
     const defaulted = !exempt && !aTyped && spreadFee > 0;
+    if (defaulted) anyDefaulted = true;
 
     // ההפחתה שהוחלה מוצגת במפורש: היא מורידה מספר בעשרות אחוזים, ומשתמש צריך
     // לראות שהיא קרתה כדי שיוכל לבדוק אותה מול הצעת הפירעון של הבנק.
@@ -2976,7 +2977,11 @@ function updatePenalty() {
   }
 
   details += `<div class="divider"></div>
-    <div class="pen-row"><span style="font-size:14px;font-weight:800">סה"כ עמלת פירעון + תפעול</span><span class="m-amber" style="font-size:18px;font-family:'Space Grotesk','Heebo',sans-serif">₪${fmtShort(grandTotal+60)}</span></div>
+    ${anyDefaulted ? `<div class="rec-box warn" style="margin-bottom:10px;">
+      <div class="rec-title">המספר למטה אינו העמלה</div>
+      <div class="rec-text">מסלול אחד לפחות חושב על ריבית ברירת המחדל, כי לא הוזנה לו ריבית ממוצעת. מלא "ממוצעת היום" ו"ממוצעת בהעמדה" לכל מסלול — עד אז הסכום לא אומר כלום, לא כלפי מעלה ולא כלפי מטה.</div>
+    </div>` : ''}
+    <div class="pen-row"><span style="font-size:14px;font-weight:800">סה"כ עמלת פירעון + תפעול${anyDefaulted?' '+small('(על ריבית ברירת מחדל)'):''}</span><span class="m-amber" style="font-size:18px;font-family:'Space Grotesk','Heebo',sans-serif">₪${fmtShort(grandTotal+60)}</span></div>
     <div class="tip" style="margin-top:8px;">* חיסכון אפשרי: הודעה מוקדמת 10 ימים חוסכת ₪${fmtShort(totalNoticeFee)}</div>
     <div class="tip" style="margin-top:6px;">* לחישוב אמיתי צריך שתי ריביות לכל מסלול — ממוצעת היום וממוצעת בהעמדה. בלעדיהן המספר מבוסס על ברירת מחדל ואינו העמלה, לא כלפי מעלה ולא כלפי מטה.</div>
     <div class="tip" style="margin-top:6px;">* הפחתת הוותק שבסעיף 8(ב) לצו מוחלת — 20% מעל שלוש שנים, 30% מעל חמש. סעיף 8(א) להלוואה משלימה אינו מיושם, ולכן הלוואה כזאת תוצג כאן גבוה מדי.</div>
