@@ -278,6 +278,13 @@ body[data-product-page="mortgage"] .field {
   transition: border-color .2s, background .2s;
 }
 
+/* The penalty card's three-column row is the narrowest field layout on desktop.
+   Keep its tracks aligned, but return enough inline space for the full Hebrew
+   labels instead of clipping "יתרת קרן" behind an ellipsis. */
+body[data-product-page="mortgage"] #penalty-tranches .tranche-head + .tranche-grid .field {
+  padding-inline: 9px;
+}
+
 body[data-product-page="mortgage"] .field:focus-within {
   border-color: rgba(var(--product-accent-rgb), .32);
   background: rgba(var(--product-accent-rgb), .065);
