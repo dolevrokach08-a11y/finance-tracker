@@ -931,8 +931,8 @@ tr:hover td{background:var(--bg-elevated);}
           <div id="penalty-tranches"></div>
           <div class="divider"></div>
           <div class="field">
-            <div class="f-label">ריבית ממוצעת נוכחית בשוק <span class="tip-icon">?<span class="tip-text">הריבית הממוצעת שמפרסם בנק ישראל למשכנתאות חדשות. משמשת לחישוב עמלת פערי ריבית.</span></span></div>
-            <input type="number" id="pen-market-rate" value="4.8" step="0.05" oninput="updatePenalty()">
+            <div class="f-label">ריבית ממוצעת נוכחית בשוק <span class="tip-icon">?<span class="tip-text">מטבלת בנק ישראל, לפי אופק ההיוון של המסלול. <b>לא</b> ה"ריבית לצרכי השוואה" שבאישור הבנק — זה נתון אחר, וזו בדיוק הטעות שהקפיצה כאן את העמלה פי ארבעה. משמש כברירת מחדל למסלול שלא הוזנה לו ריבית משלו.</span></span></div>
+            <input type="number" id="pen-market-rate" value="5.35" step="0.05" oninput="updatePenalty()" aria-label="ריבית ממוצעת נוכחית בשוק, ברירת מחדל לכל המסלולים. מטבלת בנק ישראל ולא מאישור הבנק.">
           </div>
         </div>
       </div>
@@ -2821,60 +2821,145 @@ function updateRefi() {
 }
 
 // ═══════════════════════════ PAGE 5: PENALTY ═══════════════════════════
+// ── עמלת פירעון מוקדם ────────────────────────────────────────────────────────
+// צו הבנקאות (עמלת פירעון מוקדם) תשס"ב-2002 מגדיר את עמלת ההיוון כמינימום של שתי
+// חלופות, ולא כהפרש ריביות יחיד:
+//
+//   fee3 = PV(A) - PV(R)   מול הריבית החוזית של המסלול
+//   fee4 = PV(A) - PV(C)   מול הריבית הממוצעת שהייתה בתוקף בעת ההעמדה
+//   עמלה = max(0, min(fee3, fee4))
+//
+// החלופה השנייה היא זו שתופסת בפועל, ובלעדיה אין פתרון: כל ריבית שוק שמייצרת את
+// העמלה הנכונה על מסלול אחד מייצרת עמלה שגויה על השני. זה מה שחסם את הסבב הקודם.
+//
+// כל הריביות כאן שנתיות אפקטיביות, כמו בצו. הריבית החוזית נשמרת נומינלית בשאר
+// הקובץ ולכן מומרת לפני השימוש — וכך PV(R) יוצא שווה ליתרת הקרן בדיוק, והעמלה
+// מתאפסת מעצמה כשהריבית הממוצעת משתווה לריבית ההלוואה.
+function effAnnual(nominal) { return (Math.pow(1 + nominal/1200, 12) - 1) * 100; }
+function pvFlows(annualEff, flows) {
+  const q = Math.pow(1 + annualEff/100, 1/12) - 1;
+  return flows.reduce((s, [k, c]) => s + c / Math.pow(1 + q, k), 0);
+}
+
+// התזרים שמהוונים. במסלול משתנה החשיפה נגמרת בתחנת שינוי הריבית — מעבר לה הריבית
+// עוד לא הוסכמה — ולכן מהוונים עד שם ומוסיפים באותו מועד את יתרת הקרן כתשלום אחרון.
+function penaltyFlows(p, rate, months, resetIn) {
+  const pay = pmt(rate, months, p);
+  const n = (resetIn > 0 && resetIn < months) ? resetIn : months;
+  const flows = [];
+  for (let k = 1; k <= n; k++) flows.push([k, pay]);
+  if (n < months) {
+    const mr = rate/1200;
+    const bal = mr === 0 ? p - pay*n
+                         : p*Math.pow(1+mr,n) - pay*((Math.pow(1+mr,n)-1)/mr);
+    flows[n-1] = [n, pay + bal];
+  }
+  return flows;
+}
+
+// ריבית שנצברה מאז החיוב האחרון, בבסיס actual/365 — הבסיס שדפי הבנק מאשרים לאגורה.
+// עמלת אי-ההודעה נגבית על קרן + ריבית צבורה, לא על הקרן לבדה.
+// ימים שלמים, ולכן floor ולא round: ב-19:00 ביום החיוב עצמו נצברו אפס ימים, לא אחד.
+function accruedSinceCharge(p, rate, payDay) {
+  const now = new Date(), d = Math.min(Math.max(payDay || 10, 1), 28);
+  let last = new Date(now.getFullYear(), now.getMonth(), d);
+  if (last > now) last = new Date(now.getFullYear(), now.getMonth() - 1, d);
+  return p * rate/100 * Math.floor((now - last)/86400000) / 365;
+}
+
+// כמה חודשים נותרו עד תחנת שינוי הריבית, או 0 אם אין תחנה.
+function monthsToReset(t) {
+  if (!isValidYM(t?.nextReset)) return 0;
+  return Math.max(0, ymDiff(ymNow(), t.nextReset));
+}
+
 function renderPenaltyPage() {
   const el = document.getElementById('penalty-tranches');
-  el.innerHTML = currentTranches.map((t,i)=>`
+  const dflt = document.getElementById('pen-market-rate').value || '';
+  el.innerHTML = currentTranches.map((t,i)=>{
+    const reset = monthsToReset(t);
+    const horizon = reset > 0 && reset < t.months
+      ? `${reset} חודשים — עד התחנה ב-${t.nextReset}`
+      : `${t.months} חודשים — עד הסוף`;
+    return `
     <div class="tranche">
       <div class="tranche-head"><div class="rec-title">${TYPE_LABELS[t.type] || t.name}</div><span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span></div>
       <div class="tranche-grid">
-        <div class="field" style="margin:0"><div class="f-label">יתרת קרן</div><input type="number" value="${t.principal}" id="pen-p-${i}" oninput="updatePenalty()"></div>
-        <div class="field" style="margin:0"><div class="f-label">ריבית %</div><input type="number" step="0.01" value="${t.rate}" id="pen-r-${i}" oninput="updatePenalty()"></div>
-        <div class="field" style="margin:0"><div class="f-label">חודשים נותרים</div><input type="number" value="${t.months}" id="pen-m-${i}" oninput="updatePenalty()"></div>
+        <div class="field" style="margin:0"><div class="f-label">יתרת קרן</div><input type="number" value="${t.principal}" id="pen-p-${i}" oninput="updatePenalty()" aria-label="יתרת קרן של מסלול ${i+1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">ריבית %</div><input type="number" step="0.01" value="${t.rate}" id="pen-r-${i}" oninput="updatePenalty()" aria-label="ריבית שנתית באחוזים של מסלול ${i+1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">חודשים נותרים</div><input type="number" value="${t.months}" id="pen-m-${i}" oninput="updatePenalty()" aria-label="חודשים נותרים של מסלול ${i+1}"></div>
       </div>
-    </div>`).join('');
+      <div class="tranche-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+        <div class="field" style="margin:0"><div class="f-label">ממוצעת היום <span class="tip-icon">?<span class="tip-text">מטבלת בנק ישראל למסלול הזה, לפי אופק ההיוון. <b>לא</b> ה"ריבית לצרכי השוואה" שבאישור הבנק. ריק = ברירת המחדל שלמטה.</span></span></div><input type="number" step="0.0001" placeholder="${dflt}" id="pen-a-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת היום למסלול ${i+1}, מטבלת בנק ישראל לפי אופק ההיוון. לא הריבית לצרכי השוואה שבאישור הבנק."></div>
+        <div class="field" style="margin:0"><div class="f-label">ממוצעת בהעמדה <span class="tip-icon">?<span class="tip-text">הריבית הממוצעת שהייתה בתוקף כשההלוואה הועמדה — ובמסלול משתנה, בשינוי הריבית האחרון. בלעדיה אפשר לחשב רק תקרה, לא את העמלה.</span></span></div><input type="number" step="0.0001" id="pen-c-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת בעת העמדת מסלול ${i+1}, ובמסלול משתנה בשינוי הריבית האחרון. בלעדיה מוצגת תקרה בלבד."></div>
+      </div>
+      <div class="proj-note">אופק ההיוון: ${horizon}</div>
+    </div>`;}).join('');
   updatePenalty();
 }
 
 function updatePenalty() {
-  const marketRate = +document.getElementById('pen-market-rate').value||4.8;
+  const marketRate = +document.getElementById('pen-market-rate').value||5.35;
   let details = '';
-  let grandTotal = 0;
+  let grandTotal = 0, totalNoticeFee = 0;
   const count = currentTranches.length;
+  const small = s => `<span style="color:var(--text3);font-size:10px">${s}</span>`;
 
   for(let i=0; i<count; i++){
     const pEl = document.getElementById(`pen-p-${i}`);
     const rEl = document.getElementById(`pen-r-${i}`);
     const mEl = document.getElementById(`pen-m-${i}`);
+    const aEl = document.getElementById(`pen-a-${i}`);
+    const cEl = document.getElementById(`pen-c-${i}`);
     if(!pEl) continue;
+    if(aEl) aEl.placeholder = marketRate;
     const p = +pEl.value||0;
     const r = +rEl.value||0;
     const m = +mEl.value||0;
-    if(!p) continue;
+    const a = +(aEl && aEl.value) || marketRate;
+    const c = +(cEl && cEl.value) || 0;
+    if(!p || !m) continue;
 
-    const adminFee = 60;
-    const noticeFee = p * 0.001;
-    const spreadPct = Math.max(0, r - marketRate);
-    const spreadFee = p * spreadPct/100 * m/12 * 0.5;
+    const t = currentTranches[i];
+    const accrued = accruedSinceCharge(p, r, t && t.payDay);
+    const noticeFee = (p + accrued) * 0.001;
+    totalNoticeFee += noticeFee;
+
+    // מסלול פריים פטור מעמלת היוון.
+    const exempt = t && t.type === 'prime';
+    const flows = penaltyFlows(p, r, m, monthsToReset(t));
+    const pvA = pvFlows(a, flows);
+    const ceiling = pvA - pvFlows(effAnnual(r), flows);
+    const capped = c > 0 ? pvA - pvFlows(c, flows) : null;
+    const spreadFee = exempt ? 0
+      : Math.max(0, capped === null ? ceiling : Math.min(ceiling, capped));
+    // בלי הריבית שבהעמדה אפשר לחשב רק את החלופה הראשונה, שהיא תקרה ולא העמלה.
+    const partial = !exempt && capped === null && spreadFee > 0;
+
+    // סעיף 8 לצו מפחית את עמלת ההיוון לפי ותק ההלוואה. המדרגות לא מיושמות כאן
+    // במכוון: לא אימתתי אותן מול מקור שאפשר לבדוק, ומסמך הייחוס לא יכול לאמת
+    // אותן — ההלוואה שבו צעירה מכדי שתחול עליה הפחתה. טבלה לא מאומתת הייתה מורידה
+    // את העמלה בעשרות אחוזים בשקט, וזה הכיוון המסוכן: עמלה נמוכה מדי גורמת למחזור
+    // שלא משתלם. לכן במסלול ותיק מוצגת תקרה ונאמר שזו תקרה.
+    const ageMonths = t && t._origMonths ? t._paidCount : null;
+    const senior = !exempt && spreadFee > 0 && ageMonths !== null && ageMonths >= 36;
+
     const total = noticeFee + spreadFee;
     grandTotal += total;
 
-    details += `<div style="margin-bottom:14px;"><div class="sec-title">הלוואה ${i+1} — ${TYPE_LABELS[currentTranches[i]?.type]||''}</div>
-      <div class="pen-row"><span>עמלת מדד ממוצע</span><span>₪0</span></div>
-      <div class="pen-row"><span>עמלת פערי ריבית</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
+    details += `<div style="margin-bottom:14px;"><div class="sec-title">הלוואה ${i+1} — ${(t && TYPE_LABELS[t.type])||''}</div>
+      <div class="pen-row"><span>עמלת מדד ממוצע</span><span>${t && t.type==='cpi'?small('לא מחושב — מסלול צמוד'):'₪0'}</span></div>
+      <div class="pen-row"><span>עמלת היוון${exempt?' '+small('(פריים — פטור)'):partial?' '+small('(תקרה — חסרה ממוצעת בהעמדה)'):senior?' '+small('(תקרה — הפחתת ותק לא מיושמת)'):''}</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
       <div class="pen-row"><span>עמלת העדר הודעה מוקדמת</span><span>₪${fmtShort(noticeFee)}</span></div>
       <div class="pen-row"><span>סה"כ הלוואה ${i+1}</span><span style="font-weight:700">₪${fmtShort(total)}</span></div>
     </div>`;
   }
 
-  let totalNoticeFee = 0;
-  for(let i=0;i<count;i++){
-    const pEl = document.getElementById(`pen-p-${i}`);
-    if(pEl) totalNoticeFee += (+pEl.value||0)*0.001;
-  }
-
   details += `<div class="divider"></div>
     <div class="pen-row"><span style="font-size:14px;font-weight:800">סה"כ עמלת פירעון + תפעול</span><span class="m-amber" style="font-size:18px;font-family:'Space Grotesk','Heebo',sans-serif">₪${fmtShort(grandTotal+60)}</span></div>
-    <div class="tip" style="margin-top:8px;">* חיסכון אפשרי: הודעה מוקדמת 10 ימים חוסכת ₪${fmtShort(totalNoticeFee)}</div>`;
+    <div class="tip" style="margin-top:8px;">* חיסכון אפשרי: הודעה מוקדמת 10 ימים חוסכת ₪${fmtShort(totalNoticeFee)}</div>
+    <div class="tip" style="margin-top:6px;">* הפחתת הוותק שבסעיף 8 לצו אינה מיושמת. במסלול שעבר שלוש שנים העמלה כאן היא תקרה.</div>
+    <div class="tip" style="margin-top:6px;">* אומדן. הבנק מהוון לפי ימי התשלום בפועל ולפי הריבית הממוצעת שהוא מפרסם למסלול — המספר המחייב הוא זה שבדף פירוט ההלוואה שלו.</div>`;
 
   document.getElementById('penalty-detail').innerHTML = details;
 }
