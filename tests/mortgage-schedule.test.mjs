@@ -58,12 +58,21 @@ ok(Math.abs(y2.principal - expected(24)) > 100,
 ok(projectTranche(loan, '2026-09', 3)._paidCount === 25, 'before the 10th, September has not paid');
 ok(projectTranche(loan, '2026-09', 10)._paidCount === 26, 'on the 10th it has');
 
-// --- a pinned balance keeps its own meaning: it is dated to the month it was true ---
-// Here the roll must apply exactly the payments after that month, with no extra one.
-const pinned = { ...loan, principal: 90000, asOf: '2026-06' };
-ok(projectTranche(pinned, '2026-09', 31)._advanced === 3,
-   'a pinned balance rolls one payment per month after it, not one more',
-   String(projectTranche(pinned, '2026-09', 31)._advanced));
+// --- origination is the single source once it is present ---
+// A balance left on the record from the older data model must not override it. The
+// figure shown on a bank's website is principal plus interest accrued since the charge
+// date, so honouring it here made the balance wrong by however many days had passed.
+const strayBalance = { ...loan, principal: 90000, asOf: '2026-06' };
+ok(Math.abs(projectTranche(strayBalance, '2026-08', 31).principal - expected(25)) <= 1,
+   'origination beats a stray balance on the same tranche',
+   String(projectTranche(strayBalance, '2026-08', 31).principal));
+
+// --- without origination, a typed balance is still the anchor, dated to its month ---
+// The roll then applies exactly the payments after that month, with no extra one.
+const typed = { id: 2, type: 'fix', rate: 6, principal: 90000, months: 95, asOf: '2026-06' };
+ok(projectTranche(typed, '2026-09', 31)._advanced === 3,
+   'a typed balance rolls one payment per month after it, not one more',
+   String(projectTranche(typed, '2026-09', 31)._advanced));
 
 // --- the payment itself is unaffected by any of this ---
 ok(Math.abs(livePayment(loan) - payment) < 0.01, 'payment comes from the loan terms');
