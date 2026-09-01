@@ -2916,7 +2916,10 @@ function updatePenalty() {
     const p = +pEl.value||0;
     const r = +rEl.value||0;
     const m = +mEl.value||0;
-    const a = +(aEl && aEl.value) || marketRate;
+    // האם הריבית הממוצעת הוזנה למסלול, או שזו ברירת המחדל הגלובלית. ההבחנה קובעת
+    // מה מותר לומר על התוצאה, ראה למטה.
+    const aTyped = !!(aEl && aEl.value);
+    const a = aTyped ? +aEl.value : marketRate;
     const c = +(cEl && cEl.value) || 0;
     if(!p || !m) continue;
 
@@ -2936,20 +2939,25 @@ function updatePenalty() {
     // בלי הריבית שבהעמדה אפשר לחשב רק את החלופה הראשונה, שהיא תקרה ולא העמלה.
     const partial = !exempt && capped === null && spreadFee > 0;
 
+    // "תקרה" מותר לומר רק כשהריבית הממוצעת אמיתית. `fee3` חוסמת את `fee4` באותה
+    // ריבית ממוצעת בלבד — עם ריבית ברירת מחדל שגויה היא יכולה לצאת נמוכה מהעמלה
+    // האמיתית, ואז "תקרה" הופכת להבטחה שקרית. במצב הזה לא נטענת שום טענה על גודל.
+    const defaulted = !exempt && !aTyped && spreadFee > 0;
+
     // סעיף 8 לצו מפחית את עמלת ההיוון לפי ותק ההלוואה. המדרגות לא מיושמות כאן
     // במכוון: לא אימתתי אותן מול מקור שאפשר לבדוק, ומסמך הייחוס לא יכול לאמת
     // אותן — ההלוואה שבו צעירה מכדי שתחול עליה הפחתה. טבלה לא מאומתת הייתה מורידה
     // את העמלה בעשרות אחוזים בשקט, וזה הכיוון המסוכן: עמלה נמוכה מדי גורמת למחזור
     // שלא משתלם. לכן במסלול ותיק מוצגת תקרה ונאמר שזו תקרה.
     const ageMonths = t && t._origMonths ? t._paidCount : null;
-    const senior = !exempt && spreadFee > 0 && ageMonths !== null && ageMonths >= 36;
+    const senior = !defaulted && !exempt && spreadFee > 0 && ageMonths !== null && ageMonths >= 36;
 
     const total = noticeFee + spreadFee;
     grandTotal += total;
 
     details += `<div style="margin-bottom:14px;"><div class="sec-title">הלוואה ${i+1} — ${(t && TYPE_LABELS[t.type])||''}</div>
       <div class="pen-row"><span>עמלת מדד ממוצע</span><span>${t && t.type==='cpi'?small('לא מחושב — מסלול צמוד'):'₪0'}</span></div>
-      <div class="pen-row"><span>עמלת היוון${exempt?' '+small('(פריים — פטור)'):partial?' '+small('(תקרה — חסרה ממוצעת בהעמדה)'):senior?' '+small('(תקרה — הפחתת ותק לא מיושמת)'):''}</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
+      <div class="pen-row"><span>עמלת היוון${exempt?' '+small('(פריים — פטור)'):defaulted?' '+small('(ריבית ברירת מחדל — לא העמלה)'):partial?' '+small('(תקרה — חסרה ממוצעת בהעמדה)'):senior?' '+small('(תקרה — הפחתת ותק לא מיושמת)'):''}</span><span${spreadFee>0?' style="color:var(--amber)"':''}>₪${fmtShort(spreadFee)}</span></div>
       <div class="pen-row"><span>עמלת העדר הודעה מוקדמת</span><span>₪${fmtShort(noticeFee)}</span></div>
       <div class="pen-row"><span>סה"כ הלוואה ${i+1}</span><span style="font-weight:700">₪${fmtShort(total)}</span></div>
     </div>`;
@@ -2958,6 +2966,7 @@ function updatePenalty() {
   details += `<div class="divider"></div>
     <div class="pen-row"><span style="font-size:14px;font-weight:800">סה"כ עמלת פירעון + תפעול</span><span class="m-amber" style="font-size:18px;font-family:'Space Grotesk','Heebo',sans-serif">₪${fmtShort(grandTotal+60)}</span></div>
     <div class="tip" style="margin-top:8px;">* חיסכון אפשרי: הודעה מוקדמת 10 ימים חוסכת ₪${fmtShort(totalNoticeFee)}</div>
+    <div class="tip" style="margin-top:6px;">* לחישוב אמיתי צריך שתי ריביות לכל מסלול — ממוצעת היום וממוצעת בהעמדה. בלעדיהן המספר מבוסס על ברירת מחדל ואינו העמלה, לא כלפי מעלה ולא כלפי מטה.</div>
     <div class="tip" style="margin-top:6px;">* הפחתת הוותק שבסעיף 8 לצו אינה מיושמת. במסלול שעבר שלוש שנים העמלה כאן היא תקרה.</div>
     <div class="tip" style="margin-top:6px;">* אומדן. הבנק מהוון לפי ימי התשלום בפועל ולפי הריבית הממוצעת שהוא מפרסם למסלול — המספר המחייב הוא זה שבדף פירוט ההלוואה שלו.</div>`;
 
