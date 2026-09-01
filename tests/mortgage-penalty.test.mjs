@@ -1,11 +1,19 @@
-// Pins the early-repayment fee to a discounted calculation.
+// Pins the early-repayment fee to the two-alternative rule in the 2002 order.
 //
-// The fee used to be `principal × (rate − market) × years × 0.5`, which does not
-// discount at all. On a 28-year tranche that overstates the statutory היוון fee by
-// several times over: the instalments being compared are decades away, and the ×0.5
-// fudge for the declining balance comes nowhere near paying for that.
+// The fee is not one interest-gap calculation. It is the SMALLER of two:
 //
-// The figures here are invented; they are round enough to check by hand.
+//   fee3 = PV(A) - PV(R)   against the tranche's own contract rate
+//   fee4 = PV(A) - PV(C)   against the average rate in force when it was taken out
+//
+// Only fee3 was implemented at first, and no market rate exists that makes fee3 land
+// on the bank's figure for two tranches of one mortgage at once — the second
+// alternative is what binds in practice. A fee that quietly drops the cap comes out
+// roughly double, so the cap is what these tests mostly guard.
+//
+// Rates here are effective annual, as the order has them; the contract rate is stored
+// nominal elsewhere in the file and converted by effAnnual before use.
+//
+// The figures are invented. They are round enough to check by hand.
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../mortgage.html', import.meta.url), 'utf8');
@@ -14,54 +22,96 @@ const grab = (a, b) => {
   if (s < 0 || e < 0) throw new Error(`marker not found: ${a}`);
   return html.slice(s, e);
 };
-const { pmt, pvAnnuity } =
-  new Function(grab('function pmt(r, n, pv)', 'function totalInterest') +
-               '\n; return {pmt, pvAnnuity};')();
+const src = grab('function pmt(r, n, pv)', 'function totalInterest')
+          + grab('function effAnnual(nominal)', 'function renderPenaltyPage');
+const { pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge } =
+  new Function(src + '\n; return {pmt, effAnnual, pvFlows, penaltyFlows, accruedSinceCharge};')();
 
 let failures = 0;
 const ok = (cond, name, got = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${cond ? '' : `  got: ${got}`}`);
   if (!cond) failures++;
 };
+const near = (a, b, tol = 0.01) => Math.abs(a - b) <= tol;
 
-// What updatePenalty now does for one tranche.
-const fee = (p, rate, months, market) =>
-  Math.max(0, pvAnnuity(market, months, pmt(rate, months, p)) - p);
-// What it used to do.
-const oldFee = (p, rate, months, market) =>
-  p * Math.max(0, rate - market) / 100 * months / 12 * 0.5;
+// What updatePenalty computes for one tranche.
+const fee = (p, rate, months, A, C, resetIn = 0) => {
+  const flows = penaltyFlows(p, rate, months, resetIn);
+  const pvA = pvFlows(A, flows);
+  const fee3 = pvA - pvFlows(effAnnual(rate), flows);
+  const fee4 = C > 0 ? pvA - pvFlows(C, flows) : null;
+  return { fee3, fee4, taken: Math.max(0, fee4 === null ? fee3 : Math.min(fee3, fee4)) };
+};
 
 const P = 400000, RATE = 5.5, N = 336;
 
-// --- the invariant the old formula could not have ---
-// pvAnnuity is the inverse of pmt, so a market rate equal to the loan's own rate
-// discounts the instalments back to exactly the principal: no gap, no fee.
-ok(Math.abs(fee(P, RATE, N, RATE)) < 0.01, 'no fee when the market sits at the loan rate',
-   String(fee(P, RATE, N, RATE)));
-ok(fee(P, RATE, N, RATE + 1) === 0, 'no fee when the market has risen above it');
+// --- the convention that makes the whole thing hang together ---
+// A nominal 5.5% is an effective 5.6408%. Discounting the instalments at that rate
+// returns exactly the principal, so an average rate equal to the loan's own rate
+// produces exactly zero rather than a rounding artefact.
+ok(near(effAnnual(5.5), 5.640786, 0.0001), 'nominal 5.5% is effective 5.6408%',
+   effAnnual(5.5).toFixed(6));
+ok(near(pvFlows(effAnnual(RATE), penaltyFlows(P, RATE, N, 0)), P, 0.01),
+   'discounting a loan at its own rate returns the principal',
+   pvFlows(effAnnual(RATE), penaltyFlows(P, RATE, N, 0)).toFixed(2));
+ok(fee(P, RATE, N, effAnnual(RATE), 0).taken === 0, 'no fee when the average sits at the loan rate');
+ok(fee(P, RATE, N, 7, 0).taken === 0, 'no fee when the average has risen above it');
 
-// --- discounting always costs the old formula something, and more the longer the term ---
-// The old ×0.5 fudge was a fair approximation over five years and drifted well wide of
-// the mark over twenty-eight, always in the direction of overcharging.
-const market = 4.5;
-const ratio = n => fee(P, RATE, n, market) / oldFee(P, RATE, n, market);
-ok(ratio(N) < 1, 'the discounted fee is below the linear one', ratio(N).toFixed(3));
-ok(ratio(N) < ratio(60), 'and further below it the longer the remaining term',
-   `${ratio(N).toFixed(3)} vs ${ratio(60).toFixed(3)}`);
+// --- the cap is what binds, and it is the point of this round ---
+// A loan taken out when the average was 5.2%, looked at when the average is 4.4%.
+const capped = fee(P, RATE, N, 4.4, 5.2);
+ok(capped.fee4 < capped.fee3, 'the origination alternative is the smaller one',
+   `${capped.fee4.toFixed(0)} vs ${capped.fee3.toFixed(0)}`);
+ok(near(capped.taken, capped.fee4), 'and it is the one charged');
+ok(capped.fee3 > capped.fee4 * 1.4,
+   'dropping the cap would overstate the fee by nearly half again',
+   `${capped.fee3.toFixed(0)} vs ${capped.fee4.toFixed(0)}`);
 
-// The fee is the present value of the instalment stream at the market rate, less
-// what is owed — checkable independently of the helper being tested.
-const i = market / 1200, pay = pmt(RATE, N, P);
-const byHand = pay * (1 - Math.pow(1 + i, -N)) / i - P;
-ok(Math.abs(fee(P, RATE, N, market) - byHand) < 0.01, 'fee is PV(instalments) − principal',
-   String(fee(P, RATE, N, market)));
+// The cap can also fall away, but only one way round: fee3 is the smaller of the two
+// exactly when the average AT ORIGINATION was above the rate this borrower actually
+// got — someone who signed a better-than-average deal is compared to their contract.
+const uncapped = fee(P, RATE, N, 4.4, 6.5);
+ok(near(uncapped.taken, uncapped.fee3), 'the contract alternative wins when it is smaller',
+   `${uncapped.fee3.toFixed(0)} vs ${uncapped.fee4.toFixed(0)}`);
+
+// A rise since origination cannot produce a fee, whatever the contract rate says.
+ok(fee(P, RATE, N, 5.9, 4.9).taken === 0, 'no fee when the average rose since origination');
+
+// --- a variable tranche is discounted only to its next reset ---
+const RESET = 34;
+const flows = penaltyFlows(P, RATE, N, RESET);
+ok(flows.length === RESET, 'the cashflow stops at the reset', String(flows.length));
+const pay = pmt(RATE, N, P), mr = RATE / 1200;
+const balloon = P * Math.pow(1 + mr, RESET) - pay * ((Math.pow(1 + mr, RESET) - 1) / mr);
+ok(near(flows[RESET - 1][1], pay + balloon, 0.01),
+   'and carries the balance still owed there as a final payment',
+   String(flows[RESET - 1][1]));
+ok(fee(P, RATE, N, 4.4, 5.2, RESET).taken < capped.taken,
+   'a reset in three years costs less than exposure to the full term',
+   `${fee(P, RATE, N, 4.4, 5.2, RESET).taken.toFixed(0)} vs ${capped.taken.toFixed(0)}`);
+// A reset beyond the end of the loan is not a reset.
+ok(penaltyFlows(P, RATE, N, N + 12).length === N, 'a reset past the end is ignored');
 
 // --- it still moves the right way ---
-ok(fee(P, RATE, N, 4.0) > fee(P, RATE, N, 5.0), 'a wider gap costs more');
-ok(fee(P, RATE, 60, market) < fee(P, RATE, N, market), 'a shorter remaining term costs less');
-ok(fee(P / 2, RATE, N, market) < fee(P, RATE, N, market), 'a smaller balance costs less');
+ok(fee(P, RATE, N, 4.0, 5.2).taken > fee(P, RATE, N, 5.0, 5.2).taken, 'a wider gap costs more');
+ok(fee(P, RATE, 60, 4.4, 5.2).taken < capped.taken, 'a shorter remaining term costs less');
+ok(fee(P / 2, RATE, N, 4.4, 5.2).taken < capped.taken, 'a smaller balance costs less');
+ok(fee(3000, 0, 38, 4.4, 5.2).taken === 0, 'a 0% tranche carries no fee at all');
 
-// --- a 0% tranche can never carry an interest-differential fee ---
-ok(fee(3000, 0, 38, market) === 0, 'a 0% tranche is free of the differential fee');
+// --- accrued interest, on the actual/365 basis the bank's own statements confirm ---
+// The notice fee is a tenth of a percent of principal PLUS this, not of principal alone.
+// Anchored to today's date so the test does not need to stub the clock.
+const today = new Date().getDate();
+if (today <= 28) {
+  ok(accruedSinceCharge(P, RATE, today) === 0, 'nothing has accrued on the charge day itself',
+     String(accruedSinceCharge(P, RATE, today)));
+}
+const dayAfter = today >= 28 ? 1 : today + 1;   // charge day just missed: a full month accrued
+const month = accruedSinceCharge(P, RATE, dayAfter);
+ok(month > P * RATE / 100 * 27 / 365 && month < P * RATE / 100 * 32 / 365,
+   'a whole month back is about a month of interest', month.toFixed(2));
+ok(near(accruedSinceCharge(P * 2, RATE, dayAfter), month * 2, 0.01), 'it scales with the balance');
+ok(near(accruedSinceCharge(P, RATE * 2, dayAfter), month * 2, 0.01), 'and with the rate');
+ok(accruedSinceCharge(P, 0, dayAfter) === 0, 'a 0% tranche accrues nothing');
 
 process.exit(failures ? 1 : 0);
