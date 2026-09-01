@@ -1465,9 +1465,16 @@ function effectiveAnchor(a) {
     ? { ...a, principal: a.origPrincipal, months: a.origMonths,
         asOf: ymAdd(a.startYM, -1), _fromOrigin: true }
     : null;
-  const pinned = a.principal > 0 && isValidYM(a.asOf) ? { ...a, _fromOrigin: false } : null;
-  if (origin && pinned) return ymDiff(origin.asOf, pinned.asOf) > 0 ? pinned : origin;
-  return pinned || origin || a;
+  // A tranche without origination still anchors on a typed balance and its month —
+  // that is the older data model and it stays. What is gone is letting such a balance
+  // OVERRIDE origination. It was an escape hatch for drift the model turns out not to
+  // have, and it was a trap: the figure on the bank's website is principal PLUS
+  // interest accrued since the charge date, so copying it in made the balance wrong by
+  // however many days had passed. If a real event ever knocks the loan off its
+  // schedule — a partial early repayment — the honest fix is to model that event, not
+  // to paper over it with a balance.
+  const anchored = a.principal > 0 && isValidYM(a.asOf) ? { ...a, _fromOrigin: false } : null;
+  return origin || anchored || a;
 }
 
 // Rolls one tranche from its anchor month to `toYM` along the Spitzer schedule the
@@ -1544,14 +1551,9 @@ function withOriginSummary(t, input, toYM) {
   t._origMonths = input.origMonths;
   t._paidSoFar = Math.round(paid * payment);
   t._leftToPay = Math.round((t.months || 0) * payment);
-  // With a statement balance pinned as well, the two disagree by however far the real
-  // loan has drifted from its schedule. That gap is worth showing rather than hiding:
-  // it is the part the model cannot know.
-  if (!t._fromOrigin) {
-    const modelled = projectTranche(
-      { ...input, principal: undefined, asOf: undefined, payment: undefined }, toYM, 31);
-    if (!modelled._noAnchor) t._origGap = Math.round(t.principal - modelled.principal);
-  }
+  // No model-versus-pinned comparison any more: with origination present it IS the
+  // model, so there is nothing to disagree with. This also removes a recursive
+  // re-projection that ran on every render of every tranche.
   return t;
 }
 function projectAll(anchors, toYM, day) {
@@ -2103,6 +2105,14 @@ window.editTranche = editTranche;
 // balance that looks hand-entered is worse than one that admits what it is.
 // Anything the user has to act on. Always rendered, open or collapsed — a warning
 // you have to expand a card to discover is not a warning.
+// The month to show the user when saying how far the roll has come. For an
+// origination-driven tranche the internal anchor sits one month before the first
+// payment, which is a date nobody entered and would read as wrong next to the field
+// they filled in.
+function anchorLabel(t) {
+  return isValidYM(t.startYM) && t.origPrincipal > 0 ? t.startYM : t.asOf;
+}
+
 function projectionWarn(t) {
   if (t._noAnchor) return `<div class="proj-note proj-warn">⚠ אין תאריך עוגן — קבע "נכון לחודש" כדי שהיתרה תתעדכן לבד</div>`;
   if (t._needsRate) return `<div class="proj-note proj-warn">⚠ עדכון ריבית ב-${t.nextReset} — הזן את הריבית החדשה כדי להמשיך. היתרה מוצגת נכון ל-${t._projectedTo}</div>`;
@@ -2118,7 +2128,7 @@ function projectionWarn(t) {
 function projectionDetail(t) {
   if (t._noAnchor) return '';
   const bits = [];
-  bits.push(t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}` : `נכון ל-${t.asOf}`);
+  bits.push(t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מ-${anchorLabel(t)}` : `נכון ל-${anchorLabel(t)}`);
   if (t._noIndexation) bits.push('ללא הצמדה למדד');
   if (t._origMonths) bits.push(`שולם עד היום ₪${fmtShort(t._paidSoFar)} · נותר ₪${fmtShort(t._leftToPay)}`);
   // Where the payment came from. These are alternatives to each other; the charge
@@ -2128,9 +2138,6 @@ function projectionDetail(t) {
   else if (t._paymentStale) bits.push('החזר מחושב מחדש אחרי עדכון הריבית');
   else bits.push('החזר מחושב');
   if (t.payDay >= 1) bits.push(`חיוב ב-${t.payDay} לחודש`);
-  if (typeof t._origGap === 'number' && Math.abs(t._origGap) >= 1) {
-    bits.push(`יתרה מהבנק, ${t._origGap > 0 ? 'גבוהה' : 'נמוכה'} ב-₪${fmtShort(Math.abs(t._origGap))} מהלוח`);
-  }
   return `<div class="proj-note">${bits.join(' · ')}</div>`;
 }
 // Which tranche is open for editing, and whether its origination panel is open with it.
@@ -2216,7 +2223,7 @@ function renderCurrentTranches() {
       <div class="editor">
         <div class="editor-topline">
           <p class="section-kicker">מצב המסלול היום</p>
-          <span class="sync-state">${t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מאז ${t.asOf}` : t._noAnchor ? 'ממתין לתאריך עוגן' : `נכון ל-${t.asOf}`}</span>
+          <span class="sync-state">${t._advanced > 0 ? `עודכן אוטומטית · ${t._advanced} תשלומים מ-${anchorLabel(t)}` : t._noAnchor ? 'ממתין לתאריך עוגן' : `נכון ל-${anchorLabel(t)}`}</span>
         </div>
 
         <section class="live-readout" aria-label="נתוני המסלול הנוכחיים">
@@ -2234,8 +2241,7 @@ function renderCurrentTranches() {
             ${field('סוג המסלול', `<select onchange="editTranche(${i},'type',this.value)">${Object.entries(TYPE_LABELS).map(([k,v])=>`<option value="${k}"${t.type===k?' selected':''}>${v}</option>`).join('')}</select>`)}
             ${field('ריבית %', `<input type="number" step="0.01" value="${t.rate}" onchange="editTranche(${i},'rate',+this.value)">`)}
             ${isVar ? field('עדכון הריבית הבא', `<input type="month" value="${isValidYM(a.nextReset) ? a.nextReset : ''}" onchange="editTranche(${i},'nextReset',this.value)">`) : ''}
-            ${field(origin ? 'חודש עדכון מהבנק' : 'נכון לחודש', `<input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">`)}
-            ${isValidYM(a.asOf) ? field('יתרה בחודש זה ₪', `<input type="number" step="0.01" value="${a.principal > 0 ? a.principal : ''}" placeholder="מדף הבנק" onchange="editTranche(${i},'principal',+this.value)">`) : ''}
+            ${origin ? '' : field('נכון לחודש', `<input type="month" value="${isValidYM(a.asOf) ? a.asOf : ''}" onchange="editTranche(${i},'asOf',this.value)">`)}
             ${origin || a.payment > 0 ? '' : field('חודשים נותרים', `<input type="number" value="${t.months}" onchange="editTranche(${i},'months',+this.value)">`)}
           </div>
         </section>
