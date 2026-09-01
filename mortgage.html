@@ -1455,8 +1455,15 @@ function liveMonths(a) {
 // one, wins over the model for the months after it: it is measured rather than
 // predicted. The payment still comes from origination either way.
 function effectiveAnchor(a) {
+  // startYM is the month of the FIRST payment, so origPrincipal is the balance as it
+  // stood *before* that payment — i.e. as of the month before it. Anchoring on startYM
+  // itself lost a payment: a loan whose first instalment was 2024-08, seen in 2026-08,
+  // has made 25 payments, while ymDiff('2024-08','2026-08') counts 24. The whole roll
+  // and the paid/remaining figures ran one instalment behind, which on this mortgage
+  // read as a balance ~₪800 too high across the tranches.
   const origin = hasOrigin(a)
-    ? { ...a, principal: a.origPrincipal, months: a.origMonths, asOf: a.startYM, _fromOrigin: true }
+    ? { ...a, principal: a.origPrincipal, months: a.origMonths,
+        asOf: ymAdd(a.startYM, -1), _fromOrigin: true }
     : null;
   const pinned = a.principal > 0 && isValidYM(a.asOf) ? { ...a, _fromOrigin: false } : null;
   if (origin && pinned) return ymDiff(origin.asOf, pinned.asOf) > 0 ? pinned : origin;
@@ -1531,7 +1538,8 @@ function projectTranche(input, toYM, day) {
 function withOriginSummary(t, input, toYM) {
   if (!hasOrigin(input)) return t;
   const payment = livePayment(input);
-  const paid = Math.max(0, Math.min(input.origMonths, ymDiff(input.startYM, toYM)));
+  // Counted from the month before the first payment, for the same reason as above.
+  const paid = Math.max(0, Math.min(input.origMonths, ymDiff(ymAdd(input.startYM, -1), toYM)));
   t._paidCount = paid;
   t._origMonths = input.origMonths;
   t._paidSoFar = Math.round(paid * payment);
