@@ -67,35 +67,24 @@ ok(boiRowOn(dayBefore).from < mid.from, 'the day before a publication still uses
    boiRowOn(dayBefore).from);
 void oldest;
 
-// --- the date reading, which is where the generator actually broke ---
-// LibreOffice writes dates in the locale it happens to be running under. The first run of
-// this on a GitHub runner exported 08/13/2026 where this machine exports 13/08/2026, and
-// the generator read the American form as day-first: a newest publication of "2026-21-04"
-// and the whole table resorted around it. The order is now inferred from the column, so
-// both readings have to come out right here.
-const tool = readFileSync(new URL('../tools/fetch-boi-rates.mjs', import.meta.url), 'utf8');
-const dates = new Function(
-  tool.slice(tool.indexOf('const DATE_RE'), tool.indexOf('function parse(csvPath)')) +
-  '\n; return { dateOrder, toISO };')();
-
-const dmy = ['13/08/2026', '12/07/2026', '17/06/2024'];
-const mdy = ['08/13/2026', '07/12/2026', '06/17/2024'];
-ok(dates.dateOrder(dmy) === 'dmy', 'a day above twelve marks the European form', dates.dateOrder(dmy));
-ok(dates.dateOrder(mdy) === 'mdy', 'and in second place it marks the American one', dates.dateOrder(mdy));
-ok(dates.dateOrder(['2026-08-13']) === 'ymd', 'an ISO export is recognised as itself');
-ok(dates.toISO('13/08/2026', 'dmy') === '2026-08-13', 'the European form reads correctly');
-ok(dates.toISO('08/13/2026', 'mdy') === '2026-08-13', 'and so does the American one');
-// The bug in one line: read the American form as European and you get a thirteenth month.
-ok(dates.toISO('08/13/2026', 'dmy') === null, 'a nonexistent month is rejected, not emitted');
-
-// Ambiguity has to be an error rather than a coin flip — silently guessing wrong reorders
-// every row and picks the wrong rate for every loan.
-let threw = false;
-try { dates.dateOrder(['01/02/2026', '03/04/2026']); } catch { threw = true; }
-ok(threw, 'a column with nothing above twelve refuses to guess');
-threw = false;
-try { dates.dateOrder(['13/08/2026', '08/13/2026']); } catch { threw = true; }
-ok(threw, 'a column that reads both ways refuses too');
+// --- reading the workbook, which is where the generator actually broke ---
+// The .xls used to be converted through LibreOffice, and that meant reading back what a
+// spreadsheet chose to display: dates in the machine's locale, which came out day-first
+// here and month-first on a runner and produced a publication dated "2026-21-04". The file
+// is now read directly, so a date is a stored serial and cannot be reinterpreted.
+const { serialToISO } = await import('../tools/lib/xls-cells.mjs');
+ok(serialToISO(46247) === '2026-08-13', 'a serial resolves to its date', serialToISO(46247));
+ok(serialToISO(45460) === '2024-06-17', 'and so does one from the origination window', serialToISO(45460));
+// The spreadsheet epoch counts a 29th of February 1900 that never happened. Using an
+// origin of 1899-12-30 absorbs it from serial 61 onward, which is every date after that
+// phantom day and therefore every date this file will ever hold — the series begins in
+// 2013, around serial 41000. Below 61 the origin is off by one, deliberately untreated.
+ok(serialToISO(61) === '1900-03-01', 'the first of March 1900, just past the phantom day',
+   serialToISO(61));
+ok(serialToISO(41000) === '2012-04-01', 'a serial from before the series starts', serialToISO(41000));
+ok(serialToISO(0) === null && serialToISO(-5) === null && serialToISO(NaN) === null,
+   'nothing that is not a date resolves to one');
+ok(serialToISO(46247, true) !== serialToISO(46247, false), 'the 1904 epoch is a different date');
 
 // --- and the generated file must survive the trip ---
 ok(table.rows.every(r => !Number.isNaN(Date.parse(r.from))), 'every date in the file is a real one');

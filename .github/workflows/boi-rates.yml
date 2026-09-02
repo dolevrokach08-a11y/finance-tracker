@@ -1,10 +1,12 @@
 name: Bank of Israel Average Rates
 
-# Scheduled only after a manual run proved the whole path from a runner. That caution
-# earned its keep twice: the download itself works, but LibreOffice formats dates through
-# the environment's locale, so the runner read the same workbook month-first and produced
-# a table sorted around a publication dated "2026-21-04". A cron added on the first day
-# would have been rewriting the rates wrongly, once a month, in silence.
+# Scheduled only after a manual run proved the whole path from a runner, and that caution
+# earned its keep: the download worked first time, the parse did not. The .xls was being
+# converted through LibreOffice back then, which formats dates in the machine's locale, so
+# the runner read the same workbook month-first and built a table sorted around a
+# publication dated "2026-21-04". A cron added on day one would have been rewriting the
+# rates wrongly, once a month, in silence. The workbook is now read directly and the job
+# needs nothing but Node.
 #
 # The Bank has published between the 11th and the 21st over the past two years. Two
 # attempts cover that: the 16th catches an early publication within days, the 23rd is the
@@ -30,19 +32,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      # The runner image does not reliably carry LibreOffice, and the fetch script needs
-      # it to convert the Bank's .xls. calc alone is enough and installs faster than the
-      # full suite.
-      - name: Ensure LibreOffice Calc
-        run: |
-          if command -v soffice >/dev/null 2>&1; then
-            echo "soffice already present: $(soffice --version)"
-          else
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq --no-install-recommends libreoffice-calc
-            echo "installed: $(soffice --version)"
-          fi
 
       - name: Fetch the published rates
         run: node tools/fetch-boi-rates.mjs
