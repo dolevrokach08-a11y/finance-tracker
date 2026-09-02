@@ -313,6 +313,7 @@ node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישר
 node tools/fetch-boi-rates.mjs --check
 node tools/agent-relay.mjs --status # מי חייב תגובה למי
 node tools/agent-relay.mjs --once
+node tools/agent-relay.mjs --selftest
 ```
 
 ### `tools/agent-relay.mjs` — הדוור
@@ -325,6 +326,7 @@ node tools/agent-relay.mjs --once
 ושרשור נעצר אחרי חמישה סבבים אוטומטיים — מה שעדיין מתגלגל אז צריך אדם ולא עוד תור.
 
 **להריץ מטרמינל רגיל, לא מתוך סשן של סוכן** — תהליך־בן לא יורש התחברות שניתן לרענן.
+`--selftest` בודק את כל המסלול בפקודה אחת ומנקה אחריו, כולל בכישלון.
 
 ### `data/boi-mortgage-rates.json` — נתון חיצוני, לא לערוך ביד
 

@@ -22,6 +22,7 @@
 //   node tools/agent-relay.mjs --once          one pass
 //   node tools/agent-relay.mjs --watch [secs]  poll (default 120)
 //   node tools/agent-relay.mjs --reset         forget dispatch history
+//   node tools/agent-relay.mjs --selftest      end-to-end check, cleans up after itself
 //
 // Run it from your own terminal, not from inside an agent session. A first end-to-end
 // attempt got as far as building the worktree and launching the CLI and then failed on
@@ -140,7 +141,10 @@ function dispatch(note, round) {
     return { ok: false, reason: `${lane.bin} is not installed here — this one still needs relaying by hand.` };
   }
 
-  const slug = basename(note.name, '.md').slice(0, 40).replace(/[^a-zA-Z0-9-]/g, '-');
+  // A branch whose name starts with a dash reads as a flag to git, and a note called
+  // _selftest.md produced exactly that.
+  const slug = (basename(note.name, '.md').slice(0, 40).replace(/[^a-zA-Z0-9-]/g, '-')
+    .replace(/^-+|-+$/g, '') || 'note');
   const branch = `relay/${slug}`;
   const dir = join(WORKTREES, slug);
 
@@ -211,10 +215,72 @@ function pass({ act }) {
   return st;
 }
 
+// One command that proves the whole path: writes a throwaway note, dispatches it, reports,
+// and removes every trace including its own state entry. It exists because the manual
+// version was four commands and a heredoc of Hebrew, which is too much ceremony for the
+// check you want to repeat whenever authentication or a CLI changes.
+const SELFTEST = '_selftest.md';
+
+function selftest() {
+  const dir = join(ROOT, 'agents', 'from-gpt');
+  const path = join(dir, SELFTEST);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, [
+    '# בדיקת דוור — טענה אחת לאימות',
+    '',
+    'סוג: דיווח',
+    '',
+    '---',
+    '',
+    'הפתק הזה נוצר על ידי `--selftest` וימחק בסופו. הוא מכיל טענה אחת שאפשר לאמת בהרצה אחת.',
+    '',
+    '## הטענה',
+    '',
+    '`seniorityDiscount` ב-`mortgage.html` מחזירה **0.2 בדיוק** ב-36 חודשים ו-**0.3 בדיוק**',
+    'ב-60 חודשים, והמעברים חדים — אין ערך ביניים.',
+    '',
+    '## מה שאני מבקש',
+    '',
+    'חשב את זה בעצמך מהקוד ואל תסתמך על הפתק. אם אתה מסכים — אמור על מה בדקת.',
+    'אם יש ערך שמפריך, תן אותו.',
+    '',
+  ].join(String.fromCharCode(10)));
+
+  console.log(`· wrote agents/from-gpt/${SELFTEST}`);
+  const note = { dir: 'from-gpt', name: SELFTEST, path, lane: LANES['from-gpt'], hash: 'selftest' };
+  let r;
+  try {
+    r = dispatch(note, 1);
+  } finally {
+    rmSync(path, { force: true });
+    console.log(`· removed agents/from-gpt/${SELFTEST}`);
+  }
+
+  if (r.ok) {
+    console.log(`
+✓ the relay works end to end — replied on ${r.branch}`);
+    console.log(`  ${r.commits.split(String.fromCharCode(10)).join(String.fromCharCode(10) + '  ')}`);
+    console.log(`  read it:  git log -p main..${r.branch}`);
+    console.log('  it is left in place so you can look; delete with:');
+    console.log(`    git worktree remove --force .relay/worktrees/${basename(r.dir)} && git branch -D ${r.branch}`);
+  } else {
+    console.log(`
+✗ ${r.reason || 'the agent produced no commit'}`);
+    if (r.output) console.log(r.output.split(String.fromCharCode(10)).map(l => '  ' + l).join(String.fromCharCode(10)));
+    if (r.branch) {
+      try { sh('git', ['worktree', 'remove', '--force', r.dir]); } catch { /* already gone */ }
+      try { sh('git', ['branch', '-D', r.branch]); } catch { /* already gone */ }
+      console.log('· cleaned up the worktree and branch');
+    }
+  }
+}
+
 const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
 
-if (has('--reset')) {
+if (has('--selftest')) {
+  selftest();
+} else if (has('--reset')) {
   rmSync(STATE, { force: true });
   console.log('✓ dispatch history forgotten.');
 } else if (has('--watch')) {
