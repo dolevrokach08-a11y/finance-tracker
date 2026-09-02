@@ -1346,9 +1346,18 @@ function showToast(msg) {
 }
 
 // ═══════════════════════════ DATA ═══════════════════════════
+// What a new account starts with, before anyone enters their own loan. Deliberately a
+// round, invented 700,000 split 60/40 — this file is public, and a default carrying
+// someone's real balances would publish them.
+//
+// Stated as origination terms rather than as a balance and a remaining count, so a fresh
+// account exercises the model the app actually uses: the balance is derived from the loan
+// and today's date, and advances on its own each month.
 const DEFAULT_TRANCHES = [
-  {id:1, name:'משתנה כל 5 שנים', type:'var5', rate:5.55, principal:389956, months:340, anchor:4.51, spread:1.04},
-  {id:2, name:'קבועה לא צמודה', type:'fix', rate:5.60, principal:196485, months:340}
+  {id:1, name:'משתנה כל 5 שנים', type:'var5', rate:5.20, origPrincipal:420000, origMonths:360,
+   startYM:'2024-01', payDay:10, nextReset:'2029-01', anchor:4.50, spread:0.70},
+  {id:2, name:'קבועה לא צמודה', type:'fix', rate:5.40, origPrincipal:280000, origMonths:360,
+   startYM:'2024-01', payDay:10}
 ];
 
 // ═══════════════════════ TIME PROJECTION ═══════════════════════
@@ -1438,11 +1447,18 @@ function livePayment(t) {
 // Remaining term implied by the payment. Only the anchor needs this; once derived,
 // the roll-forward just counts it down.
 function liveMonths(a) {
+  // Origination states the term outright, and re-deriving it from the payment can only
+  // lose: nper of a payment that pmt produced lands a hair either side of the exact term
+  // depending on the figures, and Math.ceil turns a hair above into a whole extra month.
+  // Two tranches of one loan, same start and same 360 months, were reporting 328 and 329
+  // remaining.
+  if (a._fromOrigin) return a.months;
   const pay = livePayment(a);
   if (!(pay > 0) || !(a.principal > 0)) return a.months;
   if (!hasOrigin(a) && !(a.payment > 0)) return a.months;
   const n = nper(a.rate, pay, a.principal);
-  return isFinite(n) ? Math.max(1, Math.ceil(n)) : a.months;
+  // A term of 328.4 genuinely needs a 329th payment. One of 328.0000001 does not.
+  return isFinite(n) ? Math.max(1, Math.ceil(n - 1e-9)) : a.months;
 }
 
 // Which point in the loan's life the roll starts from.

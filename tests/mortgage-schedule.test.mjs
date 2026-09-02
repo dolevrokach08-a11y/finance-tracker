@@ -74,6 +74,19 @@ ok(projectTranche(typed, '2026-09', 31)._advanced === 3,
    'a typed balance rolls one payment per month after it, not one more',
    String(projectTranche(typed, '2026-09', 31)._advanced));
 
+// --- the remaining term comes from the loan, not from re-deriving it ---
+// nper of a payment that pmt produced lands a hair either side of the exact term. Ceiling
+// that turned a hair above into a whole extra month, and two tranches of one loan sharing
+// a start date and a 360-month term reported 328 and 329 remaining.
+const twin = { ...loan, rate: 5.2, origPrincipal: 420000 };
+const other = { ...loan, id: 9, rate: 5.4, origPrincipal: 280000 };
+const a = projectTranche(twin, '2026-08', 31), b = projectTranche(other, '2026-08', 31);
+ok(a._paidCount === b._paidCount, 'two tranches starting together have paid the same number',
+   `${a._paidCount} vs ${b._paidCount}`);
+ok(a.months === b.months, 'and have the same term remaining', `${a.months} vs ${b.months}`);
+ok(a.months === loan.origMonths - a._paidCount, 'which is the original term less what has been paid',
+   `${a.months} vs ${loan.origMonths - a._paidCount}`);
+
 // --- the payment itself is unaffected by any of this ---
 ok(Math.abs(livePayment(loan) - payment) < 0.01, 'payment comes from the loan terms');
 
