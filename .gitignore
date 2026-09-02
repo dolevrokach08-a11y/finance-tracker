@@ -23,3 +23,7 @@ Thumbs.db
 .idea/
 
 vendor-update-summary.md
+
+# agent-relay: which notes this machine has dispatched. Local, not shared.
+.agent-relay-state.json
+.relay/
