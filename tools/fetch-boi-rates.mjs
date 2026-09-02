@@ -142,13 +142,20 @@ function parse(csvPath) {
   const dataLines = readFileSync(csvPath, 'utf8').split(/\r?\n/)
     .map(cells)
     .filter(c => c.length >= 10 && c.slice(1, 8).every(isRate));
-  const order = dateOrder(dataLines.flatMap(c => [c[8], c[9]]));
+  // Only column 8 — the date the rate takes effect, and the one the app selects rows by —
+  // is reliably a date cell. Column 9 has a couple of rows someone typed as text, and text
+  // keeps whatever form it was typed in while real dates follow the locale, so the two
+  // columns together read as a contradiction on a machine that formats month-first. That
+  // is what the mixed-order guard caught on the first runner attempt.
+  const order = dateOrder(dataLines.map(c => c[8]));
 
   const rows = [];
   for (const c of dataLines) {
     const from = toISO(c[8], order);
     if (!from) continue;
-    const month = toISO(c[9], order);
+    // The reporting month is descriptive only, so a hand-typed cell that disagrees with
+    // the sheet's own format is worth reading anyway rather than dropping the row.
+    const month = toISO(c[9], order) || toISO(c[9], order === 'dmy' ? 'mdy' : 'dmy');
     const entry = { from, rates: {} };
     if (month) entry.month = month.slice(0, 7);
     // Column 0 is the weighted average across bands; the seven we want start at 1.
