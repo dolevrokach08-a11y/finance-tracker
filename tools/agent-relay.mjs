@@ -22,7 +22,14 @@
 //   node tools/agent-relay.mjs --once          one pass
 //   node tools/agent-relay.mjs --watch [secs]  poll (default 120)
 //   node tools/agent-relay.mjs --reset         forget dispatch history
-//   node tools/agent-relay.mjs --selftest      end-to-end check, cleans up after itself
+//   node tools/agent-relay.mjs --selftest [who] end-to-end check of one lane (claude|codex)
+//
+// The two lanes are not one command with a different name in front. Claude is invoked with
+// `--print` and an explicit tool allowlist; Codex with `exec` and a sandbox, because it has
+// no allowlist to give. See claudeArgv / codexArgv, which were read off `--help` rather than
+// recalled. An earlier version passed Claude's flags to whichever binary the lane named,
+// which meant the codex lane could never have run — and nobody found that out, because the
+// "codex is not installed" check returned first and made it look like a missing install.
 //
 // The dispatch needs the CLI to be logged in, and that is the one thing this file cannot
 // arrange. It took three wrong guesses to establish that, all of them made before anyone
@@ -53,8 +60,8 @@ const WORKTREES = join(ROOT, '.relay', 'worktrees');
 
 // Who answers a note left in which directory, and how to wake them.
 const LANES = {
-  'from-gpt': { owes: 'claude', bin: 'claude' },
-  'from-claude': { owes: 'codex', bin: 'codex' },
+  'from-gpt': { owes: 'claude', bin: 'claude', argv: claudeArgv, auth: claudeAuth },
+  'from-claude': { owes: 'codex', bin: 'codex', argv: codexArgv, auth: codexAuth },
 };
 
 // How many times one thread may bounce automatically. A conversation that has gone five
@@ -140,16 +147,69 @@ const DISALLOWED = [
   'Bash(gh:*)', 'Bash(npm:*)', 'Bash(curl:*)', 'WebFetch',
 ];
 
-// Ask the CLI whether it can authenticate before doing any work for it. Best effort: a
-// CLI without this subcommand, or one that answers something unexpected, is given the
-// benefit of the doubt and allowed to fail on its own terms.
-function checkAuth(binPath) {
+// Two CLIs, two vocabularies for the same three ideas: run this prompt with no UI, work in
+// this directory, stay inside these limits. Only the third differs in kind.
+//
+// Claude takes an explicit tool allowlist. Codex has none — it contains a run with a
+// sandbox — so this names the sandbox mode and turns network access off rather than
+// inheriting whatever the default happens to be. With no network there is nothing for
+// `git push` or `gh` to reach: the same boundary reached by another road. Both lanes
+// still work in a throwaway worktree, which is what actually contains them.
+//
+// These flags were read off `codex --help`, not recalled. That is the rule this file earned:
+// three guesses were made about a failing login before anyone asked the tool, and when
+// someone finally asked, it answered in one line.
+function claudeArgv(brief) {
+  return [
+    '--print', brief,
+    '--permission-mode', 'acceptEdits',
+    '--allowedTools', ...ALLOWED,
+    '--disallowedTools', ...DISALLOWED,
+  ];
+}
+
+function codexArgv(brief, dir) {
+  return [
+    'exec', brief,
+    '-C', dir,
+    '-s', 'workspace-write',
+    '-c', 'sandbox_workspace_write.network_access=false',
+    '--color', 'never',
+  ];
+}
+
+// Ask each CLI whether it can authenticate before building a worktree for it. Best effort:
+// one that answers something unexpected gets the benefit of the doubt and is allowed to
+// fail on its own terms — the point is to turn a silent non-start into a sentence.
+function claudeAuth(binPath) {
   const r = launch(binPath, ['auth', 'status'], { encoding: 'utf8', timeout: 30000 });
   try {
     const j = JSON.parse((r.stdout || '').trim());
-    if (j && j.loggedIn === false) return 'not logged in — run `claude auth login`, or `claude setup-token` for something unattended';
+    if (j && j.loggedIn === false) return 'is not logged in — run `claude auth login`, or `claude setup-token` for something unattended';
   } catch { /* no such subcommand, or not JSON — let the dispatch speak for itself */ }
   return null;
+}
+
+function codexAuth(binPath) {
+  const r = launch(binPath, ['login', 'status'], { encoding: 'utf8', timeout: 30000 });
+  const out = ((r.stdout || '') + (r.stderr || '')).trim();
+  if (/not logged in|logged out|no credentials|please (run )?login/i.test(out)) {
+    return 'is not logged in — run `codex login`';
+  }
+  return null;
+}
+
+// Removing a worktree is git's job, not the filesystem's. A plain recursive delete leaves
+// git's registration behind and, on Windows, trips over its own locked files — a leftover
+// from an earlier run made the next pass die with EPERM before it could do anything. So:
+// ask git to remove it, prune the registration either way, drop the branch, and only then
+// fall back to deleting whatever is still on disk, with retries for a lingering handle.
+function clearWorktree(dir, branch) {
+  try { sh('git', ['worktree', 'remove', '--force', dir]); } catch { /* not registered */ }
+  try { sh('git', ['worktree', 'prune']); } catch { /* nothing to prune */ }
+  try { sh('git', ['branch', '-D', branch]); } catch { /* no such branch */ }
+  try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
+  catch (e) { throw new Error(`could not clear ${dir}: ${e.code || e.message}. Remove it by hand and retry.`); }
 }
 
 function dispatch(note, round) {
@@ -159,7 +219,7 @@ function dispatch(note, round) {
     return { ok: false, reason: `${lane.bin} is not installed here — this one still needs relaying by hand.` };
   }
 
-  const authProblem = checkAuth(binPath);
+  const authProblem = lane.auth(binPath);
   if (authProblem) return { ok: false, reason: `${lane.bin} ${authProblem}` };
 
   // A branch whose name starts with a dash reads as a flag to git, and a note called
@@ -170,25 +230,47 @@ function dispatch(note, round) {
   const dir = join(WORKTREES, slug);
 
   mkdirSync(WORKTREES, { recursive: true });
-  rmSync(dir, { recursive: true, force: true });
-  try { sh('git', ['worktree', 'prune']); } catch { /* nothing to prune */ }
-  try { sh('git', ['branch', '-D', branch]); } catch { /* no such branch yet */ }
+  clearWorktree(dir, branch);
   sh('git', ['worktree', 'add', '-b', branch, dir, 'main']);
 
-  const res = launch(binPath, [
-    '--print', briefFor(note),
-    '--permission-mode', 'acceptEdits',
-    '--allowedTools', ...ALLOWED,
-    '--disallowedTools', ...DISALLOWED,
-  ], { cwd: dir, encoding: 'utf8', timeout: 20 * 60 * 1000 });
+  // Deliver the note into the worktree. scan() reads notes from the checkout Dolev works
+  // in; the worktree is built from main. So a note that is new, or edited and not yet
+  // committed, does not exist on the branch the agent wakes up in. The first relayed round
+  // hit exactly this: the agent was told to read a file, found nothing there, and said so.
+  // Copying it in makes delivery the relay's job, which is the whole job it has.
+  const delivered = join(dir, 'agents', note.dir, note.name);
+  mkdirSync(dirname(delivered), { recursive: true });
+  writeFileSync(delivered, readFileSync(note.path, 'utf8'));
+
+  const res = launch(binPath, lane.argv(briefFor(note), dir),
+    { cwd: dir, encoding: 'utf8', timeout: 20 * 60 * 1000 });
 
   const wrote = (() => {
     try { return sh('git', ['log', '--oneline', `main..${branch}`], { cwd: dir }); }
     catch { return ''; }
   })();
 
+  // A commit is not an answer. The reply is required to go in the note itself, so check
+  // that the note is what changed rather than trusting that something was committed. The
+  // version that counted only commits would have called a dispatch green while the agent
+  // was in fact reporting that it had nothing to read.
+  const answered = (() => {
+    try {
+      const files = sh('git', ['diff', '--name-only', `main..${branch}`], { cwd: dir });
+      return files.split(String.fromCharCode(10))
+        .some(f => f.trim() === `agents/${note.dir}/${note.name}`);
+    } catch { return false; }
+  })();
+
+  const reason = !wrote
+    ? 'the agent produced no commit'
+    : !answered
+      ? `committed, but not to agents/${note.dir}/${note.name} — the reply belongs in the note`
+      : null;
+
   return {
-    ok: res.status === 0 && !!wrote,
+    ok: res.status === 0 && !!wrote && answered,
+    reason,
     branch, dir, round,
     commits: wrote,
     output: (res.stdout || res.stderr || '').trim().slice(-1200),
@@ -240,10 +322,18 @@ function pass({ act }) {
 // and removes every trace including its own state entry. It exists because the manual
 // version was four commands and a heredoc of Hebrew, which is too much ceremony for the
 // check you want to repeat whenever authentication or a CLI changes.
-const SELFTEST = '_selftest.md';
+const selftestName = owes => `_selftest-${owes}.md`;
 
-function selftest() {
-  const dir = join(ROOT, 'agents', 'from-gpt');
+function selftest(owes) {
+  const entry = Object.entries(LANES).find(([, l]) => l.owes === owes);
+  if (!entry) {
+    const known = Object.values(LANES).map(l => l.owes).join(', ');
+    console.log(`✗ no lane is owed by "${owes}". Lanes here: ${known}.`);
+    return;
+  }
+  const [laneDir, lane] = entry;
+  const SELFTEST = selftestName(owes);
+  const dir = join(ROOT, 'agents', laneDir);
   const path = join(dir, SELFTEST);
   mkdirSync(dir, { recursive: true });
   writeFileSync(path, [
@@ -267,19 +357,19 @@ function selftest() {
     '',
   ].join(String.fromCharCode(10)));
 
-  console.log(`· wrote agents/from-gpt/${SELFTEST}`);
-  const note = { dir: 'from-gpt', name: SELFTEST, path, lane: LANES['from-gpt'], hash: 'selftest' };
+  console.log(`· wrote agents/${laneDir}/${SELFTEST}  →  waking ${owes}`);
+  const note = { dir: laneDir, name: SELFTEST, path, lane, hash: 'selftest' };
   let r;
   try {
     r = dispatch(note, 1);
   } finally {
     rmSync(path, { force: true });
-    console.log(`· removed agents/from-gpt/${SELFTEST}`);
+    console.log(`· removed agents/${laneDir}/${SELFTEST}`);
   }
 
   if (r.ok) {
     console.log(`
-✓ the relay works end to end — replied on ${r.branch}`);
+✓ the ${owes} lane works end to end — replied in the note, on ${r.branch}`);
     console.log(`  ${r.commits.split(String.fromCharCode(10)).join(String.fromCharCode(10) + '  ')}`);
     console.log(`  read it:  git log -p main..${r.branch}`);
     console.log('  it is left in place so you can look; delete with:');
@@ -288,10 +378,20 @@ function selftest() {
     console.log(`
 ✗ ${r.reason || 'the agent produced no commit'}`);
     if (r.output) console.log(r.output.split(String.fromCharCode(10)).map(l => '  ' + l).join(String.fromCharCode(10)));
+    // Only tidy away a worktree that holds nothing. The first failed round was cleaned up
+    // automatically and took the agent's staged reply with it — a real answer, deleted for
+    // being unfinished. Uncommitted work is the reason to keep a worktree, not to remove it.
     if (r.branch) {
-      try { sh('git', ['worktree', 'remove', '--force', r.dir]); } catch { /* already gone */ }
-      try { sh('git', ['branch', '-D', r.branch]); } catch { /* already gone */ }
-      console.log('· cleaned up the worktree and branch');
+      let leftovers = '';
+      try { leftovers = sh('git', ['status', '--porcelain'], { cwd: r.dir }); } catch { /* gone */ }
+      if (leftovers) {
+        console.log(`· keeping ${r.dir} — the agent left work there:`);
+        console.log(leftovers.split(String.fromCharCode(10)).map(l => '    ' + l).join(String.fromCharCode(10)));
+        console.log(`  discard it with:  node tools/agent-relay.mjs --reset  (or git worktree remove --force ${r.dir})`);
+      } else {
+        try { clearWorktree(r.dir, r.branch); console.log('· cleaned up the worktree and branch'); }
+        catch (e) { console.log('· ' + e.message); }
+      }
     }
   }
 }
@@ -300,7 +400,11 @@ const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
 
 if (has('--selftest')) {
-  selftest();
+  // Testing one lane says nothing about the other: they run different binaries with
+  // different flags under different containment. Defaults to claude, which is the lane
+  // that existed first.
+  const next = argv[argv.indexOf('--selftest') + 1];
+  selftest(next && !next.startsWith('-') ? next : 'claude');
 } else if (has('--reset')) {
   rmSync(STATE, { force: true });
   console.log('✓ dispatch history forgotten.');
