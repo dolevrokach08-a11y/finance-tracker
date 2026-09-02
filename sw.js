@@ -10,7 +10,7 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v46';
+const SHELL_CACHE = 'finance-tracker-v47';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
 
@@ -41,6 +41,10 @@ const PRECACHE = [
   'shared/data.js',
   'shared/load-script.js',
   'shared/nav.js',
+  // Bank of Israel's published average rates. Precached because the penalty screen
+  // derives both of its rate inputs from it; without it the screen falls back to
+  // asking for them by hand.
+  'data/boi-mortgage-rates.json',
   'manifest.json',
   'icons/favicon-32.png',
   'icons/allmon-mark.png',

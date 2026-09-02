@@ -2879,6 +2879,69 @@ function seniorityDiscount(ageMonths) {
   return ageMonths < 60 ? 0.20 : 0.30;
 }
 
+// ── טבלת הריביות הממוצעות של בנק ישראל ────────────────────────────────────────
+// `data/boi-mortgage-rates.json` נוצר מקובץ ה-xls של בנק ישראל על ידי
+// `tools/fetch-boi-rates.mjs`. הוא מכיל שורה לכל פרסום חודשי מאז 2013, ולכן
+// **הריבית שהייתה בתוקף בעת ההעמדה נגזרת ואינה מוקלדת** — היא היסטורית וקבועה.
+//
+// הסדרה היא **שקלי לא צמוד בלבד**. מסלול צמוד לא מקבל מילוי אוטומטי, כי מילוי
+// מהטבלה הלא נכונה גרוע ממילוי בכלל.
+let boiRates = null, boiLoading = null, boiError = null;
+
+function loadBoiRates() {
+  if (boiRates || boiLoading) return boiLoading || Promise.resolve(boiRates);
+  boiLoading = fetch('data/boi-mortgage-rates.json')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => { boiRates = d; boiLoading = null; return d; })
+    .catch(e => { boiError = e; boiLoading = null; return null; });
+  return boiLoading;
+}
+
+// הטווח שמתאים לתקופה שעליה הריבית מחויבת. הערת בנק ישראל: "כל התקופות כוללות
+// את הגבול העליון", ולכן חמש שנים בדיוק נופלות ב"מעל 1 ועד 5".
+function boiBucket(years) {
+  if (!boiRates || !(years > 0)) return null;
+  const ordered = [...boiRates.buckets].sort(
+    (a, b) => (a.maxYears ?? Infinity) - (b.maxYears ?? Infinity));
+  return (ordered.find(b => b.maxYears !== null && years <= b.maxYears) ||
+          ordered[ordered.length - 1]).key;
+}
+
+// הפרסום שהיה בתוקף בתאריך נתון. השורות ממוינות מהחדש לישן.
+function boiRowOn(iso) {
+  if (!boiRates) return null;
+  return boiRates.rows.find(r => r.from <= iso) || null;
+}
+const boiLatest = () => (boiRates ? boiRates.rows[0] : null);
+
+// שתי הריביות שהצו דורש, נגזרות: A במועד הפירעון, C במועד העמדת ההלוואה.
+//
+// **הטווח של כל אחת שונה**, וזה לא פרט טכני. A נבחרת לפי אופק ההיוון — במסלול
+// משתנה זו התקופה עד התחנה ולא עד סוף ההלוואה. C נבחרת לפי התקופה שעליה הריבית
+// נסגרה בהעמדה — במסלול משתנה זה מרווח התחנות, ובקבוע זו התקופה המקורית.
+function boiRatesFor(t, months, originYM) {
+  if (!boiRates || (t && t.type === 'cpi')) return { a: null, c: null };
+  const reset = monthsToReset(t);
+  const horizon = (reset > 0 && reset < months) ? reset : months;
+  const latest = boiLatest();
+  const aKey = boiBucket(horizon / 12);
+
+  const interval = t && RESET_INTERVAL[t.type];
+  const commitMonths = interval || (t && t._origMonths) || months;
+  const cKey = boiBucket(commitMonths / 12);
+  const cRow = isValidYM(originYM) ? boiRowOn(`${originYM}-28`) : null;
+
+  return {
+    a: latest && aKey ? { rate: latest.rates[aKey], from: latest.from, key: aKey } : null,
+    c: cRow && cKey ? { rate: cRow.rates[cKey], from: cRow.from, key: cKey } : null,
+  };
+}
+
+const boiLabel = k => {
+  const b = boiRates && boiRates.buckets.find(x => x.key === k);
+  return b ? b.label : k;
+};
+
 // כמה חודשים נותרו עד תחנת שינוי הריבית, או 0 אם אין תחנה.
 function monthsToReset(t) {
   if (!isValidYM(t?.nextReset)) return 0;
@@ -2888,25 +2951,85 @@ function monthsToReset(t) {
 function renderPenaltyPage() {
   const el = document.getElementById('penalty-tranches');
   const dflt = document.getElementById('pen-market-rate').value || '';
-  el.innerHTML = currentTranches.map((t,i)=>{
+  el.innerHTML = currentTranches.map((t, i) => {
     const reset = monthsToReset(t);
     const horizon = reset > 0 && reset < t.months
       ? `${reset} חודשים — עד התחנה ב-${t.nextReset}`
       : `${t.months} חודשים — עד הסוף`;
+    const origin = isValidYM(t.startYM) ? t.startYM : '';
     return `
     <div class="tranche">
       <div class="tranche-head"><div class="rec-title">${TYPE_LABELS[t.type] || t.name}</div><span class="badge ${TYPE_BADGES[t.type]}">${TYPE_LABELS[t.type]}</span></div>
       <div class="tranche-grid">
-        <div class="field" style="margin:0"><div class="f-label">יתרת קרן</div><input type="number" value="${t.principal}" id="pen-p-${i}" oninput="updatePenalty()" aria-label="יתרת קרן של מסלול ${i+1}"></div>
-        <div class="field" style="margin:0"><div class="f-label">ריבית %</div><input type="number" step="0.01" value="${t.rate}" id="pen-r-${i}" oninput="updatePenalty()" aria-label="ריבית שנתית באחוזים של מסלול ${i+1}"></div>
-        <div class="field" style="margin:0"><div class="f-label">חודשים נותרים</div><input type="number" value="${t.months}" id="pen-m-${i}" oninput="updatePenalty()" aria-label="חודשים נותרים של מסלול ${i+1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">יתרת קרן</div><input type="number" value="${t.principal}" id="pen-p-${i}" oninput="updatePenalty()" aria-label="יתרת קרן של מסלול ${i + 1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">ריבית %</div><input type="number" step="0.01" value="${t.rate}" id="pen-r-${i}" oninput="updatePenalty()" aria-label="ריבית שנתית באחוזים של מסלול ${i + 1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">חודשים נותרים</div><input type="number" value="${t.months}" id="pen-m-${i}" oninput="updatePenalty()" aria-label="חודשים נותרים של מסלול ${i + 1}"></div>
       </div>
-      <div class="tranche-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-        <div class="field" style="margin:0"><div class="f-label">ממוצעת היום <span class="tip-icon">?<span class="tip-text">מטבלת בנק ישראל למסלול הזה, לפי אופק ההיוון. <b>לא</b> ה"ריבית לצרכי השוואה" שבאישור הבנק. ריק = ברירת המחדל שלמטה.</span></span></div><input type="number" step="0.0001" placeholder="${dflt}" id="pen-a-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת היום למסלול ${i+1}, מטבלת בנק ישראל לפי אופק ההיוון. לא הריבית לצרכי השוואה שבאישור הבנק."></div>
-        <div class="field" style="margin:0"><div class="f-label">ממוצעת בהעמדה <span class="tip-icon">?<span class="tip-text">הריבית הממוצעת שהייתה בתוקף כשההלוואה הועמדה — ובמסלול משתנה, בשינוי הריבית האחרון. בלעדיה אפשר לחשב רק תקרה, לא את העמלה.</span></span></div><input type="number" step="0.0001" id="pen-c-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת בעת העמדת מסלול ${i+1}, ובמסלול משתנה בשינוי הריבית האחרון. בלעדיה מוצגת תקרה בלבד."></div>
+      <div class="tranche-grid">
+        <div class="field" style="margin:0"><div class="f-label">חודש העמדה <span class="tip-icon">?<span class="tip-text">החודש שבו ההלוואה הועמדה בפועל — לרוב חודש או שניים לפני התשלום הראשון. ממנו נגזרת הריבית הממוצעת שהייתה אז, והיא מזיזה את העמלה בעשרות אחוזים.</span></span></div><input type="month" value="${origin}" id="pen-o-${i}"${origin ? ' data-auto="1"' : ''} onchange="refillOriginRate(${i})" aria-label="חודש העמדת מסלול ${i + 1}"></div>
+        <div class="field" style="margin:0"><div class="f-label">ממוצעת היום <span class="tip-icon">?<span class="tip-text">מטבלת בנק ישראל, לפי אופק ההיוון. נטענת לבד; אפשר לדרוס.</span></span></div><input type="number" step="0.0001" placeholder="${dflt}" id="pen-a-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת היום למסלול ${i + 1}, מטבלת בנק ישראל לפי אופק ההיוון"></div>
+        <div class="field" style="margin:0"><div class="f-label">ממוצעת בהעמדה <span class="tip-icon">?<span class="tip-text">הריבית הממוצעת שהייתה בתוקף בחודש ההעמדה, לפי התקופה שעליה הריבית נסגרה. נטענת לבד מחודש ההעמדה.</span></span></div><input type="number" step="0.0001" id="pen-c-${i}" oninput="updatePenalty()" aria-label="ריבית ממוצעת בעת העמדת מסלול ${i + 1}"></div>
       </div>
       <div class="proj-note">אופק ההיוון: ${horizon}</div>
-    </div>`;}).join('');
+      <div class="proj-note" id="pen-src-${i}"></div>
+    </div>`;
+  }).join('');
+  applyBoiAutofill();
+  updatePenalty();
+  // הטבלה נטענת פעם אחת; כשהיא מגיעה, ממלאים ומחשבים מחדש.
+  if (!boiRates) loadBoiRates().then(() => { if (document.getElementById('pen-a-0')) { applyBoiAutofill(); updatePenalty(); } });
+}
+
+// ממלא את שתי הריביות מהטבלה, **בלי לדרוס ערך שהמשתמש הקליד**, וכותב מאיפה כל
+// אחת הגיעה. המקור מוצג במסך ולא רק בקוד, כי הבחירה בין הטווחים היא בדיוק המקום
+// שבו קל לטעות בשקט.
+function applyBoiAutofill() {
+  currentTranches.forEach((t, i) => {
+    const aEl = document.getElementById(`pen-a-${i}`);
+    const cEl = document.getElementById(`pen-c-${i}`);
+    const src = document.getElementById(`pen-src-${i}`);
+    if (!aEl || !src) return;
+
+    if (!boiRates) {
+      src.textContent = boiError
+        ? 'טבלת בנק ישראל לא נטענה — מלא את הריביות ידנית.'
+        : 'טוען את טבלת בנק ישראל…';
+      return;
+    }
+    if (t.type === 'cpi') {
+      src.textContent = 'מסלול צמוד — הטבלה הטעונה היא שקלית לא צמודה, ולכן אין מילוי אוטומטי.';
+      return;
+    }
+
+    const months = +(document.getElementById(`pen-m-${i}`) || {}).value || t.months;
+    const { a, c } = boiRatesFor(t, months, (document.getElementById(`pen-o-${i}`) || {}).value);
+    const round = v => Math.round(v * 10000) / 10000;
+    if (a && !aEl.dataset.typed && !aEl.value) aEl.value = round(a.rate);
+    if (c && cEl && !cEl.dataset.typed && !cEl.value) cEl.value = round(c.rate);
+
+    const bits = [];
+    if (a) bits.push(`היום ${boiLabel(a.key)}, פרסום ${a.from}`);
+    bits.push(c ? `בהעמדה ${boiLabel(c.key)}, פרסום ${c.from}` : 'בהעמדה — הזן חודש העמדה');
+    src.textContent = 'מטבלת בנק ישראל · ' + bits.join(' · ');
+    // חודש ההעמדה מולא מחודש התשלום הראשון, שהוא לרוב מאוחר יותר. ההפרש נראה
+    // קטן ואינו: על משכנתא אמיתית חודשיים הזיזו את העמלה ב-19%, כלפי מטה.
+    const oEl = document.getElementById(`pen-o-${i}`);
+    if (c && oEl && oEl.dataset.auto) {
+      src.textContent += ' — חודש ההעמדה נלקח מהתשלום הראשון. אם ההלוואה הועמדה קודם, תקן אותו: זה מזיז את העמלה בעשרות אחוזים.';
+      src.classList.add('proj-warn');
+    } else {
+      src.classList.remove('proj-warn');
+    }
+  });
+}
+
+// שינוי חודש ההעמדה הוא שינוי של הקלט שממנו הריבית נגזרת, ולכן כאן כן דורסים.
+function refillOriginRate(i) {
+  const oEl = document.getElementById(`pen-o-${i}`);
+  if (oEl) delete oEl.dataset.auto;   // the user has now said what the month is
+  const cEl = document.getElementById(`pen-c-${i}`);
+  if (cEl) { delete cEl.dataset.typed; cEl.value = ''; }
+  applyBoiAutofill();
   updatePenalty();
 }
 
@@ -2930,6 +3053,8 @@ function updatePenalty() {
     const m = +mEl.value||0;
     // האם הריבית הממוצעת הוזנה למסלול, או שזו ברירת המחדל הגלובלית. ההבחנה קובעת
     // מה מותר לומר על התוצאה, ראה למטה.
+    if (aEl && aEl.value) aEl.dataset.typed = '1';
+    if (cEl && cEl.value) cEl.dataset.typed = '1';
     const aTyped = !!(aEl && aEl.value);
     const a = aTyped ? +aEl.value : marketRate;
     const c = +(cEl && cEl.value) || 0;

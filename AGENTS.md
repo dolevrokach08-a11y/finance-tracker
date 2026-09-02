@@ -255,7 +255,21 @@ node tools/build-assets.mjs --check # לוודא טריות
 node tools/check-tailwind-coverage.mjs
 node tests/demo-isolation.test.mjs
 node tests/ai-endpoint.test.mjs
+node tests/mortgage-schedule.test.mjs
+node tests/mortgage-penalty.test.mjs
+node tests/boi-rates.test.mjs
+node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישראל
+node tools/fetch-boi-rates.mjs --check
 ```
+
+### `data/boi-mortgage-rates.json` — נתון חיצוני, לא לערוך ביד
+
+הריביות הממוצעות של בנק ישראל, שמהן נגזרת עמלת הפירעון המוקדם. **נוצר** מקובץ ה-xls
+של בנק ישראל על ידי `tools/fetch-boi-rates.mjs`, שדורש LibreOffice (מותקן מראש על
+runners של GitHub; מקומית — או `SOFFICE_BIN`).
+
+בנק ישראל מפרסם חודשית, ולכן השורה העליונה מתיישנת. `--check` נכשל כשיצא פרסום חדש.
+הסדרה היא **שקלי לא צמוד בלבד** — מסלול צמוד לא מקבל מילוי אוטומטי.
 
 מצב הדגמה: `login.html` ← כפתור ההדגמה. נתונים פיקטיביים, מבודדים מהחשבון האמיתי,
 וכתיבה לענן חסומה. **כל בדיקה נעשית שם, אף פעם לא על נתונים אמיתיים.**
