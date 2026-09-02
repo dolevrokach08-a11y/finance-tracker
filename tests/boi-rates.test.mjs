@@ -67,4 +67,39 @@ ok(boiRowOn(dayBefore).from < mid.from, 'the day before a publication still uses
    boiRowOn(dayBefore).from);
 void oldest;
 
+// --- the date reading, which is where the generator actually broke ---
+// LibreOffice writes dates in the locale it happens to be running under. The first run of
+// this on a GitHub runner exported 08/13/2026 where this machine exports 13/08/2026, and
+// the generator read the American form as day-first: a newest publication of "2026-21-04"
+// and the whole table resorted around it. The order is now inferred from the column, so
+// both readings have to come out right here.
+const tool = readFileSync(new URL('../tools/fetch-boi-rates.mjs', import.meta.url), 'utf8');
+const dates = new Function(
+  tool.slice(tool.indexOf('const DATE_RE'), tool.indexOf('function parse(csvPath)')) +
+  '\n; return { dateOrder, toISO };')();
+
+const dmy = ['13/08/2026', '12/07/2026', '17/06/2024'];
+const mdy = ['08/13/2026', '07/12/2026', '06/17/2024'];
+ok(dates.dateOrder(dmy) === 'dmy', 'a day above twelve marks the European form', dates.dateOrder(dmy));
+ok(dates.dateOrder(mdy) === 'mdy', 'and in second place it marks the American one', dates.dateOrder(mdy));
+ok(dates.dateOrder(['2026-08-13']) === 'ymd', 'an ISO export is recognised as itself');
+ok(dates.toISO('13/08/2026', 'dmy') === '2026-08-13', 'the European form reads correctly');
+ok(dates.toISO('08/13/2026', 'mdy') === '2026-08-13', 'and so does the American one');
+// The bug in one line: read the American form as European and you get a thirteenth month.
+ok(dates.toISO('08/13/2026', 'dmy') === null, 'a nonexistent month is rejected, not emitted');
+
+// Ambiguity has to be an error rather than a coin flip — silently guessing wrong reorders
+// every row and picks the wrong rate for every loan.
+let threw = false;
+try { dates.dateOrder(['01/02/2026', '03/04/2026']); } catch { threw = true; }
+ok(threw, 'a column with nothing above twelve refuses to guess');
+threw = false;
+try { dates.dateOrder(['13/08/2026', '08/13/2026']); } catch { threw = true; }
+ok(threw, 'a column that reads both ways refuses too');
+
+// --- and the generated file must survive the trip ---
+ok(table.rows.every(r => !Number.isNaN(Date.parse(r.from))), 'every date in the file is a real one');
+ok(table.rows[0].from <= new Date().toISOString().slice(0, 10),
+   'the newest publication is not in the future', table.rows[0].from);
+
 process.exit(failures ? 1 : 0);
