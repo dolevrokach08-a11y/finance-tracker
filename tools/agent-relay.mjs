@@ -25,18 +25,19 @@
 //   node tools/agent-relay.mjs --selftest      end-to-end check, cleans up after itself
 //
 // The dispatch needs the CLI to be logged in, and that is the one thing this file cannot
-// arrange. Both attempts so far — one from inside an agent session, one from a plain Git
-// Bash — reached the worktree and the launch and then stopped on:
+// arrange. Three attempts failed identically — inside an agent session, in Git Bash, and
+// in PowerShell — on:
 //
 //     Failed to authenticate: OAuth session expired and could not be refreshed
 //
-// The first time that looked like a child process failing to inherit a session. The
-// second run disproved it: the stored login has simply expired, and --print cannot renew
-// it because renewing is interactive. Run `claude` on its own once, log in, and retry.
+// Two guesses at the cause were wrong before anyone asked the CLI. `claude auth status`
+// answers it outright: {"loggedIn": false, "authMethod": "none"}. Nothing had expired
+// mid-flight; there were no stored credentials at all, which is why the shell and the
+// session made no difference. checkAuth below asks that question first so the answer
+// arrives before a worktree is built rather than after.
 //
-// Everything either side of that step behaved: the failure was reported rather than
-// swallowed, the note stayed undispatched so it retries, and no worktree or branch was
-// left behind. --selftest exercises the whole path in one command.
+//   claude auth login     interactive, gets a session now
+//   claude setup-token    a long-lived token, which is what --watch actually wants
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -137,12 +138,27 @@ const DISALLOWED = [
   'Bash(gh:*)', 'Bash(npm:*)', 'Bash(curl:*)', 'WebFetch',
 ];
 
+// Ask the CLI whether it can authenticate before doing any work for it. Best effort: a
+// CLI without this subcommand, or one that answers something unexpected, is given the
+// benefit of the doubt and allowed to fail on its own terms.
+function checkAuth(binPath) {
+  const r = launch(binPath, ['auth', 'status'], { encoding: 'utf8', timeout: 30000 });
+  try {
+    const j = JSON.parse((r.stdout || '').trim());
+    if (j && j.loggedIn === false) return 'not logged in — run `claude auth login`, or `claude setup-token` for something unattended';
+  } catch { /* no such subcommand, or not JSON — let the dispatch speak for itself */ }
+  return null;
+}
+
 function dispatch(note, round) {
   const lane = LANES[note.dir];
   const binPath = resolveBin(lane.bin);
   if (!binPath) {
     return { ok: false, reason: `${lane.bin} is not installed here — this one still needs relaying by hand.` };
   }
+
+  const authProblem = checkAuth(binPath);
+  if (authProblem) return { ok: false, reason: `${lane.bin} ${authProblem}` };
 
   // A branch whose name starts with a dash reads as a flag to git, and a note called
   // _selftest.md produced exactly that.
