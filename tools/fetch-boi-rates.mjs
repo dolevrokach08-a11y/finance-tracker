@@ -103,30 +103,74 @@ function toCsv(bin, xls, outDir) {
 // commas is safe here and a quote-aware parser would be ceremony.
 const cells = line => line.split(',').map(s => s.trim());
 
-const toISO = s => {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s.trim());
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+// LibreOffice formats dates through the environment's locale, so the same workbook exports
+// 13/08/2026 here and 08/13/2026 on a GitHub runner. That stays invisible until a day above
+// the twelfth appears, and then it silently reorders the whole table — the first run on a
+// runner produced a newest publication of "2026-21-04". Pinning a locale would only move
+// the assumption somewhere a runner might not have generated it, so the order is read off
+// the data instead: across 160-odd publications, a day above 12 is certain to appear, and
+// under the wrong reading so is a month above 12.
+const DATE_RE = /^(\d{1,4})[\/-](\d{1,2})[\/-](\d{2,4})$/;
+
+function dateOrder(samples) {
+  let firstOver12 = false, secondOver12 = false, iso = false;
+  for (const raw of samples) {
+    const m = DATE_RE.exec(String(raw).trim());
+    if (!m) continue;
+    if (m[1].length === 4) { iso = true; continue; }
+    if (+m[1] > 12) firstOver12 = true;
+    if (+m[2] > 12) secondOver12 = true;
+  }
+  if (iso) return 'ymd';
+  if (firstOver12 && secondOver12) throw new Error('Date columns disagree: some rows read as d/m, others as m/d.');
+  if (firstOver12) return 'dmy';
+  if (secondOver12) return 'mdy';
+  throw new Error('Could not tell d/m from m/d — no value above 12 in either position.');
+}
+
+const toISO = (raw, order) => {
+  const m = DATE_RE.exec(String(raw).trim());
+  if (!m) return null;
+  const [, a, b, c] = m;
+  const [y, mo, d] = order === 'ymd' ? [a, b, c] : order === 'dmy' ? [c, b, a] : [c, a, b];
+  const out = `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return Number.isNaN(Date.parse(out)) ? null : out;
 };
 
 function parse(csvPath) {
+  const isRate = v => Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) <= 25;
+  const dataLines = readFileSync(csvPath, 'utf8').split(/\r?\n/)
+    .map(cells)
+    .filter(c => c.length >= 10 && c.slice(1, 8).every(isRate));
+  const order = dateOrder(dataLines.flatMap(c => [c[8], c[9]]));
+
   const rows = [];
-  for (const line of readFileSync(csvPath, 'utf8').split(/\r?\n/)) {
-    const c = cells(line);
-    if (c.length < 10) continue;
-    const rates = c.slice(0, 7).map(Number);       // average sits in column 0; skip it
-    const values = c.slice(1, 8).map(Number);      // the seven bands, over25 first
-    const from = toISO(c[8]);
-    const month = toISO(c[9]);
-    if (!from || values.some(v => !Number.isFinite(v) || v <= 0 || v > 25)) continue;
-    void rates;
+  for (const c of dataLines) {
+    const from = toISO(c[8], order);
+    if (!from) continue;
+    const month = toISO(c[9], order);
     const entry = { from, rates: {} };
     if (month) entry.month = month.slice(0, 7);
-    BUCKETS.forEach((b, i) => { entry.rates[b.key] = values[i]; });
+    // Column 0 is the weighted average across bands; the seven we want start at 1.
+    BUCKETS.forEach((b, i) => { entry.rates[b.key] = Number(c[i + 1]); });
     rows.push(entry);
   }
   if (!rows.length) throw new Error('Parsed no rate rows — the sheet layout has changed.');
   // Newest first, which is the order the app wants for "the rate in force today".
   rows.sort((a, b) => (a.from < b.from ? 1 : a.from > b.from ? -1 : 0));
+
+  // One publication per month, so a duplicate date or one in the future means the dates
+  // came out wrong even though each of them parsed.
+  const seen = new Set();
+  for (const r of rows) {
+    if (seen.has(r.from)) throw new Error(`Two publications dated ${r.from} — dates parsed wrong (read as ${order}).`);
+    seen.add(r.from);
+  }
+  const horizon = new Date(Date.now() + 86400000 * 45).toISOString().slice(0, 10);
+  if (rows[0].from > horizon) {
+    throw new Error(`Newest publication is ${rows[0].from}, over six weeks out — dates parsed wrong (read as ${order}).`);
+  }
+  console.log(`  dates read as ${order}`);
   return rows;
 }
 
