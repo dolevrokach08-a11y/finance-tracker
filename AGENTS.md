@@ -311,7 +311,20 @@ node tests/mortgage-penalty.test.mjs
 node tests/boi-rates.test.mjs
 node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישראל
 node tools/fetch-boi-rates.mjs --check
+node tools/agent-relay.mjs --status # מי חייב תגובה למי
+node tools/agent-relay.mjs --once
 ```
+
+### `tools/agent-relay.mjs` — הדוור
+
+מנטר את `agents/from-*/` ומעיר את הצד שחייב תגובה, כדי שדולב לא יהיה השליח.
+**הוא לא ממזג, לא דוחף, ולא נוגע ב-`main`**, והסוכן שהוא מעיר מתודרך **לסקור ולענות,
+לא ליישם**. סבב מסתיים בענף `relay/*` במצב "מוכן לאישור".
+
+ההכלה היא ה-worktree, לא רשימת הכלים. פתק מזוהה לפי hash של תוכנו ולכן מעיר פעם אחת,
+ושרשור נעצר אחרי חמישה סבבים אוטומטיים — מה שעדיין מתגלגל אז צריך אדם ולא עוד תור.
+
+**להריץ מטרמינל רגיל, לא מתוך סשן של סוכן** — תהליך־בן לא יורש התחברות שניתן לרענן.
 
 ### `data/boi-mortgage-rates.json` — נתון חיצוני, לא לערוך ביד
 
