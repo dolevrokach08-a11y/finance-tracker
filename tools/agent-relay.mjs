@@ -24,16 +24,19 @@
 //   node tools/agent-relay.mjs --reset         forget dispatch history
 //   node tools/agent-relay.mjs --selftest      end-to-end check, cleans up after itself
 //
-// Run it from your own terminal, not from inside an agent session. A first end-to-end
-// attempt got as far as building the worktree and launching the CLI and then failed on
-// "OAuth session expired and could not be refreshed" — a child process spawned from within
-// a session does not inherit a refreshable login. Nothing else about the pass was wrong:
-// the failure was reported, the note was left undispatched so it retries, and no branch
-// was left behind. If a plain terminal hits the same wall, the CLI needs its own
-// credentials, which is a decision for Dolev and not something this file should reach for.
+// The dispatch needs the CLI to be logged in, and that is the one thing this file cannot
+// arrange. Both attempts so far — one from inside an agent session, one from a plain Git
+// Bash — reached the worktree and the launch and then stopped on:
 //
-// To smoke-test it, drop a short note in agents/from-gpt/ asking for one checkable claim
-// to be verified, run --once, and look for a relay/ branch with a commit on it.
+//     Failed to authenticate: OAuth session expired and could not be refreshed
+//
+// The first time that looked like a child process failing to inherit a session. The
+// second run disproved it: the stored login has simply expired, and --print cannot renew
+// it because renewing is interactive. Run `claude` on its own once, log in, and retry.
+//
+// Everything either side of that step behaved: the failure was reported rather than
+// swallowed, the note stayed undispatched so it retries, and no worktree or branch was
+// left behind. --selftest exercises the whole path in one command.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
