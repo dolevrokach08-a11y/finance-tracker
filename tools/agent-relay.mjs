@@ -25,19 +25,21 @@
 //   node tools/agent-relay.mjs --selftest      end-to-end check, cleans up after itself
 //
 // The dispatch needs the CLI to be logged in, and that is the one thing this file cannot
-// arrange. Three attempts failed identically — inside an agent session, in Git Bash, and
-// in PowerShell — on:
+// arrange. It took three wrong guesses to establish that, all of them made before anyone
+// asked the CLI: not the shell, not a child process failing to inherit a session, and not
+// missing credentials either. `claude auth status --text` says it in one line —
 //
-//     Failed to authenticate: OAuth session expired and could not be refreshed
+//     Login: Expired — log in again
 //
-// Two guesses at the cause were wrong before anyone asked the CLI. `claude auth status`
-// answers it outright: {"loggedIn": false, "authMethod": "none"}. Nothing had expired
-// mid-flight; there were no stored credentials at all, which is why the shell and the
-// session made no difference. checkAuth below asks that question first so the answer
-// arrives before a worktree is built rather than after.
+// The credentials file is still there and still names the account, which is why an
+// interactive `claude` looks signed in. What has died is the refresh token, and once that
+// is gone nothing can renew itself; only a fresh login issues another one.
 //
-//   claude auth login     interactive, gets a session now
+//   claude auth login     re-issues the pair
 //   claude setup-token    a long-lived token, which is what --watch actually wants
+//
+// checkAuth below asks first, so this arrives before a worktree is built rather than as
+// an OAuth message that invited two wrong conclusions.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
