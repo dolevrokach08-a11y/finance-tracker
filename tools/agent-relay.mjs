@@ -40,7 +40,9 @@
 //   node tools/agent-relay.mjs --status        what is pending, dispatch nothing
 //   node tools/agent-relay.mjs --once          one pass
 //   node tools/agent-relay.mjs --watch [secs]  poll (default 120)
-//   node tools/agent-relay.mjs --reset         forget dispatch history
+//   node tools/agent-relay.mjs --prime         mark every note as seen, dispatch nothing
+//   node tools/agent-relay.mjs --reset          forget all dispatch history
+//   node tools/agent-relay.mjs --reset-note X   forget one note, so it is dispatched again
 //   node tools/agent-relay.mjs --selftest [who] end-to-end check of one lane (claude|codex)
 //
 // The two lanes are not one command with a different name in front. Claude is invoked with
@@ -134,7 +136,10 @@ function scan() {
   for (const [dir, lane] of Object.entries(LANES)) {
     const abs = join(ROOT, 'agents', dir);
     if (!existsSync(abs)) continue;
-    for (const name of readdirSync(abs).filter(f => f.endsWith('.md'))) {
+    // A leading underscore marks a file the relay itself made — the selftest note is one.
+    // Without this, running --selftest while --watch is up hands the watcher a note to
+    // dispatch as if a person had left it.
+    for (const name of readdirSync(abs).filter(f => f.endsWith('.md') && !f.startsWith('_'))) {
       const path = join(abs, name);
       found.push({ dir, name, path, lane, hash: hash(readFileSync(path, 'utf8')) });
     }
@@ -545,6 +550,46 @@ function selftest(owes) {
   }
 }
 
+// Start --watch quietly. Turning the watcher on with open notes means every one of them is
+// "changed since never" and goes out at once — three, at the time this was written, into two
+// CLIs on one machine. Priming records what is on disk as already seen, so the watcher reacts
+// to the next edit rather than to the backlog. It is the honest version of what people
+// otherwise do, which is run --reset and hope.
+function prime() {
+  const st = loadState();
+  let marked = 0;
+  for (const note of scan()) {
+    if (st.notes[note.path]?.hash === note.hash) continue;
+    const prev = st.notes[note.path] || { rounds: 0 };
+    st.notes[note.path] = { ...prev, hash: note.hash, primed: true, at: new Date().toISOString() };
+    console.log(`  · ${note.dir}/${note.name}`);
+    marked++;
+  }
+  if (marked) {
+    saveState(st);
+    console.log(`✓ ${marked} note(s) marked as seen. --watch will answer the next change, not these.`);
+  } else {
+    console.log('· nothing to mark — every note was already seen at its current contents.');
+  }
+}
+
+// Forget one note rather than all of them, which is what --reset does and why --reset is
+// rarely what someone means.
+function resetNote(which) {
+  if (!which) { console.log('✗ --reset-note needs a note: a filename, or any part of its path.'); return; }
+  const st = loadState();
+  const hits = Object.keys(st.notes).filter(p => p.includes(which) || basename(p) === which);
+  if (!hits.length) { console.log(`✗ nothing dispatched matches "${which}".`); return; }
+  if (hits.length > 1) {
+    console.log(`✗ "${which}" matches ${hits.length} notes; name one of them:`);
+    for (const h of hits) console.log(`    ${basename(h)}`);
+    return;
+  }
+  delete st.notes[hits[0]];
+  saveState(st);
+  console.log(`✓ forgotten: ${basename(hits[0])} — the next pass will dispatch it again.`);
+}
+
 const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
 
@@ -554,9 +599,21 @@ if (has('--selftest')) {
   // that existed first.
   const next = argv[argv.indexOf('--selftest') + 1];
   selftest(next && !next.startsWith('-') ? next : 'claude');
+} else if (has('--prime')) {
+  prime();
+} else if (has('--reset-note')) {
+  resetNote(argv[argv.indexOf('--reset-note') + 1]);
 } else if (has('--reset')) {
+  const pending = (() => {
+    const st = loadState();
+    return scan().filter(n => st.notes[n.path]?.hash === n.hash).length;
+  })();
   rmSync(STATE, { force: true });
   console.log('✓ dispatch history forgotten.');
+  if (pending) {
+    console.log(`  ${pending} note(s) that had been answered now look new, and the next pass will`);
+    console.log('  dispatch all of them. If that is not what you wanted: --prime, or --reset-note X.');
+  }
 } else if (has('--watch')) {
   const secs = Number(argv[argv.indexOf('--watch') + 1]) || 120;
   console.log(`agent-relay: watching agents/ every ${secs}s. Nothing is merged or pushed. Ctrl-C to stop.`);
