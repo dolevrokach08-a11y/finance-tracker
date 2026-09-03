@@ -17,11 +17,13 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { transformAsync } from '@babel/core';
-// Imported as a value, not named as a string: Babel resolves string preset names
-// relative to the file being compiled (the repo root), where tools/node_modules
-// is not visible.
-import presetReact from '@babel/preset-react';
+
+// Babel is loaded inside the build below rather than here, so that --check needs no
+// dependencies at all. --check compares sha256 stamps and never compiles anything, but a
+// static import crashes the whole file wherever tools/node_modules is absent — which is
+// every fresh git worktree, since an ignored directory does not follow one. The pre-commit
+// hook runs --check, so in a worktree it blocked every commit and reported that a
+// generated file was stale. Nothing was stale; the checker could not start.
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const check = process.argv.includes('--check');
@@ -60,6 +62,11 @@ targets.push({
   source: 'tax-optimizer.src.jsx',
   out: 'tax-optimizer.app.js',
   async build(src) {
+    const { transformAsync } = await import('@babel/core');
+    // Imported as a value, not named as a string: Babel resolves string preset names
+    // relative to the file being compiled (the repo root), where tools/node_modules
+    // is not visible.
+    const { default: presetReact } = await import('@babel/preset-react');
     const { code } = await transformAsync(src, {
       filename: 'tax-optimizer.src.jsx',
       babelrc: false,

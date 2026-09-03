@@ -7,10 +7,17 @@
 # old code) and silently for the Tailwind CSS (a new class just wouldn't style).
 #
 # Enable once per clone:  git config core.hooksPath tools/hooks
-node tools/build-assets.mjs --check || {
+#
+# The check's own output is printed rather than replaced by a guess at the cause.
+# This hook used to announce "a generated file is out of date" whenever --check
+# exited non-zero, including when --check had crashed before comparing anything
+# and no file was stale at all. Two agents lost a round to that sentence.
+out=$(node tools/build-assets.mjs --check 2>&1) || {
+  echo "$out"
   echo ""
-  echo "Commit blocked: a generated file is out of date with its source."
-  echo "Run:  node tools/build-assets.mjs"
-  echo "then stage the rebuilt file and commit again."
+  echo "Commit blocked: node tools/build-assets.mjs --check did not pass."
+  echo "If a file is stale:  node tools/build-assets.mjs   then stage the rebuilt file."
+  echo "If the check itself failed, the error above is the reason - not a stale file."
   exit 1
 }
+echo "$out"
