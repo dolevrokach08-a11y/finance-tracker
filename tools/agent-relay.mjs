@@ -15,15 +15,26 @@
 // not wake anyone twice and an edited one does. State lives in .agent-relay-state.json,
 // untracked, because "which notes has this machine dispatched" is a fact about this machine.
 //
-// On containment, plainly: **a worktree is not a security boundary.** It isolates git — a
-// branch, an index, a checkout — and nothing else. The process running inside it is an
-// ordinary process, and the allowlist grants `Bash(node:*)`, so Node can write outside the
-// worktree and open the network whenever it likes. An earlier version of this comment said
-// the worktree was "the real containment" and the allowlist merely "defence in depth". That
-// was backwards, and it was the same mistake as the rest of this file's history: a safety
-// property asserted rather than demonstrated. What is actually true is narrower — a relayed
-// round cannot reach main or a remote **by way of git**, because it never checks out main
-// and never pushes. Do not run --watch unattended on this basis alone.
+// On containment. A round runs in its own **clone**, not in a worktree of this repository.
+// That began as a bug report from the machine itself: a linked worktree keeps its git
+// directory back in the parent (.git/worktrees/<name>), so codex — whose sandbox grants
+// write only inside the round's own directory — reviewed a note correctly, wrote the reply,
+// and then could not record it, because index.lock lives outside the box. A clone puts .git
+// inside the box.
+//
+// It is worth being exact about what that does and does not buy, since this file has a
+// history of asserting safety rather than showing it:
+//
+//   Demonstrated — codex's sandbox refused a write outside its directory. That is an
+//   observation from a real run, not a claim. With a clone, the round has no path to this
+//   repository's refs at all, so it cannot move main even by accident.
+//
+//   NOT demonstrated — that codex has no network. network_access=false is set and has never
+//   been tested. And the claude lane has no sandbox at all: its allowlist grants
+//   `Bash(node:*)`, and Node can write anywhere and open a socket. For that lane the clone
+//   bounds git, nothing more.
+//
+// So: the codex lane is contained. The claude lane is bounded in git and trusted otherwise.
 //
 // Usage:
 //   node tools/agent-relay.mjs --status        what is pending, dispatch nothing
@@ -64,7 +75,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATE = join(ROOT, '.agent-relay-state.json');
-const WORKTREES = join(ROOT, '.relay', 'worktrees');
+const ROUNDS = join(ROOT, '.relay', 'rounds');
 
 // Who answers a note left in which directory, and how to wake them.
 const LANES = {
@@ -145,9 +156,10 @@ const briefFor = note => `
 מחוץ ל-\`agents/\`. הסבב נגמר ב"מוכן לאישור" — דולב מאשר, לא אתה.
 `.trim();
 
-// Read, search, reason, run the repo's own checks, and commit inside the worktree. No push,
-// no merge, no gh. The worktree is what actually contains this; the list narrows the blast
-// radius inside it.
+// Read, search, reason, run the repo's own checks, and commit inside the round. No push, no
+// merge, no gh. Note what this list is and is not: with Bash(node:*) on it, it does not
+// confine the process — see the note on containment at the top. It states the shape of the
+// job, and it stops the ordinary mistakes.
 const ALLOWED = [
   'Read', 'Glob', 'Grep', 'Edit', 'Write',
   'Bash(node:*)', 'Bash(git status:*)', 'Bash(git diff:*)', 'Bash(git log:*)',
@@ -165,7 +177,7 @@ const DISALLOWED = [
 // sandbox — so this names the sandbox mode and turns network access off rather than
 // inheriting whatever the default happens to be. With no network there is nothing for
 // `git push` or `gh` to reach: the same boundary reached by another road. Both lanes
-// still work in a throwaway worktree, which is what actually contains them.
+// still run in a throwaway clone, which is what actually contains the codex one.
 //
 // These flags were read off `codex --help`, not recalled. That is the rule this file earned:
 // three guesses were made about a failing login before anyone asked the tool, and when
@@ -189,7 +201,7 @@ function codexArgv(brief, dir) {
   ];
 }
 
-// Ask each CLI whether it can authenticate before building a worktree for it. Best effort:
+// Ask each CLI whether it can authenticate before building a round for it. Best effort:
 // one that answers something unexpected gets the benefit of the doubt and is allowed to
 // fail on its own terms — the point is to turn a silent non-start into a sentence.
 function claudeAuth(binPath) {
@@ -210,22 +222,17 @@ function codexAuth(binPath) {
   return null;
 }
 
-// Removing a worktree is git's job, not the filesystem's. A plain recursive delete leaves
-// git's registration behind and, on Windows, trips over its own locked files — a leftover
-// from an earlier run made the next pass die with EPERM before it could do anything. So:
-// ask git to remove it, prune the registration either way, drop the branch, and only then
-// fall back to deleting whatever is still on disk, with retries for a lingering handle.
 const branchExists = branch => {
   try { sh('git', ['rev-parse', '--verify', '--quiet', branch]); return true; }
   catch { return false; }
 };
 
-function clearWorktree(dir, branch) {
-  try { sh('git', ['worktree', 'remove', '--force', dir]); } catch { /* not registered */ }
-  try { sh('git', ['worktree', 'prune']); } catch { /* nothing to prune */ }
-  try { sh('git', ['branch', '-D', branch]); } catch { /* no such branch */ }
+// A clone is an ordinary directory — no registration in this repo to prune, and no branch
+// of ours living inside it. Deleting one is a delete, which is the point: the teardown that
+// worktrees needed was itself a source of failures.
+function removeRound(dir) {
   try { rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
-  catch (e) { throw new Error(`could not clear ${dir}: ${e.code || e.message}. Remove it by hand and retry.`); }
+  catch (e) { throw new Error(`could not remove ${dir}: ${e.code || e.message}. Remove it by hand.`); }
 }
 
 function dispatch(note, round) {
@@ -249,9 +256,9 @@ function dispatch(note, round) {
   // waiting to be read. A round's output is the only record that the round happened.
   const name = `${slug}-${String(note.hash).slice(0, 8)}-r${round}`;
   const branch = `relay/${name}`;
-  const dir = join(WORKTREES, name);
+  const dir = join(ROUNDS, name);
 
-  mkdirSync(WORKTREES, { recursive: true });
+  mkdirSync(ROUNDS, { recursive: true });
 
   // Refuse rather than overwrite. Reaching here with the branch already present means an
   // identical round already ran; whatever it produced is not this run's to throw away.
@@ -263,15 +270,16 @@ function dispatch(note, round) {
     };
   }
 
-  // Only an orphaned directory can be here now, since the branch does not exist.
-  clearWorktree(dir, branch);
-  sh('git', ['worktree', 'add', '-b', branch, dir, 'main']);
+  // Only a leftover directory can be here now, since the branch does not exist.
+  removeRound(dir);
+  sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
+  sh('git', ['checkout', '--quiet', '-b', branch], { cwd: dir });
 
-  // Deliver the note into the worktree. scan() reads notes from the checkout Dolev works
-  // in; the worktree is built from main. So a note that is new, or edited and not yet
-  // committed, does not exist on the branch the agent wakes up in. The first relayed round
-  // hit exactly this: the agent was told to read a file, found nothing there, and said so.
-  // Copying it in makes delivery the relay's job, which is the whole job it has.
+  // Deliver the note into the round. scan() reads notes from the checkout Dolev works in;
+  // the round is built from main. So a note that is new, or edited and not yet committed,
+  // does not exist on the branch the agent wakes up in. The first relayed round hit exactly
+  // this: the agent was told to read a file, found nothing there, and said so. Copying it in
+  // makes delivery the relay's job, which is the whole job it has.
   const delivered = join(dir, 'agents', note.dir, note.name);
   mkdirSync(dirname(delivered), { recursive: true });
   writeFileSync(delivered, readFileSync(note.path, 'utf8'));
@@ -279,10 +287,53 @@ function dispatch(note, round) {
   const res = launch(binPath, lane.argv(briefFor(note), dir),
     { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
 
+  // Record whatever the agent left, from outside the sandbox.
+  //
+  // Codex cannot do this for itself. Its workspace-write sandbox refuses to write .git even
+  // when .git sits inside the workspace — moving the round from a worktree to a clone did not
+  // change that, which is how the guard was shown to be about .git and not about paths. The
+  // tool ships `codex apply` for exactly this reason: it is built to produce a change that
+  // something outside the box records. Claude commits for itself, and then this finds nothing
+  // staged and does nothing.
+  //
+  // Only agents/ is staged. The brief forbids touching anything else, so a file outside it is
+  // a finding to report, not a contribution to commit.
+  let stray = [];
+  let commitFailed = null;
+  try {
+    const dirty = sh('git', ['status', '--porcelain'], { cwd: dir })
+      .split(String.fromCharCode(10)).map(l => l.trimEnd()).filter(Boolean);
+    const paths = dirty.map(l => l.slice(3).replace(/^"|"$/g, ''));
+    stray = paths.filter(p => !p.startsWith('agents/'));
+    if (paths.length && !stray.length) {
+      sh('git', ['add', '--', 'agents'], { cwd: dir });
+      if (sh('git', ['diff', '--cached', '--name-only'], { cwd: dir })) {
+        sh('git', ['commit', '--quiet', '-m', [
+          `Reply from ${lane.owes} to ${note.dir}/${note.name}`,
+          '',
+          'Written by the agent, committed by tools/agent-relay.mjs from outside the',
+          "sandbox. Only agents/ is staged; the round changed nothing else.",
+          '',
+          `Co-Authored-By: ${lane.owes === 'codex' ? 'Codex <noreply@openai.com>' : 'Claude Opus 5 <noreply@anthropic.com>'}`,
+        ].join(String.fromCharCode(10))], { cwd: dir });
+      }
+    }
+  } catch (e) { commitFailed = (e.stderr || e.message || '').trim().slice(-400); }
+
   const wrote = (() => {
     try { return sh('git', ['log', '--oneline', `main..${branch}`], { cwd: dir }); }
     catch { return ''; }
   })();
+
+  // The reply exists only inside the clone until it is fetched. Do this before anything can
+  // remove the directory, and report a failure to fetch as its own failure — a round whose
+  // answer was written and then lost is the worst outcome this tool has, and it has already
+  // happened once by another route.
+  let fetchFailed = null;
+  if (wrote) {
+    try { sh('git', ['fetch', '--quiet', dir, `${branch}:${branch}`]); }
+    catch (e) { fetchFailed = e.message; }
+  }
 
   // A commit is not an answer. The reply is required to go in the note itself, so check
   // that the note is what changed rather than trusting that something was committed. The
@@ -304,8 +355,11 @@ function dispatch(note, round) {
   // that it is missing rather than inventing a cause.
   const timedOut = res.error && res.error.code === 'ETIMEDOUT';
   const reason =
-      timedOut  ? `${lane.bin} was still working after ${TIMEOUT_MIN} minutes and was stopped`
+      stray.length ? `the round changed files outside agents/, which the brief forbids: ${stray.join(', ')}. Nothing was committed; the round is at ${dir}`
+    : commitFailed ? `the reply could not be committed: ${commitFailed}`
+    : timedOut  ? `${lane.bin} was still working after ${TIMEOUT_MIN} minutes and was stopped`
     : res.error ? `${lane.bin} could not be run: ${res.error.message}`
+    : fetchFailed ? `${lane.bin} replied, but the branch could not be fetched out of ${dir}: ${fetchFailed}`
     : !wrote    ? `${lane.bin} exited ${res.status} and left no commit`
     : !answered ? `committed, but not to agents/${note.dir}/${note.name} — the reply belongs in the note`
     : res.status !== 0
@@ -313,7 +367,7 @@ function dispatch(note, round) {
       : null;
 
   return {
-    ok: !res.error && res.status === 0 && !!wrote && answered,
+    ok: !res.error && res.status === 0 && !stray.length && !commitFailed && !!wrote && answered && !fetchFailed,
     // This run built the branch, so this run may remove it. A dispatch that refused to
     // touch an existing branch says created: false, and cleanup must respect that.
     created: true,
@@ -425,24 +479,33 @@ function selftest(owes) {
 ✓ the ${owes} lane works end to end — replied in the note, on ${r.branch}`);
     console.log(`  ${r.commits.split(String.fromCharCode(10)).join(String.fromCharCode(10) + '  ')}`);
     console.log(`  read it:  git log -p main..${r.branch}`);
-    console.log('  it is left in place so you can look; delete with:');
-    console.log(`    git worktree remove --force .relay/worktrees/${basename(r.dir)} && git branch -D ${r.branch}`);
+    // The branch was fetched into this repository, so nothing is lost with the clone.
+    try { removeRound(r.dir); console.log('  (the round\'s clone is removed; the branch is here)'); }
+    catch (e) { console.log('  ' + e.message); }
+    console.log(`  delete the branch with:  git branch -D ${r.branch}`);
   } else {
     console.log(`
 ✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
     if (r.output) console.log(r.output.split(String.fromCharCode(10)).map(l => '  ' + l).join(String.fromCharCode(10)));
-    // Only tidy away a worktree that holds nothing. The first failed round was cleaned up
-    // automatically and took the agent's staged reply with it — a real answer, deleted for
-    // being unfinished. Uncommitted work is the reason to keep a worktree, not to remove it.
+    // A round holding anything uncommitted is never removed. The version before this one
+    // tried to be clever — it discounted the delivered note, on the grounds that the relay
+    // had put it there and it was not the agent's work. But the reply is written *into* that
+    // note, so the one file that had to be kept was the one file being ignored, and a codex
+    // round that had answered correctly was deleted by the code written to stop exactly that.
+    // Now that the relay commits the reply itself, anything still dirty here is a genuine
+    // leftover, and leftovers are kept.
     if (r.branch && r.created) {
-      let leftovers = '';
-      try { leftovers = sh('git', ['status', '--porcelain'], { cwd: r.dir }); } catch { /* gone */ }
-      if (leftovers) {
+      let mine = [];
+      try {
+        mine = sh('git', ['status', '--porcelain'], { cwd: r.dir })
+          .split(String.fromCharCode(10)).filter(l => l.trim());
+      } catch { /* the directory is already gone */ }
+      if (mine.length) {
         console.log(`· keeping ${r.dir} — the agent left work there:`);
-        console.log(leftovers.split(String.fromCharCode(10)).map(l => '    ' + l).join(String.fromCharCode(10)));
-        console.log(`  discard it with:  node tools/agent-relay.mjs --reset  (or git worktree remove --force ${r.dir})`);
+        console.log(mine.map(l => '    ' + l).join(String.fromCharCode(10)));
+        console.log(`  remove it with:  rm -rf ${r.dir}`);
       } else {
-        try { clearWorktree(r.dir, r.branch); console.log('· cleaned up the worktree and branch'); }
+        try { removeRound(r.dir); console.log('· removed the round; nothing was left in it'); }
         catch (e) { console.log('· ' + e.message); }
       }
     }
