@@ -106,11 +106,20 @@ function resolveBin(bin) {
   return first || null;
 }
 
-// A .cmd or .bat shim cannot be executed directly by Node, but it can be handed to cmd.exe
-// as a separate argument, which still keeps the brief out of a concatenated string.
+// A .cmd or .bat shim cannot be executed by Node directly; cmd.exe has to run it, and
+// cmd.exe re-parses whatever it is given. Passing the path as an ordinary argument breaks on
+// any path containing a space — here, every path does: "C:\\Users\\Dolev Rokach\\..." arrived
+// as the command "C:\\Users\\Dolev". Both lanes resolve to .exe files today, so nothing has hit
+// this; an npm-installed CLI is a .cmd, and it would have.
+//
+// The fix is to build the command line, quote every token, and tell Node not to touch it.
+// Verified against a shim under a spaced path with a Hebrew argument containing & and %.
 function launch(binPath, args, opts) {
   if (/\.(cmd|bat)$/i.test(binPath)) {
-    return spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', binPath, ...args], opts);
+    const quote = t => '"' + String(t).replace(/"/g, '\\"') + '"';
+    const line = '"' + [binPath, ...args].map(quote).join(' ') + '"';
+    return spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', line],
+      { ...opts, windowsVerbatimArguments: true });
   }
   return spawnSync(binPath, args, opts);
 }
@@ -281,8 +290,9 @@ function dispatch(note, round) {
   // this: the agent was told to read a file, found nothing there, and said so. Copying it in
   // makes delivery the relay's job, which is the whole job it has.
   const delivered = join(dir, 'agents', note.dir, note.name);
+  const deliveredText = readFileSync(note.path, 'utf8');
   mkdirSync(dirname(delivered), { recursive: true });
-  writeFileSync(delivered, readFileSync(note.path, 'utf8'));
+  writeFileSync(delivered, deliveredText);
 
   const res = launch(binPath, lane.argv(briefFor(note), dir),
     { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
@@ -298,6 +308,18 @@ function dispatch(note, round) {
   //
   // Only agents/ is staged. The brief forbids touching anything else, so a file outside it is
   // a finding to report, not a contribution to commit.
+  // Whether the note came back changed at all. Everything below turns on this, because the
+  // relay delivering a file and then committing it is not an answer — and for one run it
+  // looked like one: the agent died on a token refresh having written nothing, the relay
+  // committed the untouched note it had just delivered, and both "there is a commit" and
+  // "the commit touches the note" were satisfied by the relay's own delivery. The only thing
+  // that stopped a green was the CLI's non-zero exit, which is luck, not a check.
+  let replied = false;
+  try {
+    const back = readFileSync(delivered, 'utf8');
+    replied = back !== deliveredText && /^##\s+תגובה/m.test(back);
+  } catch { /* the agent deleted it, which is not a reply either */ }
+
   let stray = [];
   let commitFailed = null;
   try {
@@ -305,7 +327,7 @@ function dispatch(note, round) {
       .split(String.fromCharCode(10)).map(l => l.trimEnd()).filter(Boolean);
     const paths = dirty.map(l => l.slice(3).replace(/^"|"$/g, ''));
     stray = paths.filter(p => !p.startsWith('agents/'));
-    if (paths.length && !stray.length) {
+    if (replied && paths.length && !stray.length) {
       sh('git', ['add', '--', 'agents'], { cwd: dir });
       if (sh('git', ['diff', '--cached', '--name-only'], { cwd: dir })) {
         sh('git', ['commit', '--quiet', '-m', [
@@ -339,7 +361,7 @@ function dispatch(note, round) {
   // that the note is what changed rather than trusting that something was committed. The
   // version that counted only commits would have called a dispatch green while the agent
   // was in fact reporting that it had nothing to read.
-  const answered = (() => {
+  const answered = replied && (() => {
     try {
       const files = sh('git', ['diff', '--name-only', `main..${branch}`], { cwd: dir });
       return files.split(String.fromCharCode(10))
@@ -360,6 +382,7 @@ function dispatch(note, round) {
     : timedOut  ? `${lane.bin} was still working after ${TIMEOUT_MIN} minutes and was stopped`
     : res.error ? `${lane.bin} could not be run: ${res.error.message}`
     : fetchFailed ? `${lane.bin} replied, but the branch could not be fetched out of ${dir}: ${fetchFailed}`
+    : !replied  ? `${lane.bin} exited ${res.status} without writing a reply into agents/${note.dir}/${note.name} — the note came back exactly as delivered`
     : !wrote    ? `${lane.bin} exited ${res.status} and left no commit`
     : !answered ? `committed, but not to agents/${note.dir}/${note.name} — the reply belongs in the note`
     : res.status !== 0
@@ -371,6 +394,9 @@ function dispatch(note, round) {
     // This run built the branch, so this run may remove it. A dispatch that refused to
     // touch an existing branch says created: false, and cleanup must respect that.
     created: true,
+    // For the caller's cleanup decision: whether the note came back changed, and whether
+    // anything outside agents/ was touched. Both are facts about content, not guesses.
+    replied, stray,
     reason,
     branch, dir, round,
     commits: wrote,
@@ -494,12 +520,19 @@ function selftest(owes) {
     // round that had answered correctly was deleted by the code written to stop exactly that.
     // Now that the relay commits the reply itself, anything still dirty here is a genuine
     // leftover, and leftovers are kept.
+    // Remove a round only when the relay can prove there is nothing in it: the note came
+    // back byte-identical to what was delivered, and nothing outside agents/ was touched.
+    // That is an equality check against bytes this process wrote, not a judgement about
+    // which files look important — the judgement version deleted a correct answer.
     if (r.branch && r.created) {
+      const disposable = r.replied === false && !(r.stray || []).length;
       let mine = [];
-      try {
-        mine = sh('git', ['status', '--porcelain'], { cwd: r.dir })
-          .split(String.fromCharCode(10)).filter(l => l.trim());
-      } catch { /* the directory is already gone */ }
+      if (!disposable) {
+        try {
+          mine = sh('git', ['status', '--porcelain'], { cwd: r.dir })
+            .split(String.fromCharCode(10)).filter(l => l.trim());
+        } catch { /* the directory is already gone */ }
+      }
       if (mine.length) {
         console.log(`· keeping ${r.dir} — the agent left work there:`);
         console.log(mine.map(l => '    ' + l).join(String.fromCharCode(10)));
