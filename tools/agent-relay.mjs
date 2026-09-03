@@ -299,6 +299,23 @@ function dispatch(note, round) {
   mkdirSync(dirname(delivered), { recursive: true });
   writeFileSync(delivered, deliveredText);
 
+  // If the note is new to the branch, commit the delivery before waking anyone, so that the
+  // agent always edits a *tracked* file. A real note is tracked and comes back as " M path";
+  // the selftest note is invented each run and came back as "?? path". That one difference
+  // between the rehearsal and the performance is where a path-parsing bug lived, passing
+  // every selftest and failing the first real note. Making them the same shape closes the
+  // gap for whatever the next such bug turns out to be. The reply is still judged by
+  // comparing bytes, so an extra commit here cannot make an unanswered note look answered.
+  const notePath = `agents/${note.dir}/${note.name}`;
+  if (!sh('git', ['ls-files', '--', notePath], { cwd: dir })) {
+    sh('git', ['add', '--', notePath], { cwd: dir });
+    sh('git', ['commit', '--quiet', '-m', `Deliver ${notePath} for review`], { cwd: dir });
+  }
+
+  // Everything the round is judged on is measured from here, not from main, so that the
+  // relay's own delivery commit is never counted as the agent's work.
+  const base = sh('git', ['rev-parse', 'HEAD'], { cwd: dir });
+
   const res = launch(binPath, lane.argv(briefFor(note), dir),
     { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
 
@@ -328,9 +345,21 @@ function dispatch(note, round) {
   let stray = [];
   let commitFailed = null;
   try {
-    const dirty = sh('git', ['status', '--porcelain'], { cwd: dir })
-      .split(String.fromCharCode(10)).map(l => l.trimEnd()).filter(Boolean);
-    const paths = dirty.map(l => l.slice(3).replace(/^"|"$/g, ''));
+    // Ask git for paths, not for a status line to take apart. The version that parsed
+    // --porcelain cut three characters off each line to drop the XY status field, and sh()
+    // trims its output — so the leading space of " M path" was gone before the slice, and the
+    // first modified file came back as "gents/from-claude/...". The relay then refused the
+    // round for touching a file outside agents/, naming a path that does not exist.
+    //
+    // The selftest could not have caught it. Its note is always new, so it is always "?? path"
+    // with no leading space; a real note is tracked, so it is always " M path". The single
+    // case where the rehearsal and the performance differ is the case that broke.
+    const listed = args => sh('git', args, { cwd: dir })
+      .split(String.fromCharCode(10)).map(l => l.trim()).filter(Boolean);
+    const paths = [...new Set([
+      ...listed(['diff', '--name-only', 'HEAD']),
+      ...listed(['ls-files', '--others', '--exclude-standard']),
+    ])];
     stray = paths.filter(p => !p.startsWith('agents/'));
     if (replied && paths.length && !stray.length) {
       sh('git', ['add', '--', 'agents'], { cwd: dir });
@@ -348,7 +377,7 @@ function dispatch(note, round) {
   } catch (e) { commitFailed = (e.stderr || e.message || '').trim().slice(-400); }
 
   const wrote = (() => {
-    try { return sh('git', ['log', '--oneline', `main..${branch}`], { cwd: dir }); }
+    try { return sh('git', ['log', '--oneline', `${base}..${branch}`], { cwd: dir }); }
     catch { return ''; }
   })();
 
@@ -368,7 +397,7 @@ function dispatch(note, round) {
   // was in fact reporting that it had nothing to read.
   const answered = replied && (() => {
     try {
-      const files = sh('git', ['diff', '--name-only', `main..${branch}`], { cwd: dir });
+      const files = sh('git', ['diff', '--name-only', `${base}..${branch}`], { cwd: dir });
       return files.split(String.fromCharCode(10))
         .some(f => f.trim() === `agents/${note.dir}/${note.name}`);
     } catch { return false; }
