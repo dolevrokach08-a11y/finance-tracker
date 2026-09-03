@@ -92,6 +92,13 @@ const MAX_ROUNDS = 5;
 // How long one agent may work before the round is abandoned.
 const TIMEOUT_MIN = 20;
 
+// How many times a failed round is retried before the note is left alone. A failure used to
+// leave the note untouched so it would be tried again, with nothing counting the tries: when
+// a path-parsing bug made every round fail, --watch dispatched the same note into codex every
+// thirty seconds until someone noticed. Retrying a transient failure is right; retrying
+// forever is a bill. The count clears when the round succeeds or the note changes.
+const MAX_ATTEMPTS = 3;
+
 const sh = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { cwd: ROOT, encoding: 'utf8', ...opts }).trim();
 
@@ -438,6 +445,21 @@ function dispatch(note, round) {
   };
 }
 
+// What to do with the round's directory once the round is over. On success there is nothing
+// in it that is not already a branch in this repository, so it goes. On failure it stays
+// unless the relay can prove it holds nothing: the note came back byte-identical to what was
+// delivered and nothing outside agents/ was touched. --watch was leaving every successful
+// round on disk, at about 40MB each, because only the selftest cleaned up after itself.
+function closeRound(r) {
+  if (!r.branch || !r.created) return;
+  const disposable = r.ok || (r.replied === false && !(r.stray || []).length);
+  if (!disposable) {
+    console.log(`    the round is kept at ${r.dir}`);
+    return;
+  }
+  try { removeRound(r.dir); } catch (e) { console.log('    ' + e.message); }
+}
+
 function pass({ act }) {
   const st = loadState();
   const notes = scan();
@@ -456,6 +478,16 @@ function pass({ act }) {
     console.log(`\n→ ${note.dir}/${note.name}`);
     console.log(`  owed by: ${lane.owes}   round: ${round}`);
 
+    // The budget is spent against this exact text. Editing the note is a new question, so
+    // it starts over — otherwise the message below, which tells you to edit the note, lies.
+    const attempts = (prev.attemptsFor === note.hash ? prev.attempts || 0 : 0) + 1;
+    if (attempts > MAX_ATTEMPTS) {
+      console.log(`  ✗ ${MAX_ATTEMPTS} attempts have already failed on this note, unchanged. Not trying again.`);
+      console.log(`    last failure: ${prev.lastError || 'unrecorded'}`);
+      console.log('    edit the note, or: node tools/agent-relay.mjs --reset-note ' + basename(note.path));
+      continue;
+    }
+
     if (round > MAX_ROUNDS) {
       console.log(`  ✗ stopping: ${MAX_ROUNDS} automatic rounds already. This one needs a person.`);
       if (act) { st.notes[note.path] = { ...prev, hash: note.hash, stalled: true }; changed = true; }
@@ -467,12 +499,17 @@ function pass({ act }) {
     if (!r.ok) {
       console.log(`  ✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
       if (r.output) console.log(r.output.split('\n').map(l => '    ' + l).join('\n'));
-      // Not marked as dispatched: a failed wake should be retried, not swallowed.
+      closeRound(r);
+      // The note keeps its old hash so it is tried again, but the attempt is counted. Without
+      // the count this line was an unbounded retry loop.
+      st.notes[note.path] = { ...prev, attempts, attemptsFor: note.hash, lastError: r.reason || 'no reason given', at: new Date().toISOString() };
+      changed = true;
       continue;
     }
     console.log(`  ✓ replied on ${r.branch}`);
     console.log(`    ${r.commits.split('\n').join('\n    ')}`);
     console.log(`    review: git log -p main..${r.branch}`);
+    closeRound(r);
     st.notes[note.path] = { hash: note.hash, rounds: round, branch: r.branch, at: new Date().toISOString() };
     changed = true;
   }
