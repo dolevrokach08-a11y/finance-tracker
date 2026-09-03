@@ -12,10 +12,18 @@
 //   agents/from-claude/*.md  changed  ->  Codex owes a reply
 //
 // A note is dispatched once, keyed by the hash of its contents, so an unchanged file does
-// not wake anyone twice and an edited one does. Work happens in a throwaway git worktree,
-// which is the real containment; the tool allowlist below is defence in depth, not the
-// boundary. State lives in .agent-relay-state.json, untracked, because "which notes has
-// this machine dispatched" is a fact about this machine.
+// not wake anyone twice and an edited one does. State lives in .agent-relay-state.json,
+// untracked, because "which notes has this machine dispatched" is a fact about this machine.
+//
+// On containment, plainly: **a worktree is not a security boundary.** It isolates git — a
+// branch, an index, a checkout — and nothing else. The process running inside it is an
+// ordinary process, and the allowlist grants `Bash(node:*)`, so Node can write outside the
+// worktree and open the network whenever it likes. An earlier version of this comment said
+// the worktree was "the real containment" and the allowlist merely "defence in depth". That
+// was backwards, and it was the same mistake as the rest of this file's history: a safety
+// property asserted rather than demonstrated. What is actually true is narrower — a relayed
+// round cannot reach main or a remote **by way of git**, because it never checks out main
+// and never pushes. Do not run --watch unattended on this basis alone.
 //
 // Usage:
 //   node tools/agent-relay.mjs --status        what is pending, dispatch nothing
@@ -67,6 +75,9 @@ const LANES = {
 // How many times one thread may bounce automatically. A conversation that has gone five
 // rounds without a person in it has stopped converging.
 const MAX_ROUNDS = 5;
+
+// How long one agent may work before the round is abandoned.
+const TIMEOUT_MIN = 20;
 
 const sh = (cmd, args, opts = {}) =>
   execFileSync(cmd, args, { cwd: ROOT, encoding: 'utf8', ...opts }).trim();
@@ -204,6 +215,11 @@ function codexAuth(binPath) {
 // from an earlier run made the next pass die with EPERM before it could do anything. So:
 // ask git to remove it, prune the registration either way, drop the branch, and only then
 // fall back to deleting whatever is still on disk, with retries for a lingering handle.
+const branchExists = branch => {
+  try { sh('git', ['rev-parse', '--verify', '--quiet', branch]); return true; }
+  catch { return false; }
+};
+
 function clearWorktree(dir, branch) {
   try { sh('git', ['worktree', 'remove', '--force', dir]); } catch { /* not registered */ }
   try { sh('git', ['worktree', 'prune']); } catch { /* nothing to prune */ }
@@ -226,10 +242,28 @@ function dispatch(note, round) {
   // _selftest.md produced exactly that.
   const slug = (basename(note.name, '.md').slice(0, 40).replace(/[^a-zA-Z0-9-]/g, '-')
     .replace(/^-+|-+$/g, '') || 'note');
-  const branch = `relay/${slug}`;
-  const dir = join(WORKTREES, slug);
+
+  // The name carries the note's contents and the round, so two rounds of one thread cannot
+  // land on the same branch. When the name was the slug alone, dispatching a note a second
+  // time began by force-removing the first round — deleting a committed reply that was
+  // waiting to be read. A round's output is the only record that the round happened.
+  const name = `${slug}-${String(note.hash).slice(0, 8)}-r${round}`;
+  const branch = `relay/${name}`;
+  const dir = join(WORKTREES, name);
 
   mkdirSync(WORKTREES, { recursive: true });
+
+  // Refuse rather than overwrite. Reaching here with the branch already present means an
+  // identical round already ran; whatever it produced is not this run's to throw away.
+  if (branchExists(branch)) {
+    return {
+      ok: false, created: false, branch, dir, round,
+      reason: `${branch} already exists — an identical round has run. Read that branch, and `
+        + `delete it yourself if you want this note dispatched again.`,
+    };
+  }
+
+  // Only an orphaned directory can be here now, since the branch does not exist.
   clearWorktree(dir, branch);
   sh('git', ['worktree', 'add', '-b', branch, dir, 'main']);
 
@@ -243,7 +277,7 @@ function dispatch(note, round) {
   writeFileSync(delivered, readFileSync(note.path, 'utf8'));
 
   const res = launch(binPath, lane.argv(briefFor(note), dir),
-    { cwd: dir, encoding: 'utf8', timeout: 20 * 60 * 1000 });
+    { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
 
   const wrote = (() => {
     try { return sh('git', ['log', '--oneline', `main..${branch}`], { cwd: dir }); }
@@ -262,14 +296,27 @@ function dispatch(note, round) {
     } catch { return false; }
   })();
 
-  const reason = !wrote
-    ? 'the agent produced no commit'
-    : !answered
-      ? `committed, but not to agents/${note.dir}/${note.name} — the reply belongs in the note`
+  // Each way this can fail gets its own sentence. The version this replaces collapsed them:
+  // a run that exited non-zero *after* committing a good reply reported "the agent produced
+  // no commit", because reason was null and the caller filled the gap with a guess. That is
+  // the same shape as the pre-commit hook this file spent the day fixing, written into the
+  // fix hours later — so the caller's fallback is gone too, and a missing reason now says
+  // that it is missing rather than inventing a cause.
+  const timedOut = res.error && res.error.code === 'ETIMEDOUT';
+  const reason =
+      timedOut  ? `${lane.bin} was still working after ${TIMEOUT_MIN} minutes and was stopped`
+    : res.error ? `${lane.bin} could not be run: ${res.error.message}`
+    : !wrote    ? `${lane.bin} exited ${res.status} and left no commit`
+    : !answered ? `committed, but not to agents/${note.dir}/${note.name} — the reply belongs in the note`
+    : res.status !== 0
+      ? `the reply is committed on ${branch}, but ${lane.bin} exited ${res.status} — read it before trusting it`
       : null;
 
   return {
-    ok: res.status === 0 && !!wrote && answered,
+    ok: !res.error && res.status === 0 && !!wrote && answered,
+    // This run built the branch, so this run may remove it. A dispatch that refused to
+    // touch an existing branch says created: false, and cleanup must respect that.
+    created: true,
     reason,
     branch, dir, round,
     commits: wrote,
@@ -287,6 +334,7 @@ function pass({ act }) {
     return st;
   }
 
+  let changed = false;
   for (const note of pending) {
     const prev = st.notes[note.path] || { rounds: 0 };
     const round = prev.rounds + 1;
@@ -296,14 +344,14 @@ function pass({ act }) {
 
     if (round > MAX_ROUNDS) {
       console.log(`  ✗ stopping: ${MAX_ROUNDS} automatic rounds already. This one needs a person.`);
-      st.notes[note.path] = { ...prev, hash: note.hash, stalled: true };
+      if (act) { st.notes[note.path] = { ...prev, hash: note.hash, stalled: true }; changed = true; }
       continue;
     }
     if (!act) { console.log('  (status only — not dispatched)'); continue; }
 
     const r = dispatch(note, round);
     if (!r.ok) {
-      console.log(`  ✗ ${r.reason || 'the agent produced no commit'}`);
+      console.log(`  ✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
       if (r.output) console.log(r.output.split('\n').map(l => '    ' + l).join('\n'));
       // Not marked as dispatched: a failed wake should be retried, not swallowed.
       continue;
@@ -312,9 +360,14 @@ function pass({ act }) {
     console.log(`    ${r.commits.split('\n').join('\n    ')}`);
     console.log(`    review: git log -p main..${r.branch}`);
     st.notes[note.path] = { hash: note.hash, rounds: round, branch: r.branch, at: new Date().toISOString() };
+    changed = true;
   }
 
-  saveState(st);
+  // --status is a report and must leave no trace. It used to fall through to saveState
+  // regardless, and worse, a note past MAX_ROUNDS was marked stalled at its current hash
+  // by a command that only claimed to be looking — which would have quietly retired a
+  // thread nobody had dispatched.
+  if (changed) saveState(st);
   return st;
 }
 
@@ -376,12 +429,12 @@ function selftest(owes) {
     console.log(`    git worktree remove --force .relay/worktrees/${basename(r.dir)} && git branch -D ${r.branch}`);
   } else {
     console.log(`
-✗ ${r.reason || 'the agent produced no commit'}`);
+✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
     if (r.output) console.log(r.output.split(String.fromCharCode(10)).map(l => '  ' + l).join(String.fromCharCode(10)));
     // Only tidy away a worktree that holds nothing. The first failed round was cleaned up
     // automatically and took the agent's staged reply with it — a real answer, deleted for
     // being unfinished. Uncommitted work is the reason to keep a worktree, not to remove it.
-    if (r.branch) {
+    if (r.branch && r.created) {
       let leftovers = '';
       try { leftovers = sh('git', ['status', '--porcelain'], { cwd: r.dir }); } catch { /* gone */ }
       if (leftovers) {
