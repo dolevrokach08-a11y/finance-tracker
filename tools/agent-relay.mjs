@@ -98,6 +98,33 @@ const LANES = {
 // person to write in the file is the one who does not owe anything.
 const REPLY_HEADING = /^\s*#{1,4}\s*(?:תגובה|תוספת|reply)\s*[—–-]\s*([A-Za-z]+)/i;
 
+// A note may name the code it is about:
+//
+//   review_commit: <sha>    what to check out for the review
+//   base_commit:   <sha>    what to compare it against
+//
+// Both are optional, and a note without them behaves as before. They exist because a round
+// was always built from main, which is right for a note about main and wrong for every note
+// about work on a branch: the reviewer would read code that is not the code being described,
+// and agree or disagree with confidence about the wrong thing. Nothing here reads the current
+// checkout — a floating HEAD can move between the scan and the dispatch, so the note has to
+// say what it means.
+const META_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?(base_commit|review_commit)(?:\*\*)?\s*:\s*(?:`)?([0-9a-f]{7,40})\b/i;
+
+function metaFor(text) {
+  const meta = {};
+  for (const line of String(text).split(String.fromCharCode(10))) {
+    const m = line.match(META_LINE);
+    if (m) meta[m[1].toLowerCase()] = m[2];
+  }
+  return meta;
+}
+
+const commitExists = sha => {
+  try { sh('git', ['rev-parse', '--verify', '--quiet', sha + '^{commit}']); return true; }
+  catch { return false; }
+};
+
 function owedBy(text, dir) {
   let last = null;
   for (const line of String(text).split(String.fromCharCode(10))) {
@@ -145,9 +172,24 @@ function resolveBin(bin) {
 // this; an npm-installed CLI is a .cmd, and it would have.
 //
 // The fix is to build the command line, quote every token, and tell Node not to touch it.
-// Verified against a shim under a spaced path with a Hebrew argument containing & and %.
+// That carries spaces, Hebrew, & and % — which is what was tested, and it was not enough.
+//
+// A command line cannot hold a newline, and the brief is always many lines. Passed through
+// here it did not arrive: the run lost everything after the first line, or failed outright
+// with no output at all. In the claude lane the flags sit after the brief, so they went with
+// it — the agent would have run without --allowedTools or --disallowedTools, on default
+// permissions. That is a containment failure wearing the costume of a text bug, and the
+// exit code was 0. So this refuses rather than truncates. Both CLIs resolve to .exe here
+// and never reach it; an npm-installed one is a .cmd and would.
 function launch(binPath, args, opts) {
   if (/\.(cmd|bat)$/i.test(binPath)) {
+    if (args.some(a => /[\r\n]/.test(String(a)))) {
+      return {
+        status: null, stdout: '', stderr: '',
+        error: new Error(binPath + ' is a .cmd shim, and a multi-line argument cannot reach one. '
+          + 'Install a native executable for this agent, or run the relay where one is on PATH.'),
+      };
+    }
     const quote = t => '"' + String(t).replace(/"/g, '\\"') + '"';
     const line = '"' + [binPath, ...args].map(quote).join(' ') + '"';
     return spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', line],
@@ -212,8 +254,12 @@ function scan() {
 
 // The instruction the woken agent runs under. It restates the protocol rather than assuming
 // the agent will recall it, and it is explicit that the round ends at a reply.
-const briefFor = note => `
+const briefFor = (note, meta = {}) => `
 קרא את \`agents/${note.dir}/${note.name}\` והגב עליו.
+${meta.review_commit ? `
+**הקוד שאתה סוקר הוא \`${meta.review_commit}\`**, והוא כבר משוחזר בתיקייה הזאת.${
+  meta.base_commit ? ` ההשוואה היא מול \`${meta.base_commit}\` — \`git diff ${meta.base_commit}..HEAD\`.` : ''}
+` : ''}
 
 **התפקיד שלך בסבב הזה הוא לסקור ולענות, לא ליישם.** אל תשנה קוד מחוץ ל-\`agents/\`.
 
@@ -350,6 +396,19 @@ function dispatch(note, round) {
     };
   }
 
+  // A note that names a commit is refused outright when that commit is not here, rather than
+  // quietly reviewed against main — a review of the wrong code that reads like a review of
+  // the right code is the worst thing this tool could produce.
+  const meta = metaFor(readFileSync(note.path, 'utf8'));
+  for (const key of ['review_commit', 'base_commit']) {
+    if (meta[key] && !commitExists(meta[key])) {
+      return {
+        ok: false, created: false, branch, dir, round,
+        reason: `the note names ${key}: ${meta[key]}, which is not a commit in this repository`,
+      };
+    }
+  }
+
   // A directory here is a round that was deliberately kept: closeRound() removes every round
   // it can prove is empty, so anything left holds an agent's work that nobody has looked at.
   // The retry used to begin by deleting it — saving the evidence and then destroying it one
@@ -360,7 +419,13 @@ function dispatch(note, round) {
       reason: `${dir} already holds a kept round. Read it, then delete it yourself to retry.`,
     };
   }
-  sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
+  if (meta.review_commit) {
+    // Every ref, since the commit under review is usually on some other branch.
+    sh('git', ['clone', '--quiet', '--no-hardlinks', ROOT, dir]);
+    sh('git', ['checkout', '--quiet', '--detach', meta.review_commit], { cwd: dir });
+  } else {
+    sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
+  }
   sh('git', ['checkout', '--quiet', '-b', branch], { cwd: dir });
 
   // Deliver the note into the round. scan() reads notes from the checkout Dolev works in;
@@ -390,7 +455,7 @@ function dispatch(note, round) {
   // relay's own delivery commit is never counted as the agent's work.
   const base = sh('git', ['rev-parse', 'HEAD'], { cwd: dir });
 
-  const res = launch(binPath, lane.argv(briefFor(note), dir),
+  const res = launch(binPath, lane.argv(briefFor(note, meta), dir),
     { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
 
   // Record whatever the agent left, from outside the sandbox.
