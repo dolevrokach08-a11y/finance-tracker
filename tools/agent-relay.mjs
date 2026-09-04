@@ -111,11 +111,40 @@ const REPLY_HEADING = /^\s*#{1,4}\s*(?:תגובה|תוספת|reply)\s*[—–-]\
 // say what it means.
 const META_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?(base_commit|review_commit)(?:\*\*)?\s*:\s*(?:`)?([0-9a-f]{7,40})\b/i;
 
+// Notes quote things. A reply that shows what a metadata line looks like, or what a reply
+// heading looks like, must not be read as one — Codex demonstrated both: a note carrying
+// review_commit at the top and a different review_commit inside a code fence resolved to the
+// quoted one, silently sending the next round to other code; and a reply heading inside a
+// fence changed the routing. Anything inside a fence is an example, not an instruction.
+function withoutFences(text) {
+  let fenced = false;
+  return String(text).split(String.fromCharCode(10)).filter(line => {
+    if (/^\s*(?:```|~~~)/.test(line)) { fenced = !fenced; return false; }
+    return !fenced;
+  });
+}
+
+// Metadata is read from the head of the note only — before the first horizontal rule, which
+// every note in agents/ already uses to close its header. Reading the whole document meant
+// the last value won, so a later mention beat the real one.
 function metaFor(text) {
+  const lines = withoutFences(text);
+  const end = lines.findIndex(l => /^\s*---\s*$/.test(l));
+  const header = end === -1 ? lines.slice(0, 40) : lines.slice(0, end);
+
   const meta = {};
-  for (const line of String(text).split(String.fromCharCode(10))) {
+  for (const line of header) {
     const m = line.match(META_LINE);
-    if (m) meta[m[1].toLowerCase()] = m[2];
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    // Two different answers to the same question is not something to resolve by picking one.
+    if (meta[key] && meta[key] !== m[2]) {
+      meta.conflict = `the note gives ${key} twice, as ${meta[key]} and ${m[2]}`;
+    }
+    meta[key] = m[2];
+  }
+  if (meta.base_commit && !meta.review_commit) {
+    meta.conflict = 'the note gives base_commit without review_commit, so there is nothing to check out';
   }
   return meta;
 }
@@ -125,13 +154,18 @@ const commitExists = sha => {
   catch { return false; }
 };
 
+// The names the two agents actually sign with. "GPT" is the name AGENTS.md and the folder
+// names use, and there are replies signed that way in agents/archive/ — reading it as an
+// unknown name sent the thread back to Codex, who had just written it.
+const SIGNS_AS = { claude: 'claude', codex: 'codex', gpt: 'codex', chatgpt: 'codex' };
+
 function owedBy(text, dir) {
   let last = null;
-  for (const line of String(text).split(String.fromCharCode(10))) {
+  for (const line of withoutFences(text)) {
     const m = line.match(REPLY_HEADING);
-    if (m) last = m[1].toLowerCase();
+    if (m) last = SIGNS_AS[m[1].toLowerCase()] || last;
   }
-  if (last && AGENTS[last]) return last === 'claude' ? 'codex' : 'claude';
+  if (last) return last === 'claude' ? 'codex' : 'claude';
   return LANES[dir].owes;
 }
 
@@ -207,7 +241,10 @@ const hash = s => createHash('sha256')
   .update(String(s).replace(/\r\n/g, String.fromCharCode(10)).replace(/\r/g, String.fromCharCode(10)))
   .digest('hex').slice(0, 16);
 
-// State written before that fix holds raw-byte hashes. Recomputing them would be wrong — the
+// State written before that fix holds raw-byte hashes. It is rewritten in memory on every
+// load and saved by whatever writes state next, so a run that changes nothing leaves the file
+// alone and converts again next time. That is idempotent and cheap, and it keeps --status to
+// its promise of writing nothing. Recomputing them would be wrong — the
 // point of the entry is "this text was answered", not "these bytes were" — so an entry whose
 // stored hash matches the file's raw bytes is moved to the canonical hash of the same text.
 // An entry that matches neither is left alone: it refers to a version of the note that is no
@@ -400,6 +437,9 @@ function dispatch(note, round) {
   // quietly reviewed against main — a review of the wrong code that reads like a review of
   // the right code is the worst thing this tool could produce.
   const meta = metaFor(readFileSync(note.path, 'utf8'));
+  if (meta.conflict) {
+    return { ok: false, created: false, branch, dir, round, reason: meta.conflict };
+  }
   for (const key of ['review_commit', 'base_commit']) {
     if (meta[key] && !commitExists(meta[key])) {
       return {
