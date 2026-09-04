@@ -79,11 +79,34 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATE = join(ROOT, '.agent-relay-state.json');
 const ROUNDS = join(ROOT, '.relay', 'rounds');
 
-// Who answers a note left in which directory, and how to wake them.
-const LANES = {
-  'from-gpt': { owes: 'claude', bin: 'claude', argv: claudeArgv, auth: claudeAuth },
-  'from-claude': { owes: 'codex', bin: 'codex', argv: codexArgv, auth: codexAuth },
+// How to wake each agent.
+const AGENTS = {
+  claude: { bin: 'claude', argv: claudeArgv, auth: claudeAuth },
+  codex: { bin: 'codex', argv: codexArgv, auth: codexAuth },
 };
+
+// Which directory a thread starts in, and therefore who owes its first reply.
+const LANES = {
+  'from-gpt': { owes: 'claude', ...AGENTS.claude },
+  'from-claude': { owes: 'codex', ...AGENTS.codex },
+};
+
+// Who owes the next reply. The directory only says who owed the *first* one: a thread lives
+// in a single file, both agents write into it, and the folder never changes. So once a reply
+// was merged in, the relay woke whoever had just written it — a Codex reply inside a note in
+// from-claude/ left the directory alone, and Codex was asked to answer itself. The last
+// person to write in the file is the one who does not owe anything.
+const REPLY_HEADING = /^\s*#{1,4}\s*(?:תגובה|תוספת|reply)\s*[—–-]\s*([A-Za-z]+)/i;
+
+function owedBy(text, dir) {
+  let last = null;
+  for (const line of String(text).split(String.fromCharCode(10))) {
+    const m = line.match(REPLY_HEADING);
+    if (m) last = m[1].toLowerCase();
+  }
+  if (last && AGENTS[last]) return last === 'claude' ? 'codex' : 'claude';
+  return LANES[dir].owes;
+}
 
 // How many times one thread may bounce automatically. A conversation that has gone five
 // rounds without a person in it has stopped converging.
@@ -171,7 +194,7 @@ const saveState = st => writeFileSync(STATE, JSON.stringify(st, null, 2) + '\n')
 
 function scan() {
   const found = [];
-  for (const [dir, lane] of Object.entries(LANES)) {
+  for (const dir of Object.keys(LANES)) {
     const abs = join(ROOT, 'agents', dir);
     if (!existsSync(abs)) continue;
     // A leading underscore marks a file the relay itself made — the selftest note is one.
@@ -179,7 +202,9 @@ function scan() {
     // dispatch as if a person had left it.
     for (const name of readdirSync(abs).filter(f => f.endsWith('.md') && !f.startsWith('_'))) {
       const path = join(abs, name);
-      found.push({ dir, name, path, lane, hash: hash(readFileSync(path, 'utf8')) });
+      const text = readFileSync(path, 'utf8');
+      const owes = owedBy(text, dir);
+      found.push({ dir, name, path, lane: { owes, ...AGENTS[owes] }, hash: hash(text) });
     }
   }
   return found;
@@ -288,7 +313,10 @@ function removeRound(dir) {
 }
 
 function dispatch(note, round) {
-  const lane = LANES[note.dir];
+  // The note carries its own lane, decided by who wrote in it last. Reading it back out of
+  // LANES[note.dir] here is what made the routing fix look like it had not worked: scan()
+  // had already worked out the right answer and this threw it away.
+  const lane = note.lane;
   const binPath = resolveBin(lane.bin);
   if (!binPath) {
     return { ok: false, reason: `${lane.bin} is not installed here — this one still needs relaying by hand.` };
@@ -513,7 +541,7 @@ function pass({ act }) {
   for (const note of pending) {
     const prev = st.notes[note.path] || { rounds: 0 };
     const round = prev.rounds + 1;
-    const lane = LANES[note.dir];
+    const lane = note.lane;
     console.log(`\n→ ${note.dir}/${note.name}`);
     console.log(`  owed by: ${lane.owes}   round: ${round}`);
 
