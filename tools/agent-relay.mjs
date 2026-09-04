@@ -133,9 +133,40 @@ function launch(binPath, args, opts) {
   return spawnSync(binPath, args, opts);
 }
 
-const hash = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
+// A note's identity is its text, and line endings are not text. Hashing the raw bytes meant
+// that a note written with LF and then checked out by git as CRLF looked like a different
+// note: two questions that had already been answered came back as round 2, and a watcher
+// left running would have paid to ask them again. Normalise first, exactly as
+// tools/build-assets.mjs does for the same reason.
+const hash = s => createHash('sha256')
+  .update(String(s).replace(/\r\n/g, String.fromCharCode(10)).replace(/\r/g, String.fromCharCode(10)))
+  .digest('hex').slice(0, 16);
 
-const loadState = () => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { notes: {} });
+// State written before that fix holds raw-byte hashes. Recomputing them would be wrong — the
+// point of the entry is "this text was answered", not "these bytes were" — so an entry whose
+// stored hash matches the file's raw bytes is moved to the canonical hash of the same text.
+// An entry that matches neither is left alone: it refers to a version of the note that is no
+// longer on disk, which is exactly what "not answered yet" means.
+const HASH_VERSION = 2;
+function migrate(st) {
+  if (st.hashVersion >= HASH_VERSION) return st;
+  const rawHash = t => createHash('sha256').update(t).digest('hex').slice(0, 16);
+  for (const [path, entry] of Object.entries(st.notes || {})) {
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, 'utf8');
+    if (entry.hash && entry.hash !== hash(text) && entry.hash === rawHash(text)) {
+      entry.hash = hash(text);
+    }
+    if (entry.attemptsFor && entry.attemptsFor !== hash(text) && entry.attemptsFor === rawHash(text)) {
+      entry.attemptsFor = hash(text);
+    }
+  }
+  st.hashVersion = HASH_VERSION;
+  return st;
+}
+
+const loadState = () =>
+  migrate(existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { notes: {}, hashVersion: HASH_VERSION });
 const saveState = st => writeFileSync(STATE, JSON.stringify(st, null, 2) + '\n');
 
 function scan() {
@@ -291,8 +322,16 @@ function dispatch(note, round) {
     };
   }
 
-  // Only a leftover directory can be here now, since the branch does not exist.
-  removeRound(dir);
+  // A directory here is a round that was deliberately kept: closeRound() removes every round
+  // it can prove is empty, so anything left holds an agent's work that nobody has looked at.
+  // The retry used to begin by deleting it — saving the evidence and then destroying it one
+  // tick later, which is the same mistake as the three before it in this file's history.
+  if (existsSync(dir)) {
+    return {
+      ok: false, created: false, branch, dir, round,
+      reason: `${dir} already holds a kept round. Read it, then delete it yourself to retry.`,
+    };
+  }
   sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
   sh('git', ['checkout', '--quiet', '-b', branch], { cwd: dir });
 
@@ -623,6 +662,7 @@ function selftest(owes) {
 // otherwise do, which is run --reset and hope.
 function prime() {
   const st = loadState();
+  saveState(st);
   let marked = 0;
   for (const note of scan()) {
     if (st.notes[note.path]?.hash === note.hash) continue;
