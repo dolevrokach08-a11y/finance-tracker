@@ -446,9 +446,27 @@ function claudeArgv(brief) {
   ];
 }
 
+// Which model answers a round is Dolev's choice, not this file's: by default the relay
+// passes no model at all, so codex uses `model` from ~/.codex/config.toml — the same one he
+// picked in the app. Changing it there changes it here, which is what he wants, because he
+// moves between models on purpose.
+//
+// Naming one here was tried and was a mistake worth recording. The CLI had fallen behind the
+// model the app had moved to, every round died on a 400 in eight seconds, and pinning a
+// model the CLI knew looked like the fix. It was not: the account was simply out of credits,
+// and codex reports that honestly ("you've hit your usage limit") only when no model is
+// named — name one and the same condition comes back as "that model is not supported with a
+// ChatGPT account", which sounds like a configuration problem and is not. Pinning did not
+// fix the outage; it hid what the outage was.
+//
+// RELAY_CODEX_MODEL is here for the case where the relay should differ from the app on
+// purpose — a cheaper model for review rounds, say. Unset, nothing is passed.
+const CODEX_MODEL = process.env.RELAY_CODEX_MODEL || '';
+
 function codexArgv(brief, dir) {
   return [
     'exec', brief,
+    ...(CODEX_MODEL ? ['-m', CODEX_MODEL] : []),
     '-C', dir,
     '-s', 'workspace-write',
     '-c', 'sandbox_workspace_write.network_access=false',
