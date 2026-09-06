@@ -41,8 +41,8 @@ if (cFrom === -1 || cTo === -1 || cTo <= cFrom) {
   console.error('✗ could not find the still-current block in tools/agent-relay.mjs — this test is checking nothing.');
   process.exit(1);
 }
-const { hash, stillCurrent } = eval(
-  `(function () { ${src.slice(cFrom, cTo)}; return { hash, stillCurrent }; })()`);
+const { hash, stillCurrent, isClosed } = eval(
+  `(function () { ${src.slice(from, to)}; ${src.slice(cFrom, cTo)}; return { hash, stillCurrent, isClosed }; })()`);
 
 let failed = 0;
 const check = (label, got, want) => {
@@ -139,5 +139,27 @@ try {
   rmSync(tmp, { recursive: true, force: true });
 }
 
+
+// ── has this thread finished? ───────────────────────────────────────────────
+
+// Without a way to say "settled", a thread only stopped by running out of rounds — a
+// budget, not a conclusion — so a finished exchange kept waking both agents, and a
+// watcher could not tell "done" from "still going".
+const closedNote = ['# כותרת', '', 'מצב: **נסגר.** מוזג ל-main.', '', '---', '', 'גוף'].join(NL);
+check('a note whose status opens with נסגר is closed', isClosed(closedNote), true);
+check('סגור closes it too', isClosed(['מצב: סגור', '', '---'].join(NL)), true);
+check('and so does the English', isClosed(['status: closed', '', '---'].join(NL)), true);
+
+// Every real note in agents/ carries a status line, and none of them means finished.
+check('an open note is not closed', isClosed(['מצב: **פתוח. לא נגעתי בקוד.**', '', '---'].join(NL)), false);
+check('nor is one that merely mentions a merge',
+  isClosed(['מצב: **על ענף fix/x. לא מוזג.**', '', '---'].join(NL)), false);
+check('nor one with no status line at all', isClosed(['# כותרת', '', '---'].join(NL)), false);
+
+// The word has to be the status, not something the note talks about.
+check('a body that discusses closing does not close the thread',
+  isClosed(['מצב: פתוח', '', '---', '', 'כשזה ייסגר נכתוב מצב: נסגר'].join(NL)), false);
+check('and neither does a quoted example',
+  isClosed(['# כותרת', FENCE, 'מצב: נסגר', FENCE, '', '---'].join(NL)), false);
 console.log(failed ? `${NL}✗ ${failed} failed` : `${NL}✓ agent-relay parsing: all checks passed`);
 process.exit(failed ? 1 : 0);

@@ -40,6 +40,7 @@
 //   node tools/agent-relay.mjs --status        what is pending, dispatch nothing
 //   node tools/agent-relay.mjs --once          one pass
 //   node tools/agent-relay.mjs --watch [secs]  poll (default 120)
+//   node tools/agent-relay.mjs --watch 60 --idle 60   ...and stop when it settles or idles
 //   node tools/agent-relay.mjs --prime         mark every note as seen, dispatch nothing
 //   node tools/agent-relay.mjs --reset          forget all dispatch history
 //   node tools/agent-relay.mjs --reset-note X   forget one note, so it is dispatched again
@@ -257,6 +258,24 @@ const hash = s => createHash('sha256')
 // different line endings is not "edited" and does not lose its turn.
 const stillCurrent = note =>
   existsSync(note.path) && hash(readFileSync(note.path, 'utf8')) === note.hash;
+
+// A thread ends when someone says it ended. Until now the only way one stopped was running
+// out of rounds, which is a budget rather than a conclusion — so a settled exchange kept
+// waking both agents until the budget ran out, and a watcher had no way to tell "finished"
+// from "still going". Notes already carry a status line; a status that opens with נסגר,
+// סגור, closed or done means nobody owes a reply. Read from the header only, and outside
+// code fences, for the same reason as everything else here: a note that quotes the
+// convention is not using it.
+const CLOSED_STATUS = new RegExp(
+  String.raw`^\s*(?:[-*]\s*)?(?:\*\*)?\s*(?:מצב|status)\s*(?:\*\*)?\s*:\s*(?:\*\*)?\s*(?:נסגר|סגור|closed|done)(?![A-Za-z\u0590-\u05FF])`,
+  'i');
+
+function isClosed(text) {
+  const lines = withoutFences(text);
+  const end = lines.findIndex(l => /^\s*---\s*$/.test(l));
+  return (end === -1 ? lines.slice(0, 40) : lines.slice(0, end)).some(l => CLOSED_STATUS.test(l));
+}
+
 // ── end still-current ──
 
 // State written before that fix holds raw-byte hashes. It is rewritten in memory on every
@@ -359,7 +378,7 @@ function scan() {
       const path = join(abs, name);
       const text = readFileSync(path, 'utf8');
       const owes = owedBy(text, dir);
-      found.push({ dir, name, path, lane: { owes, ...AGENTS[owes] }, hash: hash(text) });
+      found.push({ dir, name, path, lane: { owes, ...AGENTS[owes] }, hash: hash(text), closed: isClosed(text) });
     }
   }
   return found;
@@ -708,6 +727,24 @@ function closeRound(r) {
   try { removeRound(r.dir); } catch (e) { console.log('    ' + e.message); }
 }
 
+// Whether a note is still owed a reply — the question --watch has to answer to know
+// whether the session is over. A note is not owed if it has been answered at this exact
+// text, if the thread was closed, or if it has already spent its attempts: a note nobody
+// can dispatch is finished, whatever the reason, and treating it as outstanding would keep
+// a session watcher alive forever over one stuck thread.
+const stillOwed = (note, st) => {
+  if (note.closed) return false;
+  const e = st.notes[note.path];
+  if (!e) return true;
+  if (e.hash === note.hash) return false;
+  if (e.attemptsFor === note.hash && (e.attempts || 0) >= MAX_ATTEMPTS) return false;
+  return true;
+};
+
+// A note that has run out of attempts is worth saying once. Said every tick, it buries the
+// run it is warning about.
+const alreadySaid = new Set();
+
 function pass({ act }) {
   const st = loadState();
   const notes = scan();
@@ -715,32 +752,50 @@ function pass({ act }) {
 
   if (!pending.length) {
     console.log('· nothing new — every note has been dispatched at its current contents.');
-    return st;
+    return { dispatched: 0, pending: 0 };
   }
 
-  let changed = false;
+  let changed = false, dispatched = 0;
   for (const note of pending) {
+    // A closed thread is recorded as seen so it stops being reported every pass, and is
+    // never dispatched again. Reopening it is editing the status line back.
+    if (note.closed) {
+      console.log(`· ${note.dir}/${note.name}: closed. Not dispatching.`);
+      if (act) { st.notes[note.path] = { ...(st.notes[note.path] || {}), hash: note.hash, closed: true }; changed = true; }
+      continue;
+    }
     const prev = st.notes[note.path] || { rounds: 0 };
     const round = prev.rounds + 1;
     const lane = note.lane;
-    console.log(`\n→ ${note.dir}/${note.name}`);
-    console.log(`  owed by: ${lane.owes}   round: ${round}`);
+    // Printed when there is something to say about this note. A watcher left up for an
+    // hour ticks thirty times, and heading a note that is going nowhere thirty times
+    // buries the run that actually did something.
+    const announce = () => {
+      console.log(`\n→ ${note.dir}/${note.name}`);
+      console.log(`  owed by: ${lane.owes}   round: ${round}`);
+    };
 
     // The budget is spent against this exact text. Editing the note is a new question, so
     // it starts over — otherwise the message below, which tells you to edit the note, lies.
     const attempts = (prev.attemptsFor === note.hash ? prev.attempts || 0 : 0) + 1;
     if (attempts > MAX_ATTEMPTS) {
-      console.log(`  ✗ ${MAX_ATTEMPTS} attempts have already failed on this note, unchanged. Not trying again.`);
-      console.log(`    last failure: ${prev.lastError || 'unrecorded'}`);
-      console.log('    edit the note, or: node tools/agent-relay.mjs --reset-note ' + basename(note.path));
+      if (!alreadySaid.has(note.path)) {
+        alreadySaid.add(note.path);
+        announce();
+        console.log(`  ✗ ${MAX_ATTEMPTS} attempts have already failed on this note, unchanged. Not trying again.`);
+        console.log(`    last failure: ${prev.lastError || 'unrecorded'}`);
+        console.log('    edit the note, or: node tools/agent-relay.mjs --reset-note ' + basename(note.path));
+      }
       continue;
     }
 
     if (round > MAX_ROUNDS) {
+      announce();
       console.log(`  ✗ stopping: ${MAX_ROUNDS} automatic rounds already. This one needs a person.`);
       if (act) { st.notes[note.path] = { ...prev, hash: note.hash, stalled: true }; changed = true; }
       continue;
     }
+    announce();
     if (!act) { console.log('  (status only — not dispatched)'); continue; }
 
     // The note may have moved under us since scan() read it; see stillCurrent().
@@ -749,6 +804,7 @@ function pass({ act }) {
       continue;
     }
 
+    dispatched++;
     const r = dispatch(note, round);
     if (!r.ok) {
       console.log(`  ✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
@@ -773,7 +829,10 @@ function pass({ act }) {
   // by a command that only claimed to be looking — which would have quietly retired a
   // thread nobody had dispatched.
   if (changed) saveState(st);
-  return st;
+  // What the watcher needs in order to know whether this session is over: whether anything
+  // was woken, and whether anything is still waiting for a turn.
+  const now = loadState();
+  return { dispatched, pending: scan().filter(n => stillOwed(n, now)).length };
 }
 
 // One command that proves the whole path: writes a throwaway note, dispatches it, reports,
@@ -939,10 +998,44 @@ if (has('--selftest')) {
   }
 } else if (has('--watch')) {
   const secs = Number(argv[argv.indexOf('--watch') + 1]) || 120;
-  console.log(`agent-relay: watching agents/ every ${secs}s. Nothing is merged or pushed. Ctrl-C to stop.`);
-  const tick = () => { try { pass({ act: true }); } catch (e) { console.error('✗', e.message); } };
+  // A watcher meant to sit beside a working session should not outlive the session. With
+  // --idle it stops after that long with nothing to do, and as soon as the exchange settles
+  // — every thread answered, closed, or out of rounds. Without it, it runs until Ctrl-C,
+  // which is what an unattended watcher wants and is still the default.
+  const idleMin = has('--idle') ? (Number(argv[argv.indexOf('--idle') + 1]) || 60) : 0;
+
+  console.log(`agent-relay: watching agents/ every ${secs}s.`
+    + (idleMin ? ` Stopping when the exchange settles, or after ${idleMin} idle ${idleMin === 1 ? 'minute' : 'minutes'}.` : '')
+    + ' Nothing is merged or pushed. Ctrl-C to stop.');
+
+  let lastActivity = Date.now();
+  let everDispatched = false;
+  let timer = null;
+  const stop = why => {
+    if (timer) clearInterval(timer);
+    console.log();
+    console.log('\u25a0 ' + why);
+    process.exit(0);   // the lock is dropped by the exit handler in takeLock()
+  };
+
+  const tick = () => {
+    let r;
+    try { r = pass({ act: true }); }
+    catch (e) { console.error('✗', e.message); return; }
+    if (r.dispatched) { lastActivity = Date.now(); everDispatched = true; }
+    // Settled is only meaningful after something happened. Exiting on an empty first pass
+    // would end the session before it began, which is exactly when someone is about to
+    // write the note that starts it.
+    if (everDispatched && !r.dispatched && !r.pending) {
+      stop('the exchange has settled — every thread is answered, closed, or out of rounds. '
+        + 'Nothing was merged or pushed; the branches are waiting for you.');
+    }
+    if (idleMin && Date.now() - lastActivity > idleMin * 60000) {
+      stop(`${idleMin} ${idleMin === 1 ? 'minute' : 'minutes'} with nothing to do.` + ' Stopping. Start it again when there is.');
+    }
+  };
   tick();
-  setInterval(tick, secs * 1000);
+  timer = setInterval(tick, secs * 1000);
 } else {
   const act = !has('--status');
   console.log(`agent-relay: ${act ? 'one pass' : 'status only'}`);
