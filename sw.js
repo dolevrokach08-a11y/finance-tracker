@@ -10,9 +10,21 @@
 // never be stale — a different version is a different URL. Without this split,
 // every deploy would also throw away the third-party bytes and the cache-first
 // win would evaporate exactly when the user reloads to get the new code.
-const SHELL_CACHE = 'finance-tracker-v49';
+const SHELL_CACHE = 'finance-tracker-v50';
 const VENDOR_CACHE = 'finance-tracker-vendor-v1';
 const KEEP = [SHELL_CACHE, VENDOR_CACHE];
+
+// Everything this app is allowed to delete. The activate handler used to purge
+// every cache name it did not recognise, which is every cache on the origin —
+// including ones this worker never created. On github.io the origin is shared
+// with every other project published under the same user, so "not mine" was
+// being read as "safe to delete". Scope the purge to our own prefix and leave
+// the rest of the origin alone; an unknown name is now someone else's, not
+// garbage.
+const CACHE_PREFIX = 'finance-tracker-';
+function isOurCache(name) {
+  return typeof name === 'string' && name.startsWith(CACHE_PREFIX);
+}
 
 // Scope-relative, not absolute. Absolute '/finance-tracker/...' paths 404 under
 // `npx vite` at the repo root, and because cache.addAll is atomic that made the
@@ -119,7 +131,7 @@ self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(names => Promise.all(
       names.map(name => {
-        if (!KEEP.includes(name)) {
+        if (isOurCache(name) && !KEEP.includes(name)) {
           console.log('🗑️ Deleting old cache:', name);
           return caches.delete(name);
         }

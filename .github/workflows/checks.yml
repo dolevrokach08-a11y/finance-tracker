@@ -54,6 +54,17 @@ jobs:
       - name: AI endpoint gate
         run: node tests/ai-endpoint.test.mjs
 
+      # The deploy gate itself: SHELL_CACHE bump enforcement plus the proof
+      # that activating a worker deletes only this app's caches.
+      - name: Deploy gate
+        run: node tests/deploy-gate.test.mjs
+
+      # A shell change that keeps the old SHELL_CACHE leaves every returning
+      # user on the previous bytes. This was a ::warning until now, and a
+      # warning does not stop a merge.
+      - name: Service worker cache bumped
+        run: node tools/check-shell-bump.mjs HEAD~1
+
       # Cheap guards for the mistakes this repo has actually made, rather than a
       # general-purpose linter.
       - name: Repo invariants
@@ -74,12 +85,8 @@ jobs:
             fi
           done
 
-          # The service worker purges caches by name, so a shell change that
-          # keeps the old name leaves users on stale code.
-          if git diff --name-only HEAD~1 2>/dev/null | grep -qE '^(app/|shared/)|\.html$'; then
-            if git diff --quiet HEAD~1 -- sw.js 2>/dev/null; then
-              echo "::warning file=sw.js::shell files changed but SHELL_CACHE was not bumped"
-            fi
-          fi
+          # The SHELL_CACHE bump is enforced by its own step above, which fails
+          # rather than warns. It also compares the constant itself, not merely
+          # whether sw.js was touched — a comment edit used to satisfy this.
 
           exit $fail
