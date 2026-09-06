@@ -135,4 +135,17 @@ ok(near(net, capped.taken * 0.8), 'a four-year-old tranche pays four fifths of i
 ok(seniorityDiscount(12) === 0 && seniorityDiscount(24) === 0,
    'the supplementary ladder is not applied at one or two years');
 
+// Anything that is not a number of months is not an age, and an unknown age earns no
+// reduction. This used to run the other way: NaN < 36 is false and undefined is not
+// null, so both fell through to the LAST tier — the largest reduction and the smallest
+// fee, chosen silently for input the code did not understand. No live path reaches it
+// (projectAll is called twice, both times defaulting to the current month), but the
+// guarantee then rests on a call-site audit of a function that takes the month as a
+// parameter. A string is refused for the same reason: '36' < 36 is false, so it used
+// to land on a tier by accident rather than by measurement.
+for (const bad of [undefined, NaN, Infinity, -Infinity, '36', '60', null]) {
+  ok(seniorityDiscount(bad) === 0, `an age of ${String(bad)} is not an age, and deducts nothing`,
+     String(seniorityDiscount(bad)));
+}
+
 process.exit(failures ? 1 : 0);
