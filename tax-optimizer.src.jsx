@@ -713,6 +713,31 @@ function getFXForDate(isoDateStr, fxMap, currency) {
   return null;
 }
 
+// Today's rate for a currency, and where it came from.
+//
+// This used to fall back to a hardcoded 3.6 for the dollar and 3.9 for everything else.
+// 3.9 was never a rate for anything — it is a number that was roughly the euro once, and
+// it was being applied to any currency that was not the dollar. Every figure on this
+// screen is in shekels, so the rate scales the whole comparison, and a wrong one moved
+// the tax silently: there is no way to tell a made-up rate from a real one by looking.
+//
+// fxMap is already fetched for the historical cost basis, so a real dated rate for the
+// same currencies is available at no extra cost. It is monthly and therefore lags, which
+// is why the month it came from is returned with it and shown on screen. When there is
+// no rate at all the answer is null and the caller drops the holding — a tax figure
+// nobody can check is worse than an admitted gap.
+function currentFX(currency, currentRates, fxMap) {
+  if (!currency || currency === 'ILS') return { rate: 1, source: 'ils' };
+  const live = Number(currentRates?.[currency]);
+  if (live > 0) return { rate: live, source: 'live' };
+  const keys = [...(fxMap?.keys() || [])].sort();
+  for (let i = keys.length - 1; i >= 0; i--) {
+    const v = Number(fxMap.get(keys[i])?.[currency]);
+    if (v > 0) return { rate: v, source: keys[i] };
+  }
+  return { rate: null, source: null };
+}
+
 // ====================================================================
 
 function getRemainingLots(purchases, sales, symbol) {
@@ -771,9 +796,18 @@ function getRemainingLots(purchases, sales, symbol) {
 function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
   const currentPrice = Number(holding.currentPrice || 0);
   const currency = holding.currency || 'ILS';
-  const fxSell = currency === 'ILS' ? 1 : (currentRates?.[currency] ?? (currency === 'USD' ? 3.6 : 3.9));
-  const salePriceILS = currentPrice * fxSell;
   const latest = getLatestCPI(cpiMap);
+
+  // Which rate each currency here was priced with, so the caller can say so, and which
+  // had none at all, so the caller can drop the holding instead of showing a number.
+  const fxUsed = new Map(), fxMissing = new Set();
+  const fxAt = cur => {
+    const { rate, source } = currentFX(cur, currentRates, fxMap);
+    if (rate === null) { fxMissing.add(cur); return null; }
+    // Shekels are not converted, so there is no rate here to report the age of.
+    if (source !== 'ils') fxUsed.set(cur, source);
+    return rate;
+  };
 
   let totalGainFlat = 0, totalGainReal = 0, unrealizedGain = 0;
   let adjustmentType = currency === 'ILS' ? (holding.isCPIIndexed ? 'cpi' : 'none') : 'fx';
@@ -791,7 +825,8 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
     if (lotPrice === 0 || sharesUsed <= 0) continue;
 
     // Sale rate (today): for foreign currency → use current rate. For ILS → 1.
-    const lotFxSell = lotCurrency === 'ILS' ? 1 : (currentRates?.[lotCurrency] ?? (lotCurrency === 'USD' ? 3.6 : 3.9));
+    const lotFxSell = fxAt(lotCurrency);
+    if (lotFxSell === null) continue;  // the caller drops the whole holding; see fxMissing
     // Buy rate (historical): for foreign currency → look up at purchase date. For ILS → 1.
     const lotFxBuy  = lotCurrency === 'ILS' ? 1 : (getFXForDate(lot.date, fxMap, lotCurrency) ?? lotFxSell);
 
@@ -854,7 +889,9 @@ function calcSimulatedTax(holding, remainingLots, cpiMap, fxMap, currentRates) {
     adjustmentType,                  // 'cpi' | 'fx' | 'none' — for UI badge
     savings: Math.round(Math.max(0, flatTax - realTax)),
     unrealizedGain: Math.round(unrealizedGain),
-    lotsFromHistory: remainingLots.length > 0
+    lotsFromHistory: remainingLots.length > 0,
+    fxMissing: [...fxMissing],
+    fxSources: [...fxUsed.entries()]
   };
 }
 
@@ -989,25 +1026,41 @@ function App() {
             holdings  = p.holdings  || [];
             purchases = p.purchases || [];
             sales     = p.sales     || [];
-            rates     = p.rates     || { USD: 3.6, EUR: 3.9 };
+            // No invented rates. An empty object means currentFX falls through to the
+            // real monthly series, and if that has nothing either it says so.
+            rates     = p.rates     || {};
           }
         } catch(e) {}
       }
       holdings  = holdings  || [];
       purchases = purchases || [];
       sales     = sales     || [];
-      rates     = rates     || { USD: 3.6, EUR: 3.9 };
+      rates     = rates     || {};
 
-      const rows = holdings
+      const priced = holdings
         .map(h => {
           const lots = getRemainingLots(purchases, sales, h.symbol);
-          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory, adjustmentType } = calcSimulatedTax(h, lots, cpiMap, fxMap, rates);
-          const totalValueILS = Number(h.currentPrice || 0) * Number(h.shares || 0) *
-            (h.currency === 'ILS' ? 1 : (rates[h.currency] ?? 3.6));
+          const { flatTax, cpiAdjTax, savings, unrealizedGain, lotsFromHistory, adjustmentType, fxMissing, fxSources } =
+            calcSimulatedTax(h, lots, cpiMap, fxMap, rates);
+          const own = currentFX(h.currency, rates, fxMap);
+          const totalValueILS = own.rate === null ? 0
+            : Number(h.currentPrice || 0) * Number(h.shares || 0) * own.rate;
+          const missing = [...new Set([...(fxMissing || []), ...(own.rate === null ? [h.currency] : [])])];
+          const sources = [...(fxSources || []), ...(own.source && own.source !== 'ils' ? [[h.currency, own.source]] : [])];
           return { symbol: h.symbol, isCPIIndexed: !!h.isCPIIndexed, currency: h.currency,
             adjustmentType: adjustmentType || 'none',
-            flatTax, cpiAdjTax, savings, unrealizedGain: unrealizedGain ?? 0, totalValueILS: Math.round(totalValueILS), lotsFromHistory };
-        })
+            flatTax, cpiAdjTax, savings, unrealizedGain: unrealizedGain ?? 0, totalValueILS: Math.round(totalValueILS), lotsFromHistory,
+            fxMissing: missing, fxSources: sources };
+        });
+
+      // Collected before the filters, because a holding dropped for want of a rate is
+      // exactly the one the screen must not stay quiet about.
+      const fxMissing = [...new Set(priced.flatMap(r => r.fxMissing))];
+      const fxStale = [...new Map(priced.flatMap(r => r.fxSources).filter(([, src]) => src !== 'live')).entries()]
+        .map(([currency, asOf]) => ({ currency, asOf }));
+
+      const rows = priced
+        .filter(r => r.fxMissing.length === 0)
         .filter(r => r.flatTax > 0 || r.cpiAdjTax > 0);
 
       const latest = getLatestCPI(cpiMap);
@@ -1024,6 +1077,8 @@ function App() {
         totalSavings: rows.reduce((s, r) => s + r.savings, 0),
         latestCPIDate: latest?.key || '',
         latestFXDate:  latestFXKey,
+        fxMissing,
+        fxStale,
         dataSource
       });
     } catch(e) {
@@ -2027,6 +2082,18 @@ function App() {
           {cpiError && (
             <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,80,80,0.1)", border: "1px solid rgba(200,80,80,0.3)", color: "#e07070", fontSize: 12, marginBottom: 12 }}>
               ❌ {cpiError}
+            </div>
+          )}
+
+          {cpiSim?.fxMissing?.length > 0 && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,80,80,0.1)", border: "1px solid rgba(200,80,80,0.3)", color: "#e07070", fontSize: 12, marginBottom: 12 }}>
+              ⚠ אין שער חליפין ל-{cpiSim.fxMissing.join(', ')} — ניירות במטבעות האלה הושמטו מהחישוב. הסימולציה כאן חלקית.
+            </div>
+          )}
+
+          {cpiSim?.fxStale?.length > 0 && (
+            <div style={{ padding: "10px 14px", borderRadius: 8, background: "rgba(200,160,80,0.1)", border: "1px solid rgba(200,160,80,0.25)", color: "#c8a060", fontSize: 12, marginBottom: 12 }}>
+              💱 אין שער עדכני; חושב לפי השער החודשי האחרון — {cpiSim.fxStale.map(f => `${f.currency} מ-${f.asOf}`).join(', ')}.
             </div>
           )}
 
