@@ -79,11 +79,95 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATE = join(ROOT, '.agent-relay-state.json');
 const ROUNDS = join(ROOT, '.relay', 'rounds');
 
-// Who answers a note left in which directory, and how to wake them.
-const LANES = {
-  'from-gpt': { owes: 'claude', bin: 'claude', argv: claudeArgv, auth: claudeAuth },
-  'from-claude': { owes: 'codex', bin: 'codex', argv: codexArgv, auth: codexAuth },
+// How to wake each agent.
+const AGENTS = {
+  claude: { bin: 'claude', argv: claudeArgv, auth: claudeAuth },
+  codex: { bin: 'codex', argv: codexArgv, auth: codexAuth },
 };
+
+// Which directory a thread starts in, and therefore who owes its first reply.
+const LANES = {
+  'from-gpt': { owes: 'claude', ...AGENTS.claude },
+  'from-claude': { owes: 'codex', ...AGENTS.codex },
+};
+
+// Who owes the next reply. The directory only says who owed the *first* one: a thread lives
+// in a single file, both agents write into it, and the folder never changes. So once a reply
+// was merged in, the relay woke whoever had just written it — a Codex reply inside a note in
+// from-claude/ left the directory alone, and Codex was asked to answer itself. The last
+// person to write in the file is the one who does not owe anything.
+const REPLY_HEADING = /^\s*#{1,4}\s*(?:תגובה|תוספת|reply)\s*[—–-]\s*([A-Za-z]+)/i;
+
+// A note may name the code it is about:
+//
+//   review_commit: <sha>    what to check out for the review
+//   base_commit:   <sha>    what to compare it against
+//
+// Both are optional, and a note without them behaves as before. They exist because a round
+// was always built from main, which is right for a note about main and wrong for every note
+// about work on a branch: the reviewer would read code that is not the code being described,
+// and agree or disagree with confidence about the wrong thing. Nothing here reads the current
+// checkout — a floating HEAD can move between the scan and the dispatch, so the note has to
+// say what it means.
+const META_LINE = /^\s*(?:[-*]\s*)?(?:\*\*)?(base_commit|review_commit)(?:\*\*)?\s*:\s*(?:`)?([0-9a-f]{7,40})\b/i;
+
+// Notes quote things. A reply that shows what a metadata line looks like, or what a reply
+// heading looks like, must not be read as one — Codex demonstrated both: a note carrying
+// review_commit at the top and a different review_commit inside a code fence resolved to the
+// quoted one, silently sending the next round to other code; and a reply heading inside a
+// fence changed the routing. Anything inside a fence is an example, not an instruction.
+function withoutFences(text) {
+  let fenced = false;
+  return String(text).split(String.fromCharCode(10)).filter(line => {
+    if (/^\s*(?:```|~~~)/.test(line)) { fenced = !fenced; return false; }
+    return !fenced;
+  });
+}
+
+// Metadata is read from the head of the note only — before the first horizontal rule, which
+// every note in agents/ already uses to close its header. Reading the whole document meant
+// the last value won, so a later mention beat the real one.
+function metaFor(text) {
+  const lines = withoutFences(text);
+  const end = lines.findIndex(l => /^\s*---\s*$/.test(l));
+  const header = end === -1 ? lines.slice(0, 40) : lines.slice(0, end);
+
+  const meta = {};
+  for (const line of header) {
+    const m = line.match(META_LINE);
+    if (!m) continue;
+    const key = m[1].toLowerCase();
+    // Two different answers to the same question is not something to resolve by picking one.
+    if (meta[key] && meta[key] !== m[2]) {
+      meta.conflict = `the note gives ${key} twice, as ${meta[key]} and ${m[2]}`;
+    }
+    meta[key] = m[2];
+  }
+  if (meta.base_commit && !meta.review_commit) {
+    meta.conflict = 'the note gives base_commit without review_commit, so there is nothing to check out';
+  }
+  return meta;
+}
+
+const commitExists = sha => {
+  try { sh('git', ['rev-parse', '--verify', '--quiet', sha + '^{commit}']); return true; }
+  catch { return false; }
+};
+
+// The names the two agents actually sign with. "GPT" is the name AGENTS.md and the folder
+// names use, and there are replies signed that way in agents/archive/ — reading it as an
+// unknown name sent the thread back to Codex, who had just written it.
+const SIGNS_AS = { claude: 'claude', codex: 'codex', gpt: 'codex', chatgpt: 'codex' };
+
+function owedBy(text, dir) {
+  let last = null;
+  for (const line of withoutFences(text)) {
+    const m = line.match(REPLY_HEADING);
+    if (m) last = SIGNS_AS[m[1].toLowerCase()] || last;
+  }
+  if (last) return last === 'claude' ? 'codex' : 'claude';
+  return LANES[dir].owes;
+}
 
 // How many times one thread may bounce automatically. A conversation that has gone five
 // rounds without a person in it has stopped converging.
@@ -122,9 +206,24 @@ function resolveBin(bin) {
 // this; an npm-installed CLI is a .cmd, and it would have.
 //
 // The fix is to build the command line, quote every token, and tell Node not to touch it.
-// Verified against a shim under a spaced path with a Hebrew argument containing & and %.
+// That carries spaces, Hebrew, & and % — which is what was tested, and it was not enough.
+//
+// A command line cannot hold a newline, and the brief is always many lines. Passed through
+// here it did not arrive: the run lost everything after the first line, or failed outright
+// with no output at all. In the claude lane the flags sit after the brief, so they went with
+// it — the agent would have run without --allowedTools or --disallowedTools, on default
+// permissions. That is a containment failure wearing the costume of a text bug, and the
+// exit code was 0. So this refuses rather than truncates. Both CLIs resolve to .exe here
+// and never reach it; an npm-installed one is a .cmd and would.
 function launch(binPath, args, opts) {
   if (/\.(cmd|bat)$/i.test(binPath)) {
+    if (args.some(a => /[\r\n]/.test(String(a)))) {
+      return {
+        status: null, stdout: '', stderr: '',
+        error: new Error(binPath + ' is a .cmd shim, and a multi-line argument cannot reach one. '
+          + 'Install a native executable for this agent, or run the relay where one is on PATH.'),
+      };
+    }
     const quote = t => '"' + String(t).replace(/"/g, '\\"') + '"';
     const line = '"' + [binPath, ...args].map(quote).join(' ') + '"';
     return spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/s', '/c', line],
@@ -133,14 +232,48 @@ function launch(binPath, args, opts) {
   return spawnSync(binPath, args, opts);
 }
 
-const hash = s => createHash('sha256').update(s).digest('hex').slice(0, 16);
+// A note's identity is its text, and line endings are not text. Hashing the raw bytes meant
+// that a note written with LF and then checked out by git as CRLF looked like a different
+// note: two questions that had already been answered came back as round 2, and a watcher
+// left running would have paid to ask them again. Normalise first, exactly as
+// tools/build-assets.mjs does for the same reason.
+const hash = s => createHash('sha256')
+  .update(String(s).replace(/\r\n/g, String.fromCharCode(10)).replace(/\r/g, String.fromCharCode(10)))
+  .digest('hex').slice(0, 16);
 
-const loadState = () => (existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { notes: {} });
+// State written before that fix holds raw-byte hashes. It is rewritten in memory on every
+// load and saved by whatever writes state next, so a run that changes nothing leaves the file
+// alone and converts again next time. That is idempotent and cheap, and it keeps --status to
+// its promise of writing nothing. Recomputing them would be wrong — the
+// point of the entry is "this text was answered", not "these bytes were" — so an entry whose
+// stored hash matches the file's raw bytes is moved to the canonical hash of the same text.
+// An entry that matches neither is left alone: it refers to a version of the note that is no
+// longer on disk, which is exactly what "not answered yet" means.
+const HASH_VERSION = 2;
+function migrate(st) {
+  if (st.hashVersion >= HASH_VERSION) return st;
+  const rawHash = t => createHash('sha256').update(t).digest('hex').slice(0, 16);
+  for (const [path, entry] of Object.entries(st.notes || {})) {
+    if (!existsSync(path)) continue;
+    const text = readFileSync(path, 'utf8');
+    if (entry.hash && entry.hash !== hash(text) && entry.hash === rawHash(text)) {
+      entry.hash = hash(text);
+    }
+    if (entry.attemptsFor && entry.attemptsFor !== hash(text) && entry.attemptsFor === rawHash(text)) {
+      entry.attemptsFor = hash(text);
+    }
+  }
+  st.hashVersion = HASH_VERSION;
+  return st;
+}
+
+const loadState = () =>
+  migrate(existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { notes: {}, hashVersion: HASH_VERSION });
 const saveState = st => writeFileSync(STATE, JSON.stringify(st, null, 2) + '\n');
 
 function scan() {
   const found = [];
-  for (const [dir, lane] of Object.entries(LANES)) {
+  for (const dir of Object.keys(LANES)) {
     const abs = join(ROOT, 'agents', dir);
     if (!existsSync(abs)) continue;
     // A leading underscore marks a file the relay itself made — the selftest note is one.
@@ -148,7 +281,9 @@ function scan() {
     // dispatch as if a person had left it.
     for (const name of readdirSync(abs).filter(f => f.endsWith('.md') && !f.startsWith('_'))) {
       const path = join(abs, name);
-      found.push({ dir, name, path, lane, hash: hash(readFileSync(path, 'utf8')) });
+      const text = readFileSync(path, 'utf8');
+      const owes = owedBy(text, dir);
+      found.push({ dir, name, path, lane: { owes, ...AGENTS[owes] }, hash: hash(text) });
     }
   }
   return found;
@@ -156,8 +291,12 @@ function scan() {
 
 // The instruction the woken agent runs under. It restates the protocol rather than assuming
 // the agent will recall it, and it is explicit that the round ends at a reply.
-const briefFor = note => `
+const briefFor = (note, meta = {}) => `
 קרא את \`agents/${note.dir}/${note.name}\` והגב עליו.
+${meta.review_commit ? `
+**הקוד שאתה סוקר הוא \`${meta.review_commit}\`**, והוא כבר משוחזר בתיקייה הזאת.${
+  meta.base_commit ? ` ההשוואה היא מול \`${meta.base_commit}\` — \`git diff ${meta.base_commit}..HEAD\`.` : ''}
+` : ''}
 
 **התפקיד שלך בסבב הזה הוא לסקור ולענות, לא ליישם.** אל תשנה קוד מחוץ ל-\`agents/\`.
 
@@ -257,7 +396,10 @@ function removeRound(dir) {
 }
 
 function dispatch(note, round) {
-  const lane = LANES[note.dir];
+  // The note carries its own lane, decided by who wrote in it last. Reading it back out of
+  // LANES[note.dir] here is what made the routing fix look like it had not worked: scan()
+  // had already worked out the right answer and this threw it away.
+  const lane = note.lane;
   const binPath = resolveBin(lane.bin);
   if (!binPath) {
     return { ok: false, reason: `${lane.bin} is not installed here — this one still needs relaying by hand.` };
@@ -291,9 +433,39 @@ function dispatch(note, round) {
     };
   }
 
-  // Only a leftover directory can be here now, since the branch does not exist.
-  removeRound(dir);
-  sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
+  // A note that names a commit is refused outright when that commit is not here, rather than
+  // quietly reviewed against main — a review of the wrong code that reads like a review of
+  // the right code is the worst thing this tool could produce.
+  const meta = metaFor(readFileSync(note.path, 'utf8'));
+  if (meta.conflict) {
+    return { ok: false, created: false, branch, dir, round, reason: meta.conflict };
+  }
+  for (const key of ['review_commit', 'base_commit']) {
+    if (meta[key] && !commitExists(meta[key])) {
+      return {
+        ok: false, created: false, branch, dir, round,
+        reason: `the note names ${key}: ${meta[key]}, which is not a commit in this repository`,
+      };
+    }
+  }
+
+  // A directory here is a round that was deliberately kept: closeRound() removes every round
+  // it can prove is empty, so anything left holds an agent's work that nobody has looked at.
+  // The retry used to begin by deleting it — saving the evidence and then destroying it one
+  // tick later, which is the same mistake as the three before it in this file's history.
+  if (existsSync(dir)) {
+    return {
+      ok: false, created: false, branch, dir, round,
+      reason: `${dir} already holds a kept round. Read it, then delete it yourself to retry.`,
+    };
+  }
+  if (meta.review_commit) {
+    // Every ref, since the commit under review is usually on some other branch.
+    sh('git', ['clone', '--quiet', '--no-hardlinks', ROOT, dir]);
+    sh('git', ['checkout', '--quiet', '--detach', meta.review_commit], { cwd: dir });
+  } else {
+    sh('git', ['clone', '--quiet', '--no-hardlinks', '--single-branch', '--branch', 'main', ROOT, dir]);
+  }
   sh('git', ['checkout', '--quiet', '-b', branch], { cwd: dir });
 
   // Deliver the note into the round. scan() reads notes from the checkout Dolev works in;
@@ -323,7 +495,7 @@ function dispatch(note, round) {
   // relay's own delivery commit is never counted as the agent's work.
   const base = sh('git', ['rev-parse', 'HEAD'], { cwd: dir });
 
-  const res = launch(binPath, lane.argv(briefFor(note), dir),
+  const res = launch(binPath, lane.argv(briefFor(note, meta), dir),
     { cwd: dir, encoding: 'utf8', timeout: TIMEOUT_MIN * 60 * 1000 });
 
   // Record whatever the agent left, from outside the sandbox.
@@ -474,7 +646,7 @@ function pass({ act }) {
   for (const note of pending) {
     const prev = st.notes[note.path] || { rounds: 0 };
     const round = prev.rounds + 1;
-    const lane = LANES[note.dir];
+    const lane = note.lane;
     console.log(`\n→ ${note.dir}/${note.name}`);
     console.log(`  owed by: ${lane.owes}   round: ${round}`);
 
@@ -623,6 +795,7 @@ function selftest(owes) {
 // otherwise do, which is run --reset and hope.
 function prime() {
   const st = loadState();
+  saveState(st);
   let marked = 0;
   for (const note of scan()) {
     if (st.notes[note.path]?.hash === note.hash) continue;
