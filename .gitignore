@@ -27,3 +27,6 @@ vendor-update-summary.md
 # agent-relay: which notes this machine has dispatched. Local, not shared.
 .agent-relay-state.json
 .relay/
+
+# agent-relay: which process holds the relay right now. Local, not shared.
+.agent-relay-lock.json

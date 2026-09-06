@@ -45,6 +45,9 @@
 //   node tools/agent-relay.mjs --reset-note X   forget one note, so it is dispatched again
 //   node tools/agent-relay.mjs --selftest [who] end-to-end check of one lane (claude|codex)
 //
+// Every one of those except --status takes .agent-relay-lock.json first, so a second relay
+// in the same repository refuses rather than racing the first.
+//
 // The two lanes are not one command with a different name in front. Claude is invoked with
 // `--print` and an explicit tool allowlist; Codex with `exec` and a sandbox, because it has
 // no allowlist to give. See claudeArgv / codexArgv, which were read off `--help` rather than
@@ -71,12 +74,14 @@
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync, writeFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { readdirSync, readFileSync, writeFileSync, renameSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const STATE = join(ROOT, '.agent-relay-state.json');
+const LOCK = join(ROOT, '.agent-relay-lock.json');
 const ROUNDS = join(ROOT, '.relay', 'rounds');
 
 // How to wake each agent.
@@ -241,6 +246,19 @@ const hash = s => createHash('sha256')
   .update(String(s).replace(/\r\n/g, String.fromCharCode(10)).replace(/\r/g, String.fromCharCode(10)))
   .digest('hex').slice(0, 16);
 
+// ── still-current ── (tests/agent-relay-parsing.test.mjs slices hash..here)
+// scan() photographs every note before the loop that dispatches them, and a single dispatch
+// can take twenty minutes. A note edited inside that window was dispatched under the
+// routing, hash and branch name of a version that no longer exists, while the text handed
+// to the agent — read fresh inside dispatch() — was the new one: the reply filed against
+// the wrong question, and the note dispatched again on the next pass.
+//
+// Same-text-is-the-same-note applies here too, so a note that git merely re-checked-out with
+// different line endings is not "edited" and does not lose its turn.
+const stillCurrent = note =>
+  existsSync(note.path) && hash(readFileSync(note.path, 'utf8')) === note.hash;
+// ── end still-current ──
+
 // State written before that fix holds raw-byte hashes. It is rewritten in memory on every
 // load and saved by whatever writes state next, so a run that changes nothing leaves the file
 // alone and converts again next time. That is idempotent and cheap, and it keeps --status to
@@ -269,7 +287,65 @@ function migrate(st) {
 
 const loadState = () =>
   migrate(existsSync(STATE) ? JSON.parse(readFileSync(STATE, 'utf8')) : { notes: {}, hashVersion: HASH_VERSION });
-const saveState = st => writeFileSync(STATE, JSON.stringify(st, null, 2) + '\n');
+// Written to a sibling and renamed over it, so a run killed mid-write leaves the old state
+// rather than half a file. loadState() JSON.parses with no fallback, so a truncated file is
+// not a degraded relay — it is one that will not start at all.
+const saveState = st => {
+  const tmp = `${STATE}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(st, null, 2) + '\n');
+  renameSync(tmp, STATE);
+};
+
+// Two watchers on one repository is not hypothetical: the obvious way to restart one is to
+// start another and forget the first is still up. Nothing here noticed. Both would scan the
+// same state, decide the same note was pending, and build the same round into the same
+// directory — where the second refuses, having found the first one's clone, and records a
+// failed attempt against a note the other process is answering correctly.
+//
+// Anything that writes takes the lock. --status does not, because it promises to change
+// nothing, and a report should not be refused while a watcher is doing its job.
+const running = pid => {
+  // Signal 0 asks whether a process exists without touching it; EPERM means it exists and
+  // belongs to someone else. A pid can be reused, so a stale lock whose number now belongs
+  // to something unrelated is honoured — that refuses a run which could have proceeded,
+  // which is the direction to be wrong in.
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+};
+
+function takeLock() {
+  const mine = JSON.stringify({ pid: process.pid, host: hostname(), at: new Date().toISOString() }, null, 2) + '\n';
+  try {
+    writeFileSync(LOCK, mine, { flag: 'wx' });  // wx fails if the file exists; that is the lock
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e;
+    let held = null;
+    try { held = JSON.parse(readFileSync(LOCK, 'utf8')); } catch { /* an unreadable lock is a dead one */ }
+    // A lock written by another machine cannot be checked from here, so it is believed.
+    if (held && held.host === hostname() && !running(held.pid)) {
+      console.log(`· clearing a lock left by process ${held.pid}, which is no longer running.`);
+      rmSync(LOCK, { force: true });
+      return takeLock();
+    }
+    const who = held
+      ? `process ${held.pid} on ${held.host}, since ${held.at}`
+      : 'a process that left a lock this one cannot read';
+    console.error(`✗ another relay is already working in this repository: ${who}.`);
+    console.error(`  Stop it, or delete ${basename(LOCK)} if you are certain it is gone.`);
+    process.exit(1);
+  }
+
+  const drop = () => {
+    try {
+      if (JSON.parse(readFileSync(LOCK, 'utf8')).pid === process.pid) rmSync(LOCK, { force: true });
+    } catch { /* already gone, or already someone else's */ }
+  };
+  process.on('exit', drop);
+  // --watch is meant to be stopped with Ctrl-C. That is not a crash, and it must not leave a
+  // lock behind for the next run to reason about.
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    process.on(sig, () => { drop(); process.exit(130); });
+  }
+}
 
 function scan() {
   const found = [];
@@ -667,6 +743,12 @@ function pass({ act }) {
     }
     if (!act) { console.log('  (status only — not dispatched)'); continue; }
 
+    // The note may have moved under us since scan() read it; see stillCurrent().
+    if (!stillCurrent(note)) {
+      console.log('  · changed or removed since this pass began. Leaving it for the next pass.');
+      continue;
+    }
+
     const r = dispatch(note, round);
     if (!r.ok) {
       console.log(`  ✗ ${r.reason || 'failed, and dispatch() did not say why — that is a bug in dispatch()'}`);
@@ -831,6 +913,8 @@ function resetNote(which) {
 
 const argv = process.argv.slice(2);
 const has = f => argv.includes(f);
+
+if (!has('--status')) takeLock();
 
 if (has('--selftest')) {
   // Testing one lane says nothing about the other: they run different binaries with
