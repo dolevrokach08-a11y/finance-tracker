@@ -367,6 +367,22 @@ node tools/agent-relay.mjs --selftest claude|codex
 node tools/agent-relay.mjs --watch 60 --idle 60
 ```
 
+**המודל שעונה בסבב.** מקובע ל-`gpt-5.6-sol`, ולא נגרר אחרי `~/.codex/config.toml` —
+מודל שנבחר באפליקציה למשהו אחר לא אמור לשנות בשקט מי סוקר את הקוד. לשינוי חד־פעמי:
+
+```bash
+RELAY_CODEX_MODEL=<שם> node tools/agent-relay.mjs --once
+RELAY_CODEX_MODEL=config node tools/agent-relay.mjs --once   # בלי לציין מודל בכלל
+```
+
+**כשל שהוא תשובה לא מנוסה שוב.** מכסה שנגמרה, CLI ישן מהמודל, או חוסר התחברות —
+שלושתם יחזרו זהים בעוד שתי דקות. הדוור מדווח פעם אחת ומה לעשות, ולא שורף שלושה
+ניסיונות בדקה. תקלה חולפת, כמו timeout, ממשיכה לקבל את שלושת הניסיונות.
+
+**מלכודת ששווה להכיר:** כשמצוין מודל במפורש, מכסה שנגמרה חוזרת כ-
+`The model is not supported when using Codex with a ChatGPT account`. זה נשמע כמו
+בעיית הגדרות ואינו כזה. `RELAY_CODEX_MODEL=config` יגרום ל-codex לומר את האמת.
+
 **שני דוורים במקביל — נעילה.** כל פקודה שכותבת תופסת `.agent-relay-lock.json` תחילה,
 ולכן דוור שני מסרב במקום להתחרות. `--status` אינו תופס נעילה, כי הוא לא משנה כלום.
 נעילה שנשארה אחרי קריסה נמחקת אוטומטית כשמתברר שהתהליך אינו קיים; נעילה ממחשב אחר

@@ -446,22 +446,50 @@ function claudeArgv(brief) {
   ];
 }
 
-// Which model answers a round is Dolev's choice, not this file's: by default the relay
-// passes no model at all, so codex uses `model` from ~/.codex/config.toml — the same one he
-// picked in the app. Changing it there changes it here, which is what he wants, because he
-// moves between models on purpose.
+// The model rounds are answered with. Dolev asked for this pinned rather than following
+// ~/.codex/config.toml, so that a model he picks in the app for something else does not
+// silently change what reviews his code.
 //
-// Naming one here was tried and was a mistake worth recording. The CLI had fallen behind the
-// model the app had moved to, every round died on a 400 in eight seconds, and pinning a
-// model the CLI knew looked like the fix. It was not: the account was simply out of credits,
-// and codex reports that honestly ("you've hit your usage limit") only when no model is
-// named — name one and the same condition comes back as "that model is not supported with a
-// ChatGPT account", which sounds like a configuration problem and is not. Pinning did not
-// fix the outage; it hid what the outage was.
+// RELAY_CODEX_MODEL overrides it for one run. The value `config` passes no model at all and
+// lets codex use whatever the app is set to — which is also the way to read an error
+// honestly: with a model named, a spent quota comes back as "that model is not supported
+// when using Codex with a ChatGPT account", which reads like a configuration problem and is
+// not one. That cost an hour of looking in config files. See SETTLED_FAILURE below, which
+// now says so at the point of failure.
+const CODEX_MODEL = (() => {
+  const want = process.env.RELAY_CODEX_MODEL || 'gpt-5.6-sol';
+  return want === 'config' || want === 'none' ? '' : want;
+})();
+
+// Some failures are the service giving a settled answer: another dispatch two minutes later
+// gets the same one. Retrying those spends a note's whole budget of three attempts inside a
+// minute and buries the line that says what to do — the same mistake the transaction scraper
+// made, found the same day, which is what makes it worth naming as a category rather than
+// patching one case.
 //
-// RELAY_CODEX_MODEL is here for the case where the relay should differ from the app on
-// purpose — a cheaper model for review rounds, say. Unset, nothing is passed.
-const CODEX_MODEL = process.env.RELAY_CODEX_MODEL || '';
+// Everything not listed here is treated as flaky and still gets its retries: a timeout, a
+// half-written round, a network blip. The point is not to stop retrying, it is to stop
+// retrying an answer.
+const SETTLED_FAILURE = [
+  [/hit your usage limit|usage limit|out of credits|insufficient[_ ]quota/i,
+    'the account is out of credits. The message above says when the quota resets; nothing here can hurry it.'],
+  [/not supported when using Codex with a ChatGPT account/i,
+    'codex says the model is not supported. With a model named — which the relay does — that '
+    + 'is usually how a spent quota arrives, not a real configuration problem. Check the usage '
+    + 'limit first. RELAY_CODEX_MODEL=config asks without naming one, and then codex says '
+    + 'plainly which it is.'],
+  [/requires a newer version/i,
+    'the CLI is older than the model it was asked for. Update the CLI, or set RELAY_CODEX_MODEL '
+    + 'to one it knows.'],
+  [/not logged in|please run .{0,20}login|login: expired|authentication_error|invalid[_ ]api[_ ]key/i,
+    'the CLI is not logged in. That is a person\'s job and no number of retries is going to do it.'],
+];
+
+// Read from whatever the run printed, both streams: the CLI puts these on either.
+const settledBy = text => {
+  for (const [pattern, say] of SETTLED_FAILURE) if (pattern.test(text)) return say;
+  return null;
+};
 
 function codexArgv(brief, dir) {
   return [
@@ -724,6 +752,8 @@ function dispatch(note, round) {
     // anything outside agents/ was touched. Both are facts about content, not guesses.
     replied, stray,
     reason,
+    // Set when the failure is an answer rather than a stumble; the caller stops retrying.
+    settled: reason ? settledBy((res.stdout || '') + (res.stderr || '') + (res.error?.message || '')) : null,
     branch, dir, round,
     commits: wrote,
     output: (res.stdout || res.stderr || '').trim().slice(-1200),
@@ -755,6 +785,7 @@ const stillOwed = (note, st) => {
   const e = st.notes[note.path];
   if (!e) return true;
   if (e.hash === note.hash) return false;
+  if (e.settledFor === note.hash) return false;
   if (e.attemptsFor === note.hash && (e.attempts || 0) >= MAX_ATTEMPTS) return false;
   return true;
 };
@@ -793,6 +824,18 @@ function pass({ act }) {
       console.log(`  owed by: ${lane.owes}   round: ${round}`);
     };
 
+    // A failure that was an answer is not retried at all. It is still reported once, with
+    // what to do about it, because the whole point is that a person has to act.
+    if (prev.settledFor === note.hash) {
+      if (!alreadySaid.has(note.path)) {
+        alreadySaid.add(note.path);
+        announce();
+        console.log(`  ✗ ${prev.settled}`);
+        console.log('    Not retrying. Fix it, then: node tools/agent-relay.mjs --reset-note ' + basename(note.path));
+      }
+      continue;
+    }
+
     // The budget is spent against this exact text. Editing the note is a new question, so
     // it starts over — otherwise the message below, which tells you to edit the note, lies.
     const attempts = (prev.attemptsFor === note.hash ? prev.attempts || 0 : 0) + 1;
@@ -830,7 +873,17 @@ function pass({ act }) {
       closeRound(r);
       // The note keeps its old hash so it is tried again, but the attempt is counted. Without
       // the count this line was an unbounded retry loop.
-      st.notes[note.path] = { ...prev, attempts, attemptsFor: note.hash, lastError: r.reason || 'no reason given', at: new Date().toISOString() };
+      if (r.settled) {
+        console.log(`    ${r.settled}`);
+        console.log('    Not retrying — the answer would be the same.');
+        // Said here, so the next pass does not say it again on its way past.
+        alreadySaid.add(note.path);
+      }
+      st.notes[note.path] = {
+        ...prev, attempts, attemptsFor: note.hash,
+        lastError: r.reason || 'no reason given', at: new Date().toISOString(),
+        ...(r.settled ? { settled: r.settled, settledFor: note.hash } : {}),
+      };
       changed = true;
       continue;
     }

@@ -161,5 +161,40 @@ check('a body that discusses closing does not close the thread',
   isClosed(['מצב: פתוח', '', '---', '', 'כשזה ייסגר נכתוב מצב: נסגר'].join(NL)), false);
 check('and neither does a quoted example',
   isClosed(['# כותרת', FENCE, 'מצב: נסגר', FENCE, '', '---'].join(NL)), false);
+
+// ── is this failure an answer, or a stumble? ────────────────────────────────
+
+// Retrying a settled answer spends a note's three attempts in about a minute and buries
+// the line that says what to do. These strings are the ones actually seen coming back from
+// the CLIs, not invented ones.
+const sFrom = src.indexOf('const SETTLED_FAILURE = [');
+const sTo = src.indexOf('function codexArgv');
+if (sFrom === -1 || sTo === -1 || sTo <= sFrom) {
+  console.error('✗ could not find the settled-failure block in tools/agent-relay.mjs — this test is checking nothing.');
+  process.exit(1);
+}
+const settledBy = eval(`(function () { ${src.slice(sFrom, sTo)}; return settledBy; })()`);
+
+// Verbatim from real runs on 2026-09-06.
+const QUOTA = "ERROR: You've hit your usage limit. Upgrade to Pro ... or try again at 3:15 PM.";
+const NOT_SUPPORTED = 'ERROR: {"type":"error","status":400,"error":{"message":"The \'gpt-5-codex\' model is not supported when using Codex with a ChatGPT account."}}';
+const TOO_OLD = "ERROR: The 'gpt-6-astra' model requires a newer version of Codex. Please upgrade.";
+
+check('a spent quota is an answer, not a stumble', !!settledBy(QUOTA), true);
+check('so is a CLI older than the model it was given', !!settledBy(TOO_OLD), true);
+check('so is a missing login', !!settledBy('Login: Expired — log in again'), true);
+
+// The one that cost an hour: with a model named, a spent quota comes back as this. The
+// message has to point at the quota, or the next person reads it as a config problem too.
+check('"model not supported" is treated as an answer', !!settledBy(NOT_SUPPORTED), true);
+check('and its message points at the usage limit',
+  /usage limit/i.test(settledBy(NOT_SUPPORTED) || ''), true);
+
+// The half that must not regress: a stumble still gets its retries.
+check('a timeout is not an answer',
+  settledBy('codex was still working after 20 minutes and was stopped'), null);
+check('nor is an empty run', settledBy(''), null);
+check('nor a note that merely talks about limits',
+  settledBy('the reply discusses rate limiting in the worker'), null);
 console.log(failed ? `${NL}✗ ${failed} failed` : `${NL}✓ agent-relay parsing: all checks passed`);
 process.exit(failed ? 1 : 0);
