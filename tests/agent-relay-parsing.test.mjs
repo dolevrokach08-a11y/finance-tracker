@@ -41,8 +41,8 @@ if (cFrom === -1 || cTo === -1 || cTo <= cFrom) {
   console.error('✗ could not find the still-current block in tools/agent-relay.mjs — this test is checking nothing.');
   process.exit(1);
 }
-const { hash, stillCurrent } = eval(
-  `(function () { ${src.slice(cFrom, cTo)}; return { hash, stillCurrent }; })()`);
+const { hash, stillCurrent, isClosed } = eval(
+  `(function () { ${src.slice(from, to)}; ${src.slice(cFrom, cTo)}; return { hash, stillCurrent, isClosed }; })()`);
 
 let failed = 0;
 const check = (label, got, want) => {
@@ -139,5 +139,62 @@ try {
   rmSync(tmp, { recursive: true, force: true });
 }
 
+
+// ── has this thread finished? ───────────────────────────────────────────────
+
+// Without a way to say "settled", a thread only stopped by running out of rounds — a
+// budget, not a conclusion — so a finished exchange kept waking both agents, and a
+// watcher could not tell "done" from "still going".
+const closedNote = ['# כותרת', '', 'מצב: **נסגר.** מוזג ל-main.', '', '---', '', 'גוף'].join(NL);
+check('a note whose status opens with נסגר is closed', isClosed(closedNote), true);
+check('סגור closes it too', isClosed(['מצב: סגור', '', '---'].join(NL)), true);
+check('and so does the English', isClosed(['status: closed', '', '---'].join(NL)), true);
+
+// Every real note in agents/ carries a status line, and none of them means finished.
+check('an open note is not closed', isClosed(['מצב: **פתוח. לא נגעתי בקוד.**', '', '---'].join(NL)), false);
+check('nor is one that merely mentions a merge',
+  isClosed(['מצב: **על ענף fix/x. לא מוזג.**', '', '---'].join(NL)), false);
+check('nor one with no status line at all', isClosed(['# כותרת', '', '---'].join(NL)), false);
+
+// The word has to be the status, not something the note talks about.
+check('a body that discusses closing does not close the thread',
+  isClosed(['מצב: פתוח', '', '---', '', 'כשזה ייסגר נכתוב מצב: נסגר'].join(NL)), false);
+check('and neither does a quoted example',
+  isClosed(['# כותרת', FENCE, 'מצב: נסגר', FENCE, '', '---'].join(NL)), false);
+
+// ── is this failure an answer, or a stumble? ────────────────────────────────
+
+// Retrying a settled answer spends a note's three attempts in about a minute and buries
+// the line that says what to do. These strings are the ones actually seen coming back from
+// the CLIs, not invented ones.
+const sFrom = src.indexOf('const SETTLED_FAILURE = [');
+const sTo = src.indexOf('function codexArgv');
+if (sFrom === -1 || sTo === -1 || sTo <= sFrom) {
+  console.error('✗ could not find the settled-failure block in tools/agent-relay.mjs — this test is checking nothing.');
+  process.exit(1);
+}
+const settledBy = eval(`(function () { ${src.slice(sFrom, sTo)}; return settledBy; })()`);
+
+// Verbatim from real runs on 2026-09-06.
+const QUOTA = "ERROR: You've hit your usage limit. Upgrade to Pro ... or try again at 3:15 PM.";
+const NOT_SUPPORTED = 'ERROR: {"type":"error","status":400,"error":{"message":"The \'gpt-5-codex\' model is not supported when using Codex with a ChatGPT account."}}';
+const TOO_OLD = "ERROR: The 'gpt-6-astra' model requires a newer version of Codex. Please upgrade.";
+
+check('a spent quota is an answer, not a stumble', !!settledBy(QUOTA), true);
+check('so is a CLI older than the model it was given', !!settledBy(TOO_OLD), true);
+check('so is a missing login', !!settledBy('Login: Expired — log in again'), true);
+
+// The one that cost an hour: with a model named, a spent quota comes back as this. The
+// message has to point at the quota, or the next person reads it as a config problem too.
+check('"model not supported" is treated as an answer', !!settledBy(NOT_SUPPORTED), true);
+check('and its message points at the usage limit',
+  /usage limit/i.test(settledBy(NOT_SUPPORTED) || ''), true);
+
+// The half that must not regress: a stumble still gets its retries.
+check('a timeout is not an answer',
+  settledBy('codex was still working after 20 minutes and was stopped'), null);
+check('nor is an empty run', settledBy(''), null);
+check('nor a note that merely talks about limits',
+  settledBy('the reply discusses rate limiting in the worker'), null);
 console.log(failed ? `${NL}✗ ${failed} failed` : `${NL}✓ agent-relay parsing: all checks passed`);
 process.exit(failed ? 1 : 0);
