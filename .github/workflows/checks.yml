@@ -54,6 +54,28 @@ jobs:
       - name: AI endpoint gate
         run: node tests/ai-endpoint.test.mjs
 
+      # No Anthropic key in the browser: a static sweep of everything that
+      # ships, plus the behaviour of the two callers that used to hold one.
+      - name: No browser AI key
+        run: node tests/no-browser-ai-key.test.mjs
+
+      # Two tabs on one origin (a real account and a demo session, or two real
+      # accounts) share one set of plain localStorage keys. A tab that loses
+      # ownership mid-session must stop reading/writing them, not mix its data
+      # into whatever the new owner wrote there.
+      - name: Cross-tab ownership lock
+        run: node tests/tab-ownership-lock.test.mjs
+
+      # A prime route is variable, same as var5/var1 — renderCurrentTranches()
+      # had its own copy of that check and forgot prime.
+      - name: Mortgage variable-route badge
+        run: node tests/mortgage-variable-badge.test.mjs
+
+      # A fixed income/expense spanning several years must offer every year in
+      # between, not just the one it starts and the one it ends.
+      - name: Finance year selectors
+        run: node tests/finance-year-selector.test.mjs
+
       # The deploy gate itself: SHELL_CACHE bump enforcement plus the proof
       # that activating a worker deletes only this app's caches.
       - name: Deploy gate
