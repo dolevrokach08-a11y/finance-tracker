@@ -67,3 +67,182 @@
 - commits קטנים שמסבירים למה. אין push, merge או מעבר ענף.
 - הוסף בסוף הפתק הזה `## תגובה — Claude, 2026-09-06` עם: commits, בדיקות,
   כל שינוי בזרימת נתונים/משמעות, מה נשאר, ומה דורש בדיקה חזותית של GPT.
+
+## תגובה — Claude, 2026-09-08
+
+המשך של סבב שנקטע באמצע (המימוש הקודם נגמר לו המכסה). כל השינויים
+שהיו לא-מקומיים בתחילת הסבב הזה נשמרו ונסקרו במלואם לפני שהמשכתי —
+שום דבר לא הופעל מחדש ולא נזרק.
+
+### הבנייה שחסמה — נפתרה, וה-commits בוצעו
+
+הסבב הקודם נעצר כי `tools/node_modules` לא קיים ב-worktree הזה
+(`AGENTS.md` מזהיר על זה), ו-`npm --prefix tools install` נדחה. GPT
+העתיק `tools/node_modules` מקומית והריץ `node tools/build-assets.mjs`
+בהצלחה. עכשיו `tax-optimizer.app.js` ו-`finance.tailwind.css` טריים
+ו-`--check` עובר.
+
+הדיף של `finance.tailwind.css` הוא שורת ה-hash של המקור בלבד
+(`bbc85eab3742a9b8` → `411bc130cf80b0b4`). גוף ה-CSS זהה בייט-בבייט,
+כי שינויי `finance.html` בגל הזה הם JS ולא מחלקות Tailwind.
+`tax-optimizer.app.js` לא השתנה כלל — ה-JSX לא נגע.
+
+העבודה שהייתה staged אורגנה ל-commits קטנים על הענף
+`data/approved-remediation-wave-1`:
+
+1. `Stop the assistant from holding, or falling back to, a browser API key`
+   — `ai-assistant.js` · `worker/worker.js` · `sw.js` · `shared/backup.js` (סעיף 2)
+2. `Show a prime route as variable, and correct the repayment-methods count`
+   — `mortgage.html` · `tests/mortgage-variable-badge.test.mjs` (סעיף 4)
+3. `Purge the retired AI key, and lock a tab out when another claims the keys`
+   — `shared/user-storage.js` · `tests/tab-ownership-lock.test.mjs` (סעיף 2 + סעיף 3)
+4. `Match the demo fixed-record fixture to the real schema, and drop the retired key`
+   — `demo-data.js` · `tests/demo-isolation.test.mjs` (סעיף 4 + סעיף 2)
+5. `Route the category classifier through the Worker, and fix multi-year pickers`
+   — `finance.html` · `finance.tailwind.css` · `tests/finance-year-selector.test.mjs`
+   · `tests/no-browser-ai-key.test.mjs` (סעיף 2 + סעיף 4)
+6. `Run the four new wave-1 tests in CI` — `.github/workflows/checks.yml`
+7. הפתק הזה.
+
+שלושה קבצים — `finance.html`, `demo-data.js`, `shared/user-storage.js` —
+נושאים שינוי משני סעיפים באותו commit, כי staging חלקי
+(`git reset -p`) לא היה זמין בסבב שקימט את זה. הודעת ה-commit מפרטת
+את שני הצדדים בכל מקרה.
+
+אין push, אין merge, אין מעבר ענף. הענף מוכן לסקירה ולאישור של דולב.
+
+### מה תוקן, לפי סעיף בגל
+
+**סעיף 1 (שער פריסה) —** כבר היה committed מסבב קודם
+(`bc365a9`, `7cab3b2`). לא נגעתי.
+
+**סעיף 2 — הסרת מפתח Anthropic מהלקוח.** הקוד היה כבר כתוב כשקיבלתי
+את הסבב (לא שלי); קראתי אותו שורה־שורה מול הדרישה ולא מצאתי פער:
+
+- `ai-assistant.js` — בלי `apiKey`, בלי `_viaBrowserKey`, בלי שדה
+  מפתח בהגדרות. תעבורה יחידה דרך ה-Worker; כשל ב-503 נאמר בפירוש
+  ("אין מפתח בדפדפן ואין למה ליפול חזרה") במקום ליפול לברירת מחדל.
+- `finance.html`, `suggestCategoriesWithClaude` — עבר מ-`fetch` ישיר
+  ל-`api.anthropic.com` עם מפתח מ-`localStorage`, ל-`window.FTData.aiApi()`
+  עם `pendingAuthHeaders()`. בלי טוקן — מחזיר `{}` בשקט (הייבוא ממשיך
+  עם הקטגוריה של Max), לא שגיאה למשתמש.
+- `worker/worker.js` — רק הערות עודכנו (503 מול 403), אין שינוי לוגיקה.
+- `demo-data.js`, `shared/user-storage.js` — `ai_api_key` הוצא מרשימת
+  המפתחות הפעילים, ונוסף `RETIRED_KEYS` + `purgeRetiredKeys()` שרץ
+  בכל טעינת דף, מוחק גם את המפתח השטוח וגם כל עותק `u::<uid>::ai_api_key`
+  **בלי לקרוא אותו קודם**.
+- `shared/backup.js` — הערה בלבד; הרשימה הייתה כבר allowlist בלי המפתח.
+- `sw.js` — `api.anthropic.com` הוסר מ-`NEVER_INTERCEPT` עם הערה למה.
+
+בדיקה חדשה: `tests/no-browser-ai-key.test.mjs` — סוויפ סטטי על כל קובץ
+שמגיע ללקוח (`fetch` ישיר, header, `sk-ant-`, שם המפתח השטוח), ובדיקת
+התנהגות לשני הקוראים (הסיווג ו-`purgeRetiredKeys`). מקושר ל-CI.
+
+**סעיף 3 — גבול בין לשוניות real/demo.** זה מה שהוספתי בפועל הסבב הזה.
+
+הבעיה: `ft_active_uid` (מי הבעלים של המפתחות השטוחים) הוא מפתח
+`localStorage` אחד המשותף לכל הלשוניות באותו origin. אם לשונית A
+מחוברת לחשבון אמיתי ולשונית B נכנסת למצב הדגמה (או מתחברת לחשבון אחר),
+B "גונבת" בעלות על המפתחות השטוחים בלי שA יודעת. אם A ממשיכה לכתוב —
+היא דורסת את הנתונים של B במקום, ולהפך: זה בדיוק התרחיש ש-B תציג נתון
+אמיתי שA כתבה, או שA תדרוס נתוני הדגמה על נתונים אמיתיים.
+
+המימוש הוא הגבול הביניים שאושר, לא המיגרציה המלאה: `shared/user-storage.js`
+מאזין לאירוע `storage` (שהדפדפן משגר בדיוק ללשוניות **האחרות**, אף פעם לא
+לזו שכתבה) על `ft_active_uid`. כשלשונית מזהה שהבעלים השתנה בלי שהיא
+עצמה שינתה אותו — היא ננעלת: `Storage.prototype.getItem/setItem/removeItem`
+מקבלים guard שמנטרל קריאה/כתיבה **רק** למפתחות מתוך `USER_KEYS` (לא
+ל-`ft_active_uid` עצמו, לא לארכיון ה-`u::`), ומוצג באנר קבוע למעלה
+שאומר שהלשונית הזאת הפסיקה להתעדכן ולהישמר, עם כפתור רענון. שחזור
+קורה ברענון, או כשהלשונית הזו עצמה קוראת שוב ל-`syncToUser`/
+`enterDemoSandbox` (למשל המשתמש מתחבר מחדש באותה לשונית) — לא אוטומטית
+ולא reseed שמסתיר את זה.
+
+תיעוד מפורש של מה **לא** נפתר (כמו שהסעיף דורש): זה patch ברמת
+`Storage.prototype`, לא מיגרציה. כל אתר קריאה/כתיבה בחמשת המסכים
+עדיין עובר דרך המפתח השטוח המשותף; התיקון רק תופס את הרגע שבו הבעלות
+זזה ועוצר משם. המיגרציה האמיתית — קריאה/כתיבה ישירה ל-`u::<uid>::*`
+מכל אתר קריאה, בלי מפתח שטוח משותף בכלל — לא בגל הזה.
+
+פינה ידועה שנשארה כפי שהיא: לשונית שיושבת על מסך ההתחברות (לפני
+שהיא בעלים של כלום) יכולה להיכנס למצב "ננעל" אם לשונית אחרת מחליפה
+בעלים באותו רגע — לא מזיק (אין לה מה לדלוף), אבל עלול להראות באנר
+מיותר לפני שהמשתמש בכלל התחבר. לא תיקנתי, כי זה משפר דיוק שולי מול
+מורכבות נוספת.
+
+בדיקה חדשה: `tests/tab-ownership-lock.test.mjs` — מדמה שתי "לשוניות"
+עם `Storage.prototype` נפרד לכל אחת (כמו ב-realm אמיתי) על אותו storage
+משותף, משגר אירוע `storage` סינתטי, ומוודא: קריאה חסומה, כתיבה לא
+דורסת את מה שהבעלים החדש כתב, `ft_active_uid` עצמו נשאר קריא, שחזור
+דרך `syncToUser` עובד, ואפשר להינעל שוב אחרי שחזור. נכשל בוודאות מול
+הגרסה הישנה של `shared/user-storage.js` (בדקתי ידנית מול `git show HEAD`).
+
+**סעיף 4 — תיקונים סגורים:**
+
+- `mortgage.html:2189` — `isVar` בתוך `renderCurrentTranches()` בדק
+  רק `var5`/`var1`, בעוד שכל שאר הקובץ (7 מקומות) משתמש ב-
+  `['prime','var5','var1'].includes(t.type)`. מסלול פריים הוצג כ"קבועה"
+  והשדה "עדכון הריבית הבא" לא הופיע לו. תוקן לאותה רשימה. בדיקה חדשה:
+  `tests/mortgage-variable-badge.test.mjs` — מחלץ את `renderCurrentTranches`
+  מהמקור (כמו ש-`tests/mortgage-schedule.test.mjs` כבר עושה) ומוודא
+  badge ושדה לכל סוג מסלול. נכשל מול הקוד הישן, עבר אחרי התיקון.
+
+- `getDataYears()` (finance, השורה הראשית) ו-`updateReportPeriodSelector()`
+  (finance, טאב דוחות) — שני מימושים כפולים שהוסיפו רק שנת ההתחלה
+  ושנת הסיום של הכנסה/הוצאה קבועה לבורר השנים, לא את מה שביניהן.
+  רשומה שרצה 2023–2027 לא הייתה מציגה 2024–2026 בבורר בכלל. חילצתי
+  helper משותף (`addFixedRecordYears`) וקראתי לו משני המקומות. בדיקה
+  חדשה: `tests/finance-year-selector.test.mjs` — הטווח יחסי לשנה
+  הנוכחית (לא `2044` קבוע), ומוודאת גם שהמימוש השני קורא ל-helper
+  המשותף ולא משכפל את הבאג. נכשל מול הקוד הישן.
+
+- `demo-data.js`, `generateDemoFinanceData()` — הכנסות/הוצאות קבועות
+  כתבו `desc` בזמן שה-schema האמיתי (`addFixedIncome`/`addFixedExpense`
+  ב-`finance.html`) הוא `description`+`category`. `renderFixedItems()`
+  קורא `f.description`/`f.category` — כרטיסי הכנסה/הוצאה קבועה במצב
+  הדגמה הציגו `undefined`. תוקן, ונוספה גם `category: 'דמי שכירות'`
+  שחסרה לגמרי בהכנסה הקבועה. הוספתי בדיקה ל-`tests/demo-isolation.test.mjs`
+  הקיים במקום קובץ חדש (הוא כבר מייבא `generateDemoFinanceData`).
+  נכשלה מול הקוד הישן.
+
+- הכותרת "ארבע שיטות, סיפור תזרימי אחד" ב-`mortgage.html` (עמוד 3,
+  ניווט) תוקנה ל"חמש שיטות" + ה-eyebrow עודכן לחמשת השמות
+  (שפיצר · קרן שווה · בלון · גרייס חלקי · גרייס מלא). טקסט בלבד,
+  אין שינוי בחישוב או ב-`METHOD_COLORS`.
+
+- slider המס — לא נגעתי, כמו שהסעיף אומר.
+
+### בדיקות שהורצו
+
+אחרי בניית המיוצרים, GPT הריץ מחדש 12 פקודות חובה/רלוונטיות — כולן עברו:
+`build-assets --check`, `check-tailwind-coverage`, `demo-isolation`,
+`ai-endpoint`, `no-browser-ai-key`, `tab-ownership-lock`,
+`finance-year-selector`, `mortgage-variable-badge`, `mortgage-schedule`,
+`mortgage-penalty`, `tax-fx`, `agent-relay-parsing`.
+
+כל אחת מארבע הבדיקות החדשות אומתה קודם גם מול הקוד **הישן** (עותק זמני
+מ-`git show HEAD`) — כדי לוודא שהיא באמת נכשלה לפני התיקון, לא רק שהיא
+עוברת אחריו.
+
+### מה נשאר
+
+- המיגרציה המלאה ל-namespace אמיתי (סעיף 3) — לא בגל הזה, כתוב
+  בקוד כ-follow-up.
+- הפינה של לשונית-login שננעלת מוקדם מדי (למעלה) — תיעדתי, לא תיקנתי.
+- slider המס — עבר במפורש ל-Batch 1, לא כאן.
+
+### מה דורש בדיקה חזותית של GPT
+
+שלושה דברים חדשים על המסך. המיוצרים כבר בנויים — אפשר להריץ בדפדפן:
+
+1. הבאנר החדש בראש המסך (`#ft-ownership-lock-banner` ב-
+   `shared/user-storage.js`) — מוצג רק כשלשונית מאבדת בעלות, קשה
+   לשחזר ידנית בלי שתי לשוניות בפועל. הוא **פונקציונלי בכוונה**, לא
+   מעוצב — צבע/ריווח/מיקום קשיחים inline, לא טוקנים מ-`shared/theme.css`.
+   אם דולב רוצה אותו תואם לשפה העיצובית — זה מסלול א' (עיצוב עצמאי).
+2. כרטיסי הכנסה/הוצאה קבועה במצב הדגמה (תיקון ה-`description` ב-
+   `demo-data.js`) — עכשיו מציגים טקסט אמיתי במקום `undefined`;
+   שווה מבט שהפריסה לא משתנה עם הטקסט הארוך יותר.
+3. עמוד "שיטות פירעון" ב-`mortgage.html` — הכותרת/ה-eyebrow ארוכים
+   יותר עכשיו (חמש מילים במקום ארבע); שווה לוודא שאין גלישה בכותרת
+   בטלפון.
