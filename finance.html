@@ -3312,11 +3312,21 @@
             return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
         }
 
+        // A fixed income/expense that spans several years must offer all of them, not
+        // just the year it started and the year it ends — a record running 2023 to
+        // 2027 has to show up when the picker is set to 2025, and adding only the two
+        // endpoints left 2024-2026 unreachable.
+        function addFixedRecordYears(years, f) {
+            const startYear = parseInt(f.start.split('-')[0]);
+            const endYear = parseInt(f.end.split('-')[0]);
+            for (let y = Math.min(startYear, endYear); y <= Math.max(startYear, endYear); y++) years.add(y);
+        }
+
         function getDataYears() {
             const years = new Set([new Date().getFullYear()]);
             data.transactions.forEach(t => { if(t.month) years.add(parseInt(t.month.split('-')[0])); });
-            data.fixedIncomes.forEach(f => { years.add(parseInt(f.start.split('-')[0])); years.add(parseInt(f.end.split('-')[0])); });
-            data.fixedExpenses.forEach(f => { years.add(parseInt(f.start.split('-')[0])); years.add(parseInt(f.end.split('-')[0])); });
+            data.fixedIncomes.forEach(f => addFixedRecordYears(years, f));
+            data.fixedExpenses.forEach(f => addFixedRecordYears(years, f));
             return Array.from(years).sort((a,b) => b-a);
         }
 
@@ -5833,23 +5843,29 @@
 
         // Ask Claude (cheap model) to classify unknown merchants into the user's
         // expense categories, given examples from their own history as context.
+        //
+        // Goes through the Worker, exactly like the assistant. This used to read
+        // an Anthropic key out of localStorage and send it as `x-api-key` from
+        // the page — a billable secret handed to anything that could read
+        // storage on this origin. The Worker holds the key; the Firebase ID
+        // token this page already has is what identifies the caller.
+        //
+        // Failing here is not an error the user has to see: the import still
+        // works, the unknown merchants just keep their Max-derived category.
+        // A missing token (signed out, demo mode) is one of those cases.
         async function suggestCategoriesWithClaude(merchants, expenseCategories, historySamples) {
-            const apiKey = localStorage.getItem('ai_api_key');
-            if (!apiKey || merchants.length === 0) return {};
+            if (merchants.length === 0) return {};
+            const headers = await pendingAuthHeaders({ 'Content-Type': 'application/json' });
+            if (!headers) return {};
             const system = 'אתה מסווג עסקאות אשראי לקטגוריות הוצאה. החזר JSON בלבד, ללא טקסט נוסף.';
             const prompt = `קטגוריות אפשריות (בחר רק מתוכן): ${JSON.stringify(expenseCategories)}
 דוגמאות מההיסטוריה של המשתמש (בית עסק → קטגוריה): ${JSON.stringify(historySamples)}
 סווג כל אחד מבתי העסק הבאים לאחת הקטגוריות בלבד.
 החזר אובייקט JSON {"<בית עסק>":"<קטגוריה>"} עבור: ${JSON.stringify(merchants)}`;
             try {
-                const res = await fetch('https://api.anthropic.com/v1/messages', {
+                const res = await fetch(window.FTData.aiApi(), {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': apiKey,
-                        'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true'
-                    },
+                    headers,
                     body: JSON.stringify({
                         model: 'claude-haiku-4-5',
                         max_tokens: 1024,
@@ -5858,8 +5874,10 @@
                     })
                 });
                 if (!res.ok) throw new Error('API ' + res.status);
+                // The Worker returns {text, model, usage} — already flattened
+                // out of Anthropic's content-block array.
                 const body = await res.json();
-                const text = (body.content && body.content[0] && body.content[0].text) || '{}';
+                const text = body.text || '';
                 const match = text.match(/\{[\s\S]*\}/);
                 return match ? JSON.parse(match[0]) : {};
             } catch (e) {
@@ -6747,18 +6765,8 @@
                     years.add(year);
                 }
             });
-            data.fixedIncomes.forEach(f => {
-                const startYear = parseInt(f.start.split('-')[0]);
-                const endYear = parseInt(f.end.split('-')[0]);
-                years.add(startYear);
-                years.add(endYear);
-            });
-            data.fixedExpenses.forEach(f => {
-                const startYear = parseInt(f.start.split('-')[0]);
-                const endYear = parseInt(f.end.split('-')[0]);
-                years.add(startYear);
-                years.add(endYear);
-            });
+            data.fixedIncomes.forEach(f => addFixedRecordYears(years, f));
+            data.fixedExpenses.forEach(f => addFixedRecordYears(years, f));
 
             years.add(currentYear);
 
