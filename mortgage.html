@@ -1873,8 +1873,8 @@ const MORTGAGE_PAGE_META = {
   },
   'p-methods': {
     code: '03 / REPAYMENT ENGINE',
-    eyebrow: 'שפיצר · קרן שווה · בלון · גרייס',
-    title: 'ארבע שיטות, סיפור תזרימי אחד',
+    eyebrow: 'שפיצר · קרן שווה · בלון · גרייס חלקי · גרייס מלא',
+    title: 'חמש שיטות, סיפור תזרימי אחד',
     text: 'השווה תשלום, יתרת קרן וריבית מצטברת לאורך חיי ההלוואה — לא רק את המספר של החודש הראשון.'
   },
   'p-refi': {
@@ -2186,7 +2186,7 @@ function renderCurrentTranches() {
   const el = document.getElementById('current-tranches');
   el.innerHTML = currentTranches.map((t,i) => {
     const a = anchorTranches[i] || {};
-    const isVar = t.type === 'var5' || t.type === 'var1';
+    const isVar = ['prime', 'var5', 'var1'].includes(t.type);
     const origin = hasOrigin(a);
     const open = expandedTranches.has(t.id);
     const advOpen = advancedOpen.has(t.id);
