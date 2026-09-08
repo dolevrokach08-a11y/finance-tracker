@@ -85,12 +85,16 @@ function generateDemoFinanceData() {
         });
     }
 
-    // Fixed incomes
+    // Fixed incomes and expenses use `description`/`category` (see addFixedIncome/
+    // addFixedExpense in finance.html) — a different schema from the `desc`/`cat`
+    // transactions use above. Demo cards rendered blank descriptions until this
+    // matched.
     const fixedIncomes = [
         {
             id: 2001,
-            desc: 'דמי שכירות דירה להשקעה',
+            description: 'דמי שכירות דירה להשקעה',
             amount: 4200,
+            category: 'דמי שכירות',
             start: `${currentYear}-01`,
             end: `${currentYear}-12`,
             earner: 'father'
@@ -101,7 +105,7 @@ function generateDemoFinanceData() {
     const fixedExpenses = [
         {
             id: 3001,
-            desc: 'משכנתא',
+            description: 'משכנתא',
             amount: 4800,
             category: 'דיור',
             start: `${currentYear - 2}-01`,
@@ -109,7 +113,7 @@ function generateDemoFinanceData() {
         },
         {
             id: 3002,
-            desc: 'ועד בית',
+            description: 'ועד בית',
             amount: 320,
             category: 'דיור',
             start: `${currentYear}-01`,
@@ -117,7 +121,7 @@ function generateDemoFinanceData() {
         },
         {
             id: 3003,
-            desc: 'ביטוח דירה',
+            description: 'ביטוח דירה',
             amount: 180,
             category: 'דיור',
             start: `${currentYear}-01`,
@@ -511,11 +515,15 @@ function seedDemoStorage() {
         localStorage.setItem(key, JSON.stringify(value));
     });
     localStorage.setItem('mortgage_monthly_income', '32000');
+    // Everything else a real account writes, cleared so the demo never shows a
+    // leftover from it. The retired Anthropic key is no longer in this list: it
+    // does not exist in the browser any more, and UserStorage.purgeRetiredKeys()
+    // deletes any copy an older version left behind, on every load.
     [
         'financeData', 'financeData_backup', 'mortgage', 'taxOptimizerData', 'taxData',
         'portfolio_cachedTWR', 'portfolio_cachedBenchmarks', 'portfolio_sync_meta',
         'financeTrackerData_meta', 'mortgage_sync_meta', 'ft_sync_manifest', 'ft_warnings',
-        'ai_api_key', 'ai_model'
+        'ai_model'
     ].forEach(key => localStorage.removeItem(key));
 }
 
