@@ -6,8 +6,11 @@
  * something goes wrong — so it errs toward completeness.
  *
  * What it deliberately does NOT carry:
- *   - ai_api_key: a credential. A backup file gets emailed and dropped in cloud
- *     folders; a key must never ride along.
+ *   - credentials of any kind. A backup file gets emailed and dropped in cloud
+ *     folders. There is no longer a credential in the browser to exclude — the
+ *     retired Anthropic key is gone and UserStorage purges leftovers — but the
+ *     list below stays an allowlist rather than "USER_KEYS minus the bad ones",
+ *     so a key added there in future does not silently join the export.
  *   - the computed caches (TWR, benchmarks, month summary): derived from the
  *     data below and regenerated on the next visit. Restoring a stale cache
  *     would show numbers that disagree with the data that produced them.
@@ -17,8 +20,9 @@
 (function () {
     'use strict';
 
-    // Every key that actually holds account data. Mirrors UserStorage.USER_KEYS
-    // minus the credential, the caches and the sync bookkeeping.
+    // Every key that actually holds account data. A subset of
+    // UserStorage.USER_KEYS, listed rather than derived, so nothing joins the
+    // export by being added there.
     const DATA_KEYS = [
         'portfolio',
         'financeTrackerData',

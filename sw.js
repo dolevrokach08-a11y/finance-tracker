@@ -78,7 +78,10 @@ const NEVER_INTERCEPT = [
   'identitytoolkit.googleapis.com',
   'securetoken.googleapis.com',
   'workers.dev',
-  'api.anthropic.com',
+  // api.anthropic.com used to be listed here, from when the page called it
+  // directly. Nothing in this app does any more — the Worker holds the key —
+  // and a cross-origin host that is not in CACHEABLE_HOSTS already falls
+  // through untouched, so the entry described a request that cannot happen.
   'finance.yahoo.com'
 ];
 

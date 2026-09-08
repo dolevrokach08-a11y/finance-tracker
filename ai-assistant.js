@@ -2,9 +2,12 @@
  * AI Financial Assistant Module
  *
  * Provides a floating chat interface that analyzes financial data
- * using Claude API with Tool Use for natural language queries.
+ * using Claude through the Cloudflare Worker at /api/ai/chat.
  *
- * Falls back to local analysis when API key is not configured.
+ * There is no API key in this file, and no way to put one here. The browser
+ * authenticates with the Firebase ID token it already holds; the Anthropic key
+ * is a Worker secret. Falls back to local analysis when the user is signed out
+ * or the Worker has no key configured.
  */
 
 // ==================== SHARED HELPERS ====================
@@ -23,7 +26,6 @@ function aiEscapeHTML(text) {
 
 class FinancialAIAssistant {
     constructor(options = {}) {
-        this.apiKey = options.apiKey || localStorage.getItem('ai_api_key') || null;
         // Default to claude-sonnet-4-6 (stable alias). Stored legacy names from
         // the previous generation are mapped to their current equivalents.
         const legacyMap = {
@@ -40,7 +42,7 @@ class FinancialAIAssistant {
         this.container = null;
         this.settingsOpen = false;
         this.onAction = options.onAction || (() => {});
-        // 'worker' | 'key' | null-until-a-call-has-been-made.
+        // 'worker' | null-until-a-call-has-been-made.
         this.transport = null;
         this.hasAuth = false;
         this._userPromise = null;
@@ -244,21 +246,6 @@ class FinancialAIAssistant {
                 text-align: center;
                 direction: rtl;
             }
-            .ai-settings-clear {
-                background: transparent;
-                border: 1px solid hsla(0, 72%, 55%, 0.3);
-                color: hsl(0, 72%, 55%);
-                padding: 6px;
-                border-radius: 8px;
-                font-size: 0.72rem;
-                cursor: pointer;
-                font-family: inherit;
-                width: 100%;
-                margin-top: 6px;
-                transition: all 0.2s;
-            }
-            .ai-settings-clear:hover { background: hsla(0, 72%, 55%, 0.1); }
-
             .ai-chat-messages {
                 flex: 1;
                 overflow-y: auto;
@@ -428,12 +415,10 @@ class FinancialAIAssistant {
         this.panel.className = 'ai-chat-panel';
         this.panel.setAttribute('role', 'dialog');
         this.panel.setAttribute('aria-label', 'עוזר פיננסי AI');
-        // Re-read the key: user storage may have swapped accounts since construction
-        this.apiKey = localStorage.getItem('ai_api_key') || null;
-        const hasKey = !!this.apiKey;
-        const statusClass = hasKey ? 'connected' : 'local';
-        const statusText = hasKey ? 'Claude API מחובר' : 'מצב מקומי';
-        const maskedKey = hasKey ? this.apiKey.slice(0, 10) + '...' + this.apiKey.slice(-4) : '';
+        // Auth is still resolving at this point; _updateStatus() corrects the
+        // header the moment it settles.
+        const statusClass = this.hasAuth ? 'connected' : 'local';
+        const statusText = this.hasAuth ? 'Claude API מחובר' : 'מצב מקומי';
 
         this.panel.innerHTML = `
             <div class="ai-chat-header">
@@ -446,7 +431,7 @@ class FinancialAIAssistant {
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <div class="ai-chat-status ${statusClass}">${statusText}</div>
-                    <button class="ai-settings-btn" id="aiSettingsToggle" aria-label="הגדרות API">
+                    <button class="ai-settings-btn" id="aiSettingsToggle" aria-label="הגדרות העוזר">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/>
                         </svg>
@@ -454,8 +439,6 @@ class FinancialAIAssistant {
                 </div>
             </div>
             <div class="ai-settings-panel" id="aiSettingsPanel">
-                <label for="aiApiKeyInput">Claude API Key <span style="opacity:.7;font-weight:400">— לא נדרש יותר, המפתח יושב בשרת</span></label>
-                <input type="password" id="aiApiKeyInput" placeholder="sk-ant-api03-..." value="${maskedKey}" autocomplete="off">
                 <label for="aiModelSelect">מודל</label>
                 <select id="aiModelSelect">
                     <option value="claude-sonnet-4-6" ${this.model === 'claude-sonnet-4-6' ? 'selected' : ''}>Claude Sonnet 4.6 (מהיר, מומלץ)</option>
@@ -463,15 +446,14 @@ class FinancialAIAssistant {
                     <option value="claude-opus-4-8" ${this.model === 'claude-opus-4-8' ? 'selected' : ''}>Claude Opus 4.8 (חכם ביותר, יקר)</option>
                 </select>
                 <button class="ai-settings-save" id="aiSettingsSave">שמור הגדרות</button>
-                <button class="ai-settings-clear" id="aiSettingsClear">מחק API Key</button>
                 <div class="ai-settings-info">
-                    המפתח נשמר מקומית בדפדפן בלבד (localStorage).<br>
-                    ללא מפתח, העוזר עובד במצב מקומי עם ניתוח בסיסי.
+                    אין מפתח API בדפדפן. העוזר מזדהה מול השרת עם ההתחברות שלך.<br>
+                    כשאין חיבור או שהחשבון אינו מורשה, העוזר עובד במצב מקומי עם ניתוח בסיסי.
                 </div>
             </div>
             <div class="ai-chat-messages" id="aiChatMessages">
                 <div class="ai-msg assistant">
-                    שלום! אני העוזר הפיננסי שלך. ${hasKey ? 'מחובר ל-Claude API - אפשר לשאול שאלות מורכבות!' : 'עובד במצב מקומי. להגדרת Claude API לחץ על גלגל השיניים למעלה.'}
+                    שלום! אני העוזר הפיננסי שלך. שאל אותי כל שאלה על הכספים והתיק שלך.
                 </div>
             </div>
             <div class="ai-quick-actions" id="aiQuickActions">
@@ -528,12 +510,6 @@ class FinancialAIAssistant {
             saveBtn.addEventListener('click', () => this._saveSettings());
         }
 
-        // Clear API key
-        const clearBtn = this.panel.querySelector('#aiSettingsClear');
-        if (clearBtn) {
-            clearBtn.addEventListener('click', () => this._clearApiKey());
-        }
-
         // Quick action buttons
         this.panel.querySelectorAll('.ai-quick-btn').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -579,18 +555,14 @@ class FinancialAIAssistant {
         this._scrollToBottom();
 
         try {
-            // Re-read the key: user storage may have swapped accounts since construction
-            this.apiKey = localStorage.getItem('ai_api_key') || null;
-            // The Worker holds the Anthropic key now, so being signed in is
-            // enough. A key still sitting in this browser is the old path, kept
-            // alive only until it is cleared from Settings.
+            // The Worker holds the Anthropic key, so being signed in is the
+            // whole requirement. Signed out (or in demo mode) there is nothing
+            // to authenticate with and nothing in the browser to fall back on,
+            // so the local analyser answers instead.
             const token = await this._authToken();
-            let response;
-            if (token || this.apiKey) {
-                response = await this._callClaudeAPI(text, token);
-            } else {
-                response = await this._localAnalysis(text);
-            }
+            const response = token
+                ? await this._callClaudeAPI(text, token)
+                : await this._localAnalysis(text);
             typingEl.remove();
             this._addMessage('assistant', response);
         } catch (err) {
@@ -907,13 +879,14 @@ ${dataSection}
             ]
         };
 
-        if (token) {
-            const viaWorker = await this._viaWorker(payload, token);
-            // null means "this Worker has no key yet" — the only case worth
-            // falling through for. Every other answer is a real answer.
-            if (viaWorker !== null) return viaWorker;
-        }
-        return this._viaBrowserKey(payload);
+        const viaWorker = await this._viaWorker(payload, token);
+        // null means the Worker could not be reached at all. Every answer it
+        // does give — including "not configured" and "not allowed" — is a real
+        // answer and is reported as one; there is no second transport, because
+        // there is no key in this browser to fall back to.
+        if (viaWorker !== null) return viaWorker;
+        const local = await this._localAnalysis(userMessage);
+        return 'אין כרגע חיבור לשרת העוזר, אז זו תשובה מקומית:\n\n' + local;
     }
 
     // ---- Transport ----
@@ -924,8 +897,10 @@ ${dataSection}
     // it. It sits in the Cloudflare Worker now; the page proves who it is with
     // the Firebase ID token it already holds for everything else.
     //
-    // The old path stays as a fallback so the assistant keeps answering until
-    // the Worker secret is set. Clearing the key in Settings retires it.
+    // There is exactly one transport. The old browser-key path is gone, and
+    // with it the ability to put a key back: a fallback that accepts a key
+    // from storage is a fallback that can be *given* a key by anything able to
+    // write storage.
 
     /**
      * The signed-in user. Auth state resolves asynchronously, and the assistant
@@ -973,7 +948,7 @@ ${dataSection}
         }
     }
 
-    /** @returns {Promise<string|null>} text, or null when the Worker has no key. */
+    /** @returns {Promise<string|null>} text, or null when the Worker is unreachable. */
     async _viaWorker(payload, token) {
         const endpoint = (window.FTData && window.FTData.aiApi)
             ? window.FTData.aiApi()
@@ -987,7 +962,9 @@ ${dataSection}
                 body: JSON.stringify(payload)
             });
         } catch (err) {
-            // Network-level failure. Fall through to whatever the browser has.
+            // Network-level failure — offline, DNS, a blocked request. The only
+            // case where there is nothing to report from the server, because no
+            // request reached it.
             console.warn('[ai] worker unreachable', err);
             return null;
         }
@@ -999,41 +976,16 @@ ${dataSection}
             return data.text || '';
         }
 
-        if (response.status === 503) return null; // no ANTHROPIC_API_KEY set yet
         const detail = await response.json().catch(() => ({}));
         throw this._userError(
+            // 503 used to mean "fall back to the key in this browser". There is
+            // no key in this browser, so it is said out loud instead.
+            response.status === 503 ? 'העוזר אינו מוגדר בשרת. צריך להגדיר ANTHROPIC_API_KEY ב-Worker. אין מפתח בדפדפן ואין למה ליפול חזרה.' :
             response.status === 403 ? 'החשבון הזה לא מורשה להשתמש בעוזר. צריך להוסיף את המזהה שלו ל-AI_ALLOWED_UIDS ב-Worker.' :
             response.status === 429 ? 'יותר מדי בקשות לעוזר. נסה שוב בעוד כמה דקות.' :
             response.status === 401 ? 'ההתחברות פגה. רענן את הדף והתחבר שוב.' :
             `שגיאה מהשרת (${response.status}): ${String(detail.error || '').slice(0, 200)}`
         );
-    }
-
-    /** The legacy path: a key still stored in this browser. */
-    async _viaBrowserKey(payload) {
-        if (!this.apiKey) {
-            throw this._userError('העוזר לא מחובר ל-Claude. צריך להגדיר ANTHROPIC_API_KEY ב-Worker.');
-        }
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': this.apiKey,
-                'anthropic-version': '2023-06-01',
-                'anthropic-dangerous-direct-browser-access': 'true'
-            },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            const errText = await response.text().catch(() => '');
-            throw new Error(`API Error ${response.status}: ${errText.slice(0, 200)}`);
-        }
-
-        this.transport = 'key';
-        this._updateStatus();
-        const data = await response.json();
-        return data.content[0].text;
     }
 
     _userError(message) {
@@ -1042,7 +994,7 @@ ${dataSection}
         return err;
     }
 
-    // ---- Local Analysis (No API Key) ----
+    // ---- Local Analysis (signed out, or the Worker could not be reached) ----
     // Helper: get full monthly summary including fixed incomes/expenses
     _getMonthSummary(month) {
         const data = this.getFinanceData();
@@ -1474,74 +1426,37 @@ ${dataSection}
         response += '• "כמה הוצאתי על [קטגוריה]?"\n';
         response += '• "השוואה לחודש קודם"\n';
         response += '• כל שאלה חופשית על הכספים שלך\n\n';
-        response += 'לשאלות מורכבות יותר, הגדר מפתח Claude API ב-⚙️';
+        response += 'לשאלות מורכבות יותר צריך להיות מחובר לחשבון — אז העוזר עונה דרך Claude.';
 
         return response;
     }
 
     // ---- Settings Management ----
+    // Model only. There is no key field: a key belongs in the Worker, and a
+    // form that accepts one here is a form that puts a billable secret back
+    // into localStorage.
     _saveSettings() {
-        const keyInput = this.panel.querySelector('#aiApiKeyInput');
         const modelSelect = this.panel.querySelector('#aiModelSelect');
-        const key = keyInput.value.trim();
-        const model = modelSelect.value;
+        this.model = modelSelect.value;
+        localStorage.setItem('ai_model', this.model);
 
-        // Only save if key looks new (not masked)
-        if (key && !key.includes('...')) {
-            if (!key.startsWith('sk-ant-')) {
-                this._addMessage('assistant', 'המפתח לא נראה תקין. מפתח Claude API מתחיל ב-**sk-ant-**');
-                return;
-            }
-            this.apiKey = key;
-            localStorage.setItem('ai_api_key', key);
-            keyInput.value = key.slice(0, 10) + '...' + key.slice(-4);
-        }
-
-        this.model = model;
-        localStorage.setItem('ai_model', model);
-
-        // Update status indicator
         this._updateStatus();
 
         // Close settings
         this.settingsOpen = false;
         this.settingsPanel.classList.remove('open');
 
-        this._addMessage('assistant', this.apiKey
-            ? `הגדרות נשמרו! מחובר ל-**${this._modelDisplayName()}**. אפשר לשאול שאלות מורכבות עכשיו.`
-            : 'הגדרות נשמרו. עובד במצב מקומי (ללא API key).'
-        );
-    }
-
-    _clearApiKey() {
-        this.apiKey = null;
-        localStorage.removeItem('ai_api_key');
-        localStorage.removeItem('ai_model');
-        this.model = 'claude-sonnet-4-6';
-
-        const keyInput = this.panel.querySelector('#aiApiKeyInput');
-        const modelSelect = this.panel.querySelector('#aiModelSelect');
-        if (keyInput) keyInput.value = '';
-        if (modelSelect) modelSelect.value = 'claude-sonnet-4-6';
-
-        this._updateStatus();
-        this.settingsOpen = false;
-        this.settingsPanel.classList.remove('open');
-
-        this._addMessage('assistant', 'API Key נמחק. העוזר עובד כעת במצב מקומי.');
+        this._addMessage('assistant', `הגדרות נשמרו. המודל הוא **${this._modelDisplayName()}**.`);
     }
 
     _updateStatus() {
         if (!this.statusEl) return;
-        // 'worker' and 'key' are only known after a call has actually gone out;
-        // before that, a signed-in user or a stored key means we expect one to
-        // succeed. Saying "מצב מקומי" while signed in would be wrong.
-        const connected = this.transport === 'worker' || this.transport === 'key'
-            || this.hasAuth || !!this.apiKey;
+        // 'worker' is only known after a call has actually gone out; before
+        // that, a signed-in user means we expect one to succeed. Saying
+        // "מצב מקומי" while signed in would be wrong.
+        const connected = this.transport === 'worker' || this.hasAuth;
         this.statusEl.className = connected ? 'ai-chat-status connected' : 'ai-chat-status local';
-        this.statusEl.textContent =
-            this.transport === 'key' ? 'Claude API (מפתח בדפדפן)' :
-            connected ? 'Claude API מחובר' : 'מצב מקומי';
+        this.statusEl.textContent = connected ? 'Claude API מחובר' : 'מצב מקומי';
     }
 
     _modelDisplayName() {
@@ -1554,12 +1469,6 @@ ${dataSection}
     }
 
     // ---- Public API ----
-    setApiKey(key) {
-        this.apiKey = key;
-        localStorage.setItem('ai_api_key', key);
-        this._updateStatus();
-    }
-
     destroy() {
         this.fab?.remove();
         this.panel?.remove();
