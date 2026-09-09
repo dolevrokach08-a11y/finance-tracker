@@ -76,3 +76,30 @@ main, `firebase-config.js` או קבצי הרצה מקומיים. בסוף הו�
   `tests/demo-isolation.test.mjs`, ו-`tools/build-assets.mjs --check`.
 - טרם בוצעו תור התלושים offline, slider ההכנסה, בדיקת הקבלה המשולבת
   או בדיקת UI; הגל נשאר פתוח ואין אישור ל-push/merge/main.
+
+## הרחבת היקף מאושרת — דולב, 2026-09-09
+
+לאחר שקלוד קבע שאי־אפשר להבטיח מניעת אובדן בין מכשירים באמצעות
+`getDoc`/`setDoc` בלבד, דולב אישר להרחיב את גל 2 באופן מינימלי:
+
+- מותר להוסיף ב-`firebase-config.js` ייבוא ועטיפה מוגנת־Demo של
+  `runTransaction`, ולייצא אותה לשימוש מסך המס.
+- מותר לעדכן את חוזה התלושים והצרכנים הנדרשים כדי שסנכרון add/delete
+  יהיה אטומי, idempotent ולא ידרוס מסמך finance ישן בשלמותו.
+- יתר האיסורים נשארו: אין נתוני אמת, push, merge או שינוי ב-`main`.
+
+## התקדמות משותפת — תת־שלב 2א, 2026-09-09
+
+- קלוד קבע שהחוזה אינו ניתן למימוש אמין באמצעות `getDoc`/`setDoc`
+  בלבד והגדיר transaction אטומי כדרישה. שתי טיוטות קוד שלו נדחו
+  בביקורת GPT עקב אי־התאמה לזהות התלוש, API transaction ושדות מסמך.
+- נוסף מנוע עצמאי `shared/payslip-sync.js` לפי הארכיטקטורה המוסכמת:
+  תור עמיד, מזהי פעולה ותלוש יציבים, projection מקומי, transaction
+  הנגזר מקריאת המסמך האחרונה, ledger תחום ל-250 פעולות וסטטוסים
+  סמנטיים. כשל משאיר את הפעולה בתור; replay עמום נשאר idempotent.
+- `firebase-config.js` מייצא כעת `runTransaction` עטוף במחסום Demo,
+  ו-`tax_pending_payslip_ops` נוסף לבידוד המשתמש של `UserStorage`.
+- הבדיקה `tests/payslip-sync.test.mjs` מכסה add/delete דרך reload,
+  שינוי מרוחק שאינו נדרס, replay כפול, כשל transaction ומחסום Demo.
+- עברו גם בדיקות ה-build, Tailwind, demo isolation, AI endpoint
+  ו-no-browser-key. החיווט ל-`tax-optimizer.html` עדיין לא בוצע.

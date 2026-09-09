@@ -32,6 +32,7 @@
         'mortgage_monthly_income',
         'taxOptimizerData',
         'taxData',
+        'tax_pending_payslip_ops',
         // computed caches
         'finance_cachedSummary',
         'portfolio_cachedTWR',
