@@ -157,7 +157,12 @@
         var committedIds = new Set(batch.map(function (operation) { return operation.opId; }));
         var remaining = queue.filter(function (operation) { return !committedIds.has(operation.opId); });
         if (!persist(remaining)) return false;
-        onProjection(clone(committedPayslips || []));
+        // Operations may have been enqueued while the transaction was in
+        // flight. Keep them visible by projecting the remaining durable queue
+        // over the committed cloud result instead of briefly rolling the UI
+        // back to the transaction's older snapshot.
+        var visiblePayslips = queue.reduce(applyOperation, clone(committedPayslips || []));
+        onProjection(visiblePayslips);
         emit(queue.length ? 'pending' : 'cloud');
         return true;
       } catch (error) {

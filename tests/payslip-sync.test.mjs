@@ -111,6 +111,44 @@ check('queue key is managed contract', Sync.QUEUE_KEY === 'tax_pending_payslip_o
   check('failed transaction exposes error status', states.at(-1)?.state === 'error');
 }
 
+// A new local edit made while an earlier flush is in flight must remain both
+// durable and visible when that older transaction completes.
+{
+  const local = storage();
+  let release;
+  let transactionReady;
+  const gate = new Promise(resolve => { release = resolve; });
+  const ready = new Promise(resolve => { transactionReady = resolve; });
+  let remote = { payslips: [] };
+  let latestProjection = [];
+  let seq = 0;
+  const transact = async callback => {
+    let patch;
+    const result = await callback({
+      get: async () => clone(remote),
+      set: value => { patch = clone(value); }
+    });
+    remote = { ...remote, ...patch };
+    transactionReady();
+    await gate;
+    return result;
+  };
+  const sync = Sync.create({
+    storage: local,
+    transact,
+    makeId: () => `race-${++seq}`,
+    onProjection: rows => { latestProjection = rows; }
+  });
+  sync.enqueueAdd({ id: 'first', source: 'manual' });
+  const flushing = sync.flush();
+  await ready;
+  sync.enqueueAdd({ id: 'during-flight', source: 'manual' });
+  release();
+  check('in-flight newer operation remains queued', await flushing && sync.pendingCount() === 1);
+  check('in-flight newer operation remains visible', latestProjection.some(p => p.id === 'during-flight'));
+  check('older transaction still committed its own row', latestProjection.some(p => p.id === 'first'));
+}
+
 const firebase = readFileSync(join(ROOT, 'firebase-config.js'), 'utf8');
 const wrapperStart = firebase.indexOf('async function runTransaction(');
 const wrapperEnd = firebase.indexOf('\n}', wrapperStart);
