@@ -366,21 +366,23 @@ a { color: var(--accent); }
       // Show user in nav
       setNavUser(user);
 
-      // Both documents are fetched before either is awaited. They used to be two
-      // sequential round trips gating first paint, and with
-      // experimentalForceLongPolling each one is a real RTT. allSettled (not all)
-      // keeps the two independent failure paths below behaving as they did.
       const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
       window.__financeDocRef = userDocRef;
 
-      // Read the two documents ONE AT A TIME, not concurrently.
+      // Read the three documents ONE AT A TIME, not concurrently.
       //
-      // These were briefly fired together to save a round trip. That was reverted:
-      // this page has no localStorage fallback, so if the reads fail it renders as
-      // though the user has no payslips and no tax years — which reads as data
-      // loss. Saving one RTT is not worth any added risk to that, and a cold
-      // long-polling connection is more likely to carry a second read once the
-      // first has established it.
+      // These were briefly fired together to save round trips. That was reverted:
+      // this page has no localStorage fallback for finance/tax data, so if the
+      // reads fail it renders as though the user has no payslips and no tax years —
+      // which reads as data loss. Saving RTTs is not worth any added risk to that,
+      // and a cold long-polling connection is more likely to carry later reads once
+      // the first has established it.
+      //
+      // The portfolio document is its OWN read from users/{uid}/portfolio/data —
+      // the same path portfolio.html established. holdings/purchases/sales/rates
+      // for the CPI tax simulator come from there, never from the finance
+      // document, and this page does not depend on portfolio.html being opened
+      // first.
       //
       // Still time-boxed: Firestore under experimentalForceLongPolling does not
       // reliably reject when it cannot reach the backend, and an unbounded await
@@ -394,8 +396,9 @@ a { color: var(--accent); }
         try { return { status: 'fulfilled', value: await p }; }
         catch (reason) { return { status: 'rejected', reason }; }
       };
-      const financeResult = await settle(withTimeout(getDoc(userDocRef)));
-      const settingsResult = await settle(withTimeout(getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings'))));
+      const financeResult   = await settle(withTimeout(getDoc(userDocRef)));
+      const portfolioResult = await settle(withTimeout(getDoc(doc(db, 'users', user.uid, 'portfolio', 'data'))));
+      const settingsResult  = await settle(withTimeout(getDoc(doc(db, 'users', user.uid, 'finance', 'taxSettings'))));
 
       // Load finance data from Firebase
       try {
@@ -407,11 +410,6 @@ a { color: var(--accent); }
           window.__financeData = data;
           window.__payslipData = { payslips: data.payslips || [], loaded: true };
           document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
-          // Portfolio data for CPI tax simulator
-          window.__portfolioHoldings = data.holdings || [];
-          window.__portfolioPurchases = data.purchases || [];
-          window.__portfolioSales     = data.sales    || [];
-          window.__portfolioRates     = data.rates    || { USD: 3.6, EUR: 3.9 };
           const transactions = data.transactions || [];
           const fixedIncomes = data.fixedIncomes || [];
 
@@ -441,6 +439,35 @@ a { color: var(--accent); }
         retry.addEventListener('click', () => location.reload());
         banner.append(msg, retry);
         document.getElementById('root').before(banner);
+      }
+
+      // Portfolio is a separate Firestore document. A rejected read deliberately
+      // leaves these globals unset so runCPISim can still consult the current
+      // user's isolated local mirror; it must not mistake a network failure for
+      // an authoritative empty portfolio.
+      try {
+        if (portfolioResult.status === 'rejected') {
+          console.error('Failed to load portfolio data:', portfolioResult.reason);
+          window.__portfolioLoadError = true;
+        } else {
+          const portfolioSnap = portfolioResult.value;
+          if (portfolioSnap.exists()) {
+            const portfolioData = portfolioSnap.data() || {};
+            window.__portfolioHoldings = Array.isArray(portfolioData.holdings) ? portfolioData.holdings : [];
+            window.__portfolioPurchases = Array.isArray(portfolioData.purchases) ? portfolioData.purchases : [];
+            window.__portfolioSales = Array.isArray(portfolioData.sales) ? portfolioData.sales : [];
+            window.__portfolioRates = portfolioData.rates || {};
+          } else {
+            window.__portfolioHoldings = [];
+            window.__portfolioPurchases = [];
+            window.__portfolioSales = [];
+            window.__portfolioRates = {};
+          }
+          window.__portfolioLoadError = false;
+        }
+      } catch (portfolioError) {
+        console.error('Failed to load portfolio data:', portfolioError);
+        window.__portfolioLoadError = true;
       }
 
       // Load saved tax optimizer settings

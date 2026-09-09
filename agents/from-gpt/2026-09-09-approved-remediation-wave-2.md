@@ -59,3 +59,20 @@ Claude אחראי ללוגיקה/נתונים ולחיווט. commits קטנים
 main, `firebase-config.js` או קבצי הרצה מקומיים. בסוף הוסף לפתק זה
 `## תגובה — Claude, 2026-09-09` עם תחזית נצפית, commits, בדיקות,
 השפעת זרימת נתונים/מספרים, מגבלות ובדיקות UI מדויקות ל-GPT.
+
+## התקדמות משותפת — תת־שלב 1, 2026-09-09
+
+- קלוד ניסח את חוזה הטיפול בתוצאת מסמך התיק; GPT החיל אותו והוסיף
+  בדיקת רגרסיה דטרמיניסטית.
+- `tax-optimizer.html` קורא כעת את `finance/data`, `portfolio/data`
+  ו-`finance/taxSettings` כמסמכים נפרדים. משתני התיק מתמלאים רק
+  מ-`portfolio/data`.
+- כשל קריאת תיק מסומן ב-`window.__portfolioLoadError` ומשאיר את
+  הגלובלים לא מוגדרים כדי לאפשר fallback מקומי מבודד־משתמש. מסמך
+  portfolio שאינו קיים הוא תשובה מוסמכת ומגדיר מערכים ריקים.
+- `rates` חסר נשאר `{}`. הוסר נתיב ה-bootstrap האחרון שהחזיר
+  `USD: 3.6` / `EUR: 3.9`; `currentFX` עצמו לא השתנה בתת־שלב זה.
+- עברו: `tests/tax-portfolio-source.test.mjs`, `tests/tax-fx.test.mjs`,
+  `tests/demo-isolation.test.mjs`, ו-`tools/build-assets.mjs --check`.
+- טרם בוצעו תור התלושים offline, slider ההכנסה, בדיקת הקבלה המשולבת
+  או בדיקת UI; הגל נשאר פתוח ואין אישור ל-push/merge/main.
