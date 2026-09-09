@@ -131,10 +131,13 @@ class MemoryStorage {
 
     async function run({ token, workerReply }) {
         const calls = [];
+        const notes = [];
         const sandbox = {
             console: { warn() {}, log() {} },
-            JSON, Set, Object, String, Number, Promise,
+            JSON, Set, Object, String, Number, Promise, Error,
             window: { FTData: { aiApi: () => 'https://finance-proxy.example/api/ai/chat' } },
+            // The real notify() drops a toast into the page; here just record it.
+            notify(msg) { notes.push(msg); },
             async pendingAuthHeaders(extra = {}) {
                 return token ? { ...extra, Authorization: `Bearer ${token}` } : null;
             },
@@ -147,7 +150,7 @@ class MemoryStorage {
         vm.createContext(sandbox);
         vm.runInContext(fn[0] + '\nglobalThis.__fn = suggestCategoriesWithClaude;', sandbox);
         const result = await sandbox.__fn(['בית קפה'], ['מזון', 'אחר'], []);
-        return { result, calls };
+        return { result, calls, notes };
     }
 
     const ok = () => ({
@@ -163,12 +166,19 @@ class MemoryStorage {
     assert.equal(signedIn.calls[0].init.headers['x-api-key'], undefined);
     assert.deepEqual(signedIn.result, { 'בית קפה': 'מזון' },
         'the Worker returns {text}, not Anthropic content blocks');
+    assert.deepEqual(signedIn.notes, [], 'a successful classification shows the user nothing');
 
+    // Every failure mode must (a) keep the import running with local categories
+    // and (b) tell the user AI classification is unavailable — not fail silent.
     // `{}` built inside the vm has that realm's prototype, so count the keys
     // rather than compare against an object from this one.
+    const aiOff = /סיווג AI לא זמין/;
+
     const signedOut = await run({ token: null, workerReply: ok });
     assert.equal(signedOut.calls.length, 0, 'no token means no request at all');
-    assert.equal(Object.keys(signedOut.result).length, 0, 'and the import continues with Max categories');
+    assert.equal(Object.keys(signedOut.result).length, 0, 'the import continues with Max categories');
+    assert.equal(signedOut.notes.length, 1, 'no token still surfaces one status message');
+    assert.match(signedOut.notes[0], aiOff, 'and it says AI classification is unavailable');
 
     const notAllowed = await run({
         token: 'firebase-id-token',
@@ -176,6 +186,28 @@ class MemoryStorage {
     });
     assert.equal(Object.keys(notAllowed.result).length, 0,
         'a refused account must not break the import — and has nothing to fall back to');
+    assert.equal(notAllowed.notes.length, 1, 'a 403 is shown to the user, not swallowed');
+    assert.match(notAllowed.notes[0], aiOff);
+
+    const noKey = await run({
+        token: 'firebase-id-token',
+        workerReply: () => ({ ok: false, status: 503, json: async () => ({ error: 'ai_not_configured' }) }),
+    });
+    assert.equal(Object.keys(noKey.result).length, 0, 'a 503 keeps the import going on local categories');
+    assert.equal(noKey.notes.length, 1, 'a 503 is shown to the user');
+    assert.match(noKey.notes[0], aiOff);
+
+    const netDown = await run({
+        token: 'firebase-id-token',
+        workerReply: () => { throw new Error('NetworkError: failed to fetch'); },
+    });
+    assert.equal(Object.keys(netDown.result).length, 0, 'a network failure keeps the import going');
+    assert.equal(netDown.notes.length, 1, 'a network failure is shown to the user, not just console.warn');
+    assert.match(netDown.notes[0], aiOff);
+
+    // Non-spammy: one classification call produces at most one toast.
+    assert.ok([signedOut, notAllowed, noKey, netDown].every(r => r.notes.length === 1),
+        'each failed import shows exactly one message, never a burst');
 }
 
 console.log('✓ no browser ai key: static sweep, purge, and both callers');
