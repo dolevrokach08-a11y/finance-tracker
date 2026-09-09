@@ -108,14 +108,23 @@ function InfoTip({ text }) {
   );
 }
 
+function sliderCeiling(value, max, step) {
+  const numericValue = Number(value);
+  const numericMax = Number(max);
+  const numericStep = Number(step) > 0 ? Number(step) : 1;
+  if (!Number.isFinite(numericValue) || !Number.isFinite(numericMax)) return max;
+  return Math.max(numericMax, Math.ceil(numericValue / numericStep) * numericStep);
+}
+
 function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
+  const effectiveMax = sliderCeiling(value, max, step);
   return (
     <div className={`tax-slider${wide ? ' tax-slider--wide' : ''}`} style={{ gridColumn: wide ? "1 / -1" : undefined }}>
       <div className="tax-slider__head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <label className="tax-slider__label" style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
         <span className="tax-slider__value" style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
+      <input type="range" min={min} max={effectiveMax} step={step} value={value} onChange={e => onChange(+e.target.value)} />
     </div>
   );
 }
