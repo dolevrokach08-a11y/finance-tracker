@@ -90,6 +90,9 @@ function makeTab() {
         remove: k => store.removeItem(k),
         // Ground truth, bypassing the gate — what actually landed in storage.
         raw: k => store._map.has(k) ? store._map.get(k) : null,
+        // Seed a key straight into the shared origin storage without going
+        // through the guard — models a value another tab/realm already wrote.
+        setRaw: (k, v) => store._map.set(k, String(v)),
         banner: () => sandbox.document.getElementById('ft-ownership-lock-banner'),
         // What a browser delivers to every OTHER tab when localStorage changes.
         // The underlying store is the same physical origin storage in a real
@@ -162,6 +165,81 @@ const ok = (cond, name, got = '') => {
     tab.deliverForeignChange('ft_active_uid', 'someone-else');
     ok(tab.get('financeTrackerData') === null,
         'the tab can be locked out again after a recovery — this is not a one-shot check');
+}
+
+// ── Reclaim after lockout, with TRULY shared flat storage ──────────────────
+// The earlier recovery block only checks that reads/writes work again — it
+// writes a fresh value AFTER the lock clears, so it never exercises the
+// archive()/restore() that syncToUser() runs while the lock is still armed.
+// Model the real post-swap state: both users have an archive, and the flat
+// slot physically holds user-b's bytes. When user-a reclaims in this tab, the
+// flat slot must end up on A and must never still be readable as B.
+{
+    const tab = makeTab();
+
+    // Tab A owned the flat keys as user-a and wrote "A".
+    tab.UserStorage.syncToUser('user-a');
+    tab.set('financeTrackerData', 'A');
+
+    // Tab B (another realm, same origin storage) signed in as user-b: it
+    // archived A under u::user-a::, restored user-b's own archive into the flat
+    // keys, and flipped ACTIVE_KEY. Reproduce that whole end state here, then
+    // let the browser deliver the ACTIVE_KEY change to this tab.
+    tab.setRaw('u::user-a::financeTrackerData', 'A');
+    tab.setRaw('u::user-b::financeTrackerData', 'B');
+    tab.setRaw('financeTrackerData', 'B');
+    tab.deliverForeignChange('ft_active_uid', 'user-b');
+
+    ok(tab.get('financeTrackerData') === null,
+        'tab A is locked out once user-b takes the flat keys');
+    ok(tab.raw('financeTrackerData') === 'B',
+        'the flat slot physically holds user-b\'s data while A is locked out',
+        tab.raw('financeTrackerData'));
+
+    // The user signs back in as user-a in THIS tab — a deliberate reclaim.
+    tab.UserStorage.syncToUser('user-a');
+
+    ok(tab.banner() === null, 'reclaiming ownership removes the banner');
+    ok(tab.get('financeTrackerData') === 'A',
+        'after reclaiming, tab A sees its own archived value A — not user-b\'s',
+        tab.get('financeTrackerData'));
+    ok(tab.raw('financeTrackerData') === 'A',
+        'restore() actually rewrote the flat slot to A — the guard did not swallow it',
+        tab.raw('financeTrackerData'));
+    ok(tab.raw('financeTrackerData') !== 'B',
+        'user-b\'s bytes must never remain visible in the flat slot after user-a reclaims');
+    ok(tab.raw('u::user-b::financeTrackerData') === 'B',
+        'and user-b\'s data was archived back, not destroyed',
+        tab.raw('u::user-b::financeTrackerData'));
+}
+
+// ── clearOnLogout has the same ordering hazard ─────────────────────────────
+// It also archives/restores through the guarded localStorage before it calls
+// noteOwnership(null). A locked-out tab logging out must still clear the flat
+// slot, not leave the other account's bytes sitting in it for the next
+// visitor (or a demo session) to read.
+{
+    const tab = makeTab();
+
+    tab.UserStorage.syncToUser('user-a');
+    tab.set('financeTrackerData', 'A');
+
+    // user-b took over in another tab; the flat slot now holds "B".
+    tab.setRaw('u::user-a::financeTrackerData', 'A');
+    tab.setRaw('u::user-b::financeTrackerData', 'B');
+    tab.setRaw('financeTrackerData', 'B');
+    tab.deliverForeignChange('ft_active_uid', 'user-b');
+    ok(tab.get('financeTrackerData') === null, 'locked out before logout');
+
+    // The user signs out in this locked-out tab.
+    tab.UserStorage.clearOnLogout();
+
+    ok(tab.raw('financeTrackerData') === null,
+        'logout clears the flat slot even when this tab was locked out',
+        tab.raw('financeTrackerData'));
+    ok(tab.get('financeTrackerData') === null,
+        'nothing left to read from the flat slot after logout');
+    ok(tab.raw('ft_active_uid') === null, 'ACTIVE_KEY is cleared on logout');
 }
 
 // ── A tab that already agrees on the owner does not lock itself out ─────────

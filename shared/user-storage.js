@@ -141,6 +141,7 @@
      */
     function syncToUser(uid) {
         if (!uid) return false;
+        beginOwnershipTransition();
         var active = localStorage.getItem(ACTIVE_KEY);
         if (active === uid) { noteOwnership(uid); return false; } // already this user's data — nothing to do
 
@@ -183,6 +184,7 @@
      * than adopted by the fictitious demo account.
      */
     function enterDemoSandbox() {
+        beginOwnershipTransition();
         var active = localStorage.getItem(ACTIVE_KEY);
         if (active === DEMO_UID) {
             // Already inside the sandbox: the plain keys ARE the demo data.
@@ -207,6 +209,7 @@
 
     /** Archive the disposable demo cache and leave no private/plain keys behind. */
     function exitDemoSandbox() {
+        beginOwnershipTransition();
         var active = localStorage.getItem(ACTIVE_KEY);
         if (active === DEMO_UID) archive(DEMO_UID);
         else USER_KEYS.forEach(function (k) { localStorage.removeItem(k); });
@@ -216,6 +219,7 @@
 
     /** Archive the active user's data and clear the plain keys. Call BEFORE signOut. */
     function clearOnLogout() {
+        beginOwnershipTransition();
         var active = localStorage.getItem(ACTIVE_KEY);
         if (active) {
             archive(active);
@@ -277,6 +281,30 @@
         lastKnownOwner = uid;
         ownershipLost = false;
         hideLockoutBanner();
+    }
+
+    /**
+     * Call at the very start of every ownership transition this tab performs
+     * itself — syncToUser / enterDemoSandbox / exitDemoSandbox / clearOnLogout.
+     *
+     * If another tab already swapped the owner out from under this one, this
+     * tab is locked out: the guard below drops every read and write of a
+     * USER_KEY. But those four functions do their work — archive() and
+     * restore() — THROUGH that same guarded localStorage. If the lock is still
+     * armed when they run, every plain-key write is silently swallowed: the
+     * plain slot keeps the previous owner's bytes while ACTIVE_KEY flips to the
+     * new uid, so the tab then reads another account's data out of the shared
+     * slot. Clearing the flag up front lets the transition's own archive/
+     * restore land; noteOwnership() at the end still records who actually won.
+     *
+     * This is not a new escape hatch — the guard already names "this same tab
+     * calling syncToUser()/enterDemoSandbox() itself" as the recovery path.
+     * The reset was just happening one step too late, after the swallowed
+     * archive/restore. The banner is left in place until noteOwnership() so a
+     * transition that somehow bails early does not look recovered.
+     */
+    function beginOwnershipTransition() {
+        ownershipLost = false;
     }
 
     function showLockoutBanner() {
