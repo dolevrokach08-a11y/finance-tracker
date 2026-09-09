@@ -103,3 +103,20 @@ main, `firebase-config.js` או קבצי הרצה מקומיים. בסוף הו�
   שינוי מרוחק שאינו נדרס, replay כפול, כשל transaction ומחסום Demo.
 - עברו גם בדיקות ה-build, Tailwind, demo isolation, AI endpoint
   ו-no-browser-key. החיווט ל-`tax-optimizer.html` עדיין לא בוצע.
+
+## התקדמות משותפת — תת־שלב 2ב, 2026-09-09
+
+- `tax-optimizer.html` חווט למנוע: add/delete נשמרים מקומית לפני
+  רשת, transaction קורא את מסמך finance האחרון, ו-reconnect וכן
+  force-sync מפעילים את אותו `flush`. הוסרה כתיבת מסמך finance הישן
+  בשלמותו מנתיב force-sync.
+- לאחר reload, הפעולות הממתינות מוקרנות על התלושים שנקראו מהענן לפני
+  הצגת React. תשובת commit עמומה נשארת בתור ו-replay נבלם על ידי
+  `taxPayslipAppliedOps`.
+- ממשק התלושים מאזין לסטטוס סמנטי ומציג: נשמר במכשיר, ממתין,
+  מסנכרן, נשמר בענן, התנגשות או כשל. שינוי זה אינו משנה סכום תלוש,
+  ממוצע שכר או נוסחת מס; הוא משנה רק מתי ואיך פעולת התלוש נשמרת.
+- נוספה `tests/tax-payslip-wiring.test.mjs`. היא מוכיחה את חיבור
+  המנוע, reconnect, force-sync והיעדר write עיוור של `__financeData`.
+- עברו בדיקות מנוע התור, חיווט, מקור תיק, FX, build, demo isolation
+  ו-AI endpoint. טרם בוצעו slider, בדיקת UI או סקירת Claude סופית.

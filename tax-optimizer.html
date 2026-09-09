@@ -77,6 +77,7 @@ a { color: var(--accent); }
 <link rel="modulepreload" href="./firebase-config.js">
 <script src="shared/user-storage.js" defer></script>
 <script src="shared/data.js" defer></script>
+<script src="shared/payslip-sync.js"></script>
 <script src="sync-widget.js" defer></script>
 <link rel="stylesheet" href="shared/product-pages.css">
 <link rel="stylesheet" href="shared/tax-lab.css">
@@ -133,11 +134,11 @@ a { color: var(--accent); }
     }
   } catch(e) { console.warn('Demo module not loaded:', e); }
 
-  let auth, db, onAuthStateChanged, doc, getDoc, setDoc;
+  let auth, db, onAuthStateChanged, doc, getDoc, setDoc, runTransaction;
   if (!_isDemoMode) {
     const fb = await import('./firebase-config.js');
     auth = fb.auth; db = fb.db; onAuthStateChanged = fb.onAuthStateChanged;
-    doc = fb.doc; getDoc = fb.getDoc; setDoc = fb.setDoc;
+    doc = fb.doc; getDoc = fb.getDoc; setDoc = fb.setDoc; runTransaction = fb.runTransaction;
   }
 
   window.__taxData = { loaded: false, years: {}, availableYears: [] };
@@ -154,11 +155,9 @@ a { color: var(--accent); }
       metaKey: 'financeTrackerData_meta',
       isDemoMode: () => _isDemoMode,
       onForceSync: async () => {
-        // Re-save current finance data + tax settings to push any pending writes
-        if (window.__financeDocRef && window.__financeData) {
-          await setDoc(window.__financeDocRef, { ...window.__financeData, lastModified: new Date().toISOString(),
-            ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
-        }
+        // Payslips use the same atomic queue as automatic reconnect. Never push
+        // the stale in-memory finance document wholesale.
+        if (window.__flushPayslipQueue) await window.__flushPayslipQueue();
         if (window.__pendingTaxSettings) {
           await window.__saveTaxSettings(window.__pendingTaxSettings);
         }
@@ -170,6 +169,52 @@ a { color: var(--accent); }
   function _markSynced(ts) { if (window.SyncWidget) window.SyncWidget.markSynced(ts); }
   function _markError() { if (window.SyncWidget) window.SyncWidget.markError(); }
   function _markPending() { if (window.SyncWidget) window.SyncWidget.markPending(); }
+
+  const EMPTY_FINANCE_DATA = {
+    transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [],
+    payslips: [], incomeCategories: [], expenseCategories: [],
+    categoryRules: [], budgets: {}
+  };
+
+  function _publishPayslipProjection(payslips) {
+    window.__financeData = { ...(window.__financeData || EMPTY_FINANCE_DATA), payslips };
+    window.__payslipData = { payslips, loaded: true };
+    document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
+  }
+
+  function _publishPayslipStatus(status) {
+    window.__payslipSyncState = status;
+    if (status.state === 'syncing') _markSyncing();
+    else if (status.state === 'cloud') _markSynced(new Date().toISOString());
+    else if (status.state === 'error' || status.state === 'conflict') _markError();
+    else _markPending();
+    document.dispatchEvent(new CustomEvent('payslipSyncStatusChanged', { detail: status }));
+  }
+
+  function _createPayslipCoordinator() {
+    if (_isDemoMode || !window.PayslipSync || !window.__financeDocRef || !runTransaction) return null;
+    window.__payslipCoordinator = window.PayslipSync.create({
+      storage: localStorage,
+      getBasePayslips: () => window.__financeData?.payslips || [],
+      stamp: () => window.FTDevice ? window.FTDevice.stamp() : {},
+      onProjection: _publishPayslipProjection,
+      onStatus: _publishPayslipStatus,
+      transact: callback => runTransaction(async firebaseTransaction => callback({
+        get: async () => {
+          const snapshot = await firebaseTransaction.get(window.__financeDocRef);
+          return snapshot.exists() ? (snapshot.data() || {}) : {};
+        },
+        set: patch => firebaseTransaction.set(window.__financeDocRef, patch, { merge: true })
+      }))
+    });
+    return window.__payslipCoordinator;
+  }
+
+  window.__flushPayslipQueue = async () => {
+    if (!window.__payslipCoordinator) return false;
+    if (!navigator.onLine) { _markPending(); return false; }
+    return window.__payslipCoordinator.flush();
+  };
 
   // Save settings to Firebase
   window.__saveTaxSettings = async (settings) => {
@@ -190,82 +235,22 @@ a { color: var(--accent); }
     }
   };
 
-  // Save payslip to Firebase (into finance/data document)
+  // Save locally first, then atomically merge the queued operation into the
+  // latest finance document. A cloud failure does not discard the local row.
   window.__savePayslip = async (payslip) => {
     if (_isDemoMode) return false;
-    if (!window.__financeDocRef) return false;
-    const data = window.__financeData || { transactions: [], fixedIncomes: [], fixedExpenses: [], donations: [], payslips: [], incomeCategories: [], expenseCategories: [], categoryRules: [], budgets: {} };
-    if (!data.payslips) data.payslips = [];
-
-    // A payslip's identity is month + earner + source + fileName. Re-uploading the
-    // same file replaces its entry; a second employer's payslip for the same month
-    // is a different file, so it is kept alongside the first. (Until 2026-08-23 the
-    // key for regular payslips was month + earner alone, so every extra payslip in
-    // a month silently overwrote the previous one — and the yearly average, which
-    // sums per month, only ever saw one employer.)
-    // Hand-typed entries carry no real file name, so they never replace anything —
-    // each one is its own row and is removed with the delete button.
-    if (payslip.source !== 'manual') {
-      data.payslips = data.payslips.filter(p =>
-        !(p.month === payslip.month &&
-          p.earner === payslip.earner &&
-          (p.source || '') === (payslip.source || '') &&
-          p.fileName === payslip.fileName)
-      );
-    }
-    data.payslips.push(payslip);
-
-    if (!navigator.onLine) {
-      window.__financeData = data;
-      window.__payslipData = { payslips: data.payslips, loaded: true };
-      _markPending();
-      return true;
-    }
-
-    _markSyncing();
-    try {
-      const ts = new Date().toISOString();
-      await setDoc(window.__financeDocRef, { ...data, lastModified: ts,
-        ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
-      window.__financeData = data;
-      window.__payslipData = { payslips: data.payslips, loaded: true };
-      _markSynced(ts);
-      return true;
-    } catch (e) {
-      console.error('Failed to save payslip:', e);
-      _markError();
-      return false;
-    }
+    const saved = window.__payslipCoordinator?.enqueueAdd(payslip);
+    if (!saved) return false;
+    if (navigator.onLine) await window.__flushPayslipQueue();
+    return true;
   };
 
   // Delete payslip from Firebase
   window.__deletePayslip = async (payslipId) => {
     if (_isDemoMode) return false;
-    if (!window.__financeDocRef || !window.__financeData) return false;
-    const data = window.__financeData;
-    data.payslips = (data.payslips || []).filter(p => p.id !== payslipId);
-
-    if (!navigator.onLine) {
-      window.__financeData = data;
-      window.__payslipData = { payslips: data.payslips, loaded: true };
-      _markPending();
-      return true;
-    }
-
-    _markSyncing();
-    try {
-      const ts = new Date().toISOString();
-      await setDoc(window.__financeDocRef, { ...data, lastModified: ts,
-        ...(window.FTDevice ? window.FTDevice.stamp() : {}) });
-      window.__financeData = data;
-      window.__payslipData = { payslips: data.payslips, loaded: true };
-      _markSynced(ts);
-      return true;
-    } catch (e) {
-      console.error('Failed to delete payslip:', e);
-      _markError();
-      return false;
-    }
+    if (!window.__payslipCoordinator?.enqueueDelete(payslipId)) return false;
+    if (navigator.onLine) await window.__flushPayslipQueue();
+    return true;
   };
 
   // Process income data for tax analysis
@@ -368,6 +353,7 @@ a { color: var(--accent); }
 
       const userDocRef = doc(db, 'users', user.uid, 'finance', 'data');
       window.__financeDocRef = userDocRef;
+      const payslipCoordinator = _createPayslipCoordinator();
 
       // Read the three documents ONE AT A TIME, not concurrently.
       //
@@ -408,8 +394,10 @@ a { color: var(--accent); }
         if (docSnap.exists()) {
           const data = docSnap.data();
           window.__financeData = data;
-          window.__payslipData = { payslips: data.payslips || [], loaded: true };
-          document.dispatchEvent(new CustomEvent('payslipDataLoaded'));
+          const visiblePayslips = payslipCoordinator
+            ? payslipCoordinator.project(data.payslips || [])
+            : (data.payslips || []);
+          _publishPayslipProjection(visiblePayslips);
           const transactions = data.transactions || [];
           const fixedIncomes = data.fixedIncomes || [];
 
@@ -417,6 +405,9 @@ a { color: var(--accent); }
           window.__taxData = { loaded: true, years: result.years, availableYears: result.availableYears };
           if (window.SyncWidget) window.SyncWidget.markLoadedFromCloud(data.lastModified || null);
         } else {
+          window.__financeData = { ...EMPTY_FINANCE_DATA };
+          const visiblePayslips = payslipCoordinator ? payslipCoordinator.project([]) : [];
+          _publishPayslipProjection(visiblePayslips);
           if (window.SyncWidget) window.SyncWidget.markLocalOnly();
         }
       } catch (e) {
@@ -439,6 +430,18 @@ a { color: var(--accent); }
         retry.addEventListener('click', () => location.reload());
         banner.append(msg, retry);
         document.getElementById('root').before(banner);
+      }
+
+      // Reconnect and explicit force-sync both use the exact same transaction
+      // queue. Starting it after the authoritative finance read also overlays any
+      // operations that survived a previous reload before React becomes visible.
+      if (payslipCoordinator) {
+        const visiblePayslips = payslipCoordinator.project(window.__financeData?.payslips || []);
+        _publishPayslipProjection(visiblePayslips);
+        window.addEventListener('online', window.__flushPayslipQueue);
+        if (navigator.onLine && payslipCoordinator.pendingCount() > 0) {
+          void window.__flushPayslipQueue();
+        }
       }
 
       // Portfolio is a separate Firestore document. A rejected read deliberately
