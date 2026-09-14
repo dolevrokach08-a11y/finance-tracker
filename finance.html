@@ -1300,6 +1300,11 @@
                             <label>קטגוריה</label>
                             <select id="edit-cat" class="edit-input"></select>
                         </div>
+                        <div class="edit-field">
+                            <label>חודש <span style="opacity:0.6;font-weight:normal;">(החודש שבו השורה מופיעה)</span></label>
+                            <select id="edit-month" class="edit-input" onchange="updateEditMonthHint()"></select>
+                            <div id="edit-month-hint" style="font-size:0.75rem;opacity:0.6;margin-top:4px;"></div>
+                        </div>
                         <div class="edit-field tithe-feature" id="edit-exempt-field" style="display: none;">
                             <label class="flex items-center gap-2" style="cursor:pointer;">
                                 <input type="checkbox" id="edit-exempt">
@@ -1316,7 +1321,7 @@
                         </div>
                         <div class="edit-field" id="edit-assign-current-field" style="display: none;">
                             <label class="flex items-center gap-2" style="cursor:pointer;">
-                                <input type="checkbox" id="edit-assign-current">
+                                <input type="checkbox" id="edit-assign-current" onchange="updateEditMonthHint()">
                                 <span>שייך לחודש הקבלה (לא לחודש הקודם)</span>
                             </label>
                             <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">
@@ -1326,7 +1331,7 @@
                         </div>
                         <div class="edit-field" id="edit-assign-prev-field" style="display: none;">
                             <label class="flex items-center gap-2" style="cursor:pointer;">
-                                <input type="checkbox" id="edit-assign-prev">
+                                <input type="checkbox" id="edit-assign-prev" onchange="updateEditMonthHint()">
                                 <span>הוצאה בדיעבד — שייך לחודש הקודם</span>
                             </label>
                             <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">
@@ -1336,7 +1341,7 @@
                         </div>
                         <div class="edit-field">
                             <label>תאריך עסקה אמיתי <span style="opacity:0.6;font-weight:normal;">(אופציונלי — מתי הכסף באמת זז)</span></label>
-                            <input type="date" id="edit-transaction-date" class="edit-input">
+                            <input type="date" id="edit-transaction-date" class="edit-input" onchange="updateEditMonthHint()">
                             <div style="font-size:0.75rem;opacity:0.6;margin-top:4px;">השאר ריק כדי להסיר תאריך</div>
                         </div>
                     </div>
@@ -6574,6 +6579,68 @@
 
         let editingTransId = null;
 
+        // Month options for the edit modal: a two-year span centred on the row's own
+        // month, so a charge that was billed in a neighbouring cycle can be moved there
+        // instead of being deleted and typed in again.
+        function buildEditMonthOptions(current) {
+            const anchor = /^\d{4}-\d{2}$/.test(current || '') ? current : getMonthKey();
+            let m = anchor;
+            for (let i = 0; i < 12; i++) m = monthMinusOne(m);
+            const vals = [];
+            for (let i = 0; i <= 24; i++) { vals.push(m); m = monthPlusOne(m); }
+            if (current && !vals.includes(current)) vals.unshift(current);
+            return vals.map(v => `<option value="${v}">${getMonthName(v)}</option>`).join('');
+        }
+
+        // Live note under the month picker: where the row is headed, and which month it
+        // accrues to once the rest of the modal state is applied.
+        function updateEditMonthHint() {
+            const hintEl = document.getElementById('edit-month-hint');
+            const monthSel = document.getElementById('edit-month');
+            if (!hintEl || !monthSel) return;
+            const id = parseInt(document.getElementById('edit-trans-id').value);
+            const trans = data.transactions.find(t => t.id === id);
+            if (!trans || !monthSel.value) { hintEl.textContent = ''; return; }
+
+            const chosen = monthSel.value;
+            const preview = { ...trans, month: chosen };
+            const dateEl = document.getElementById('edit-transaction-date');
+            if (dateEl) {
+                if (dateEl.value) preview.transactionDate = dateEl.value;
+                else delete preview.transactionDate;
+            }
+            if (trans.type === 'income') {
+                const acEl = document.getElementById('edit-assign-current');
+                if (acEl && acEl.checked) preview.assignToCurrentMonth = true;
+                else delete preview.assignToCurrentMonth;
+            } else if (trans.type === 'expense') {
+                const apEl = document.getElementById('edit-assign-prev');
+                if (apEl && apEl.checked) preview.assignToPreviousMonth = true;
+                else delete preview.assignToPreviousMonth;
+            }
+
+            const accrual = computeAssignedMonth(preview);
+            const parts = [];
+            if (chosen !== trans.month) parts.push(`תעבור מ${getMonthName(trans.month)} ל${getMonthName(chosen)}`);
+            parts.push(`שיוך צבירה: ${accrual === chosen ? 'אותו חודש' : getMonthName(accrual)}`);
+            hintEl.textContent = parts.join(' • ');
+        }
+
+        // A moved row can land in a year the pickers were not built with (they are built
+        // from the data on load). Add it so the user can navigate to where the row went.
+        function ensureYearInSelectors(year) {
+            const y = String(year);
+            ['overview-year','add-year','import-year'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el || Array.from(el.options).some(o => o.value === y)) return;
+                const sorted = Array.from(el.options).map(o => Number(o.value)).concat(Number(y)).sort((a, b) => b - a);
+                const opt = document.createElement('option');
+                opt.value = y;
+                opt.textContent = y;
+                el.add(opt, sorted.indexOf(Number(y)));
+            });
+        }
+
         function startEdit(id) {
             const trans = data.transactions.find(t => t.id === id);
             if (!trans) return;
@@ -6613,6 +6680,13 @@
             const dateEl = document.getElementById('edit-transaction-date');
             if (dateEl) dateEl.value = trans.transactionDate || '';
 
+            const monthSel = document.getElementById('edit-month');
+            if (monthSel) {
+                monthSel.innerHTML = buildEditMonthOptions(trans.month);
+                monthSel.value = trans.month || getMonthKey();
+            }
+            updateEditMonthHint();
+
             document.getElementById('editModalTitle').textContent = trans.type === 'income' ? 'עריכת הכנסה' : 'עריכת הוצאה';
             document.getElementById('editModal').style.display = 'flex';
         }
@@ -6635,9 +6709,14 @@
                 return;
             }
 
+            const monthSel = document.getElementById('edit-month');
+            const prevMonth = trans.month;
+            const newMonth = (monthSel && monthSel.value) ? monthSel.value : prevMonth;
+
             trans.desc = newDesc;
             trans.amt = newAmt;
             trans.cat = newCat;
+            trans.month = newMonth;
 
             if (trans.type === 'income') {
                 trans.titheExempt = document.getElementById('edit-exempt').checked;
@@ -6665,12 +6744,14 @@
                 delete trans.transactionDate;
             }
 
+            if (newMonth !== prevMonth) ensureYearInSelectors(newMonth.slice(0, 4));
+
             saveToLocalStorage();
             closeEditModal();
             loadMonthTransactions();
             updateOverview();
             updateTithe();
-            notify('הרשומה עודכנה');
+            notify(newMonth !== prevMonth ? `הרשומה הועברה ל${getMonthName(newMonth)}` : 'הרשומה עודכנה');
         }
 
         // Init
@@ -10464,6 +10545,7 @@
         window.startEdit = startEdit;
         window.closeEditModal = closeEditModal;
         window.saveEditModal = saveEditModal;
+        window.updateEditMonthHint = updateEditMonthHint;
         window.closeCatModal = closeCatModal;
         window.applyCategoryRule = applyCategoryRule;
         window.toggleTitheExempt = toggleTitheExempt;
