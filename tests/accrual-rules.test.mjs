@@ -140,6 +140,13 @@ check('normalize: short numbers are part of the name', A.normalizeMerchant('7 א
 check('normalize: terminal ids and spacing go', A.normalizeMerchant('  שופרסל   דיל 004512 '), 'שופרסל דיל');
 check('match: whole words — "מים" is not in "פעמים"', !!A.ruleFor({ type: 'expense', desc: 'פעמים בשבוע' }, [{ type: 'expense', keyword: 'מים' }]), false);
 check('match: whole words — "מים" is in "תאגיד מים 4521"', !!A.ruleFor({ type: 'expense', desc: 'תאגיד מים 4521' }, [{ type: 'expense', keyword: 'מים' }]), true);
+// Codex's counter-example: stripping every 3+ digit run turned the keyword "כביש 431"
+// into "כביש", which then matched "כביש 6" in every future import.
+const road = [{ type: 'expense', keyword: 'כביש 431' }];
+check('keyword keeps its number — "כביש 431" is not "כביש 6"', !!A.ruleFor({ type: 'expense', desc: 'כביש 6 אגרה' }, road), false);
+check('keyword keeps its number — "כביש 431" matches itself', !!A.ruleFor({ type: 'expense', desc: 'כביש 431 אגרה' }, road), true);
+check('keyword keeps its number — glued digits still split', !!A.ruleFor({ type: 'expense', desc: 'כביש431' }, road), true);
+check('merchant keyword still reaches a branch with a glued id', !!A.ruleFor({ type: 'expense', desc: 'שופרסל1234' }, [{ type: 'expense', keyword: 'שופרסל' }]), true);
 check('normalize: punctuation is a word break', A.normalizeMerchant('סופר ירוק - קניות'), 'סופר ירוק קניות');
 check('match: case-insensitive', !!A.ruleFor({ type: 'expense', desc: 'NETFLIX.COM' }, [{ type: 'expense', keyword: 'netflix' }]), true);
 

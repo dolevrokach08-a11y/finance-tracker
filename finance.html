@@ -4980,6 +4980,25 @@
             if (c._isDuplicate && !wasDuplicate) c._included = false;
         }
 
+        function previewFlagField(c) {
+            return c.type === 'income' ? 'assignToCurrentMonth' : c.type === 'expense' ? 'assignToPreviousMonth' : null;
+        }
+
+        // Until the user touches a row's accrual box, the box follows what the row would
+        // inherit — and editing the description, date or month can change that. Without
+        // this, a row opened as "חשמל" and renamed kept the rule's tick and was saved
+        // with it as if chosen by hand.
+        function syncPreviewAccrualFlag(c, i) {
+            const f = previewFlagField(c);
+            if (!f || c._flagTouched) return;
+            const probe = { ...c };
+            delete probe[f];
+            c[f] = accrualFlag(probe);
+            if (i < 0) return;
+            const box = document.querySelector(`#ipv-tbody input[data-i="${i}"][data-f="${f}"]`);
+            if (box) box.checked = c[f];
+        }
+
         function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll }) {
             for (const c of candidates) {
                 // Every row carries its own billing month. It defaults to the month
@@ -4990,10 +5009,11 @@
                 c._dateMonth = cycleMonthFromDate(c.transactionDate);
                 c._included = true;
                 // Pre-tick what a remembered rule (or income template) already says, so the
-                // preview shows the month the row will really land in. Unticking it is kept
-                // as an explicit exception on confirm.
-                const flagField = c.type === 'income' ? 'assignToCurrentMonth' : c.type === 'expense' ? 'assignToPreviousMonth' : null;
-                if (flagField && typeof c[flagField] !== 'boolean') c[flagField] = accrualFlag({ ...c, month: c.month });
+                // preview shows the month the row will really land in. A flag the source
+                // file already carried counts as the user's own.
+                const flagField = previewFlagField(c);
+                c._flagTouched = !!(flagField && typeof c[flagField] === 'boolean');
+                syncPreviewAccrualFlag(c, -1);
                 markImportPreviewDuplicate(c); // owns the "don't re-import dupes" default
             }
             importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll };
@@ -5155,9 +5175,11 @@
                 renderImportPreviewTable();
             } else if (f === 'assignToCurrentMonth' || f === 'assignToPreviousMonth') {
                 c[f] = el.checked;
+                c._flagTouched = true;
             } else {
                 c[f] = el.value;
             }
+            if (f === 'desc' || f === 'transactionDate' || f === 'month') syncPreviewAccrualFlag(c, i);
         }
 
         function ipvBulkAction(action) {
@@ -5228,8 +5250,9 @@
                 if (c.transactionDate) tx.transactionDate = c.transactionDate;
                 if (c.earner) tx.earner = c.earner;
                 if (c.titheExempt) tx.titheExempt = true;
-                if (c.type === 'income') setEditAccrualFlag(tx, !!c.assignToCurrentMonth);
-                if (c.type === 'expense') setEditAccrualFlag(tx, !!c.assignToPreviousMonth);
+                // An untouched box stores nothing, so the row keeps following whatever it
+                // inherits by its final description; a touched one stores only a disagreement.
+                if (c._flagTouched && previewFlagField(c)) setEditAccrualFlag(tx, !!c[previewFlagField(c)]);
                 return tx;
             });
 
@@ -6438,6 +6461,10 @@
             return `${moves.length} עסקאות קיימות יעברו לחודש צבירה אחר:\n${lines.join('\n')}`;
         }
 
+        function describeAccrualFuture(type, kw) {
+            return `הכלל יחול גם על כל ${type === 'income' ? 'הכנסה' : 'הוצאה'} עתידית שבתיאור שלה מופיע "${kw}" כמילה שלמה.`;
+        }
+
         function refreshAccrualViews() {
             renderAccrualRules();
             const accrualTab = document.getElementById('tab-accrual');
@@ -6449,17 +6476,17 @@
         function createAccrualRule(type, keyword) {
             const A = window.FTAccrual;
             if (!A) return false;
-            const kw = A.normalizeMerchant(keyword);
+            const kw = A.normalizeKeyword(keyword);
             if (!kw) { notify('מלא מילת חיפוש'); return false; }
             if (!data.accrualRules) data.accrualRules = [];
-            if (data.accrualRules.some(r => r.type === type && A.normalizeMerchant(r.keyword) === kw)) {
+            if (data.accrualRules.some(r => r.type === type && A.normalizeKeyword(r.keyword) === kw)) {
                 notify('כלל כזה כבר קיים');
                 return false;
             }
             const rule = { id: Date.now(), type, keyword: kw, createdAt: new Date().toISOString() };
             const moves = A.ruleImpact(rule, data.transactions, accrualCtx());
             const kind = type === 'income' ? 'הכנסה' : 'הוצאה';
-            if (!confirm(`כלל חדש: כל ${kind} שהתיאור שלה מכיל "${kw}" ← "${accrualFlagName(type)}".\n\n${describeAccrualMoves(moves)}\n\nליצור את הכלל?`)) return false;
+            if (!confirm(`כלל חדש: כל ${kind} שהתיאור שלה מכיל "${kw}" ← "${accrualFlagName(type)}".\n\n${describeAccrualMoves(moves)}\n\n${describeAccrualFuture(type, kw)}\n\nליצור את הכלל?`)) return false;
             data.accrualRules.push(rule);
             saveToLocalStorage();
             refreshAccrualViews();
@@ -8471,6 +8498,9 @@
                     if (!imported.categoryRules) {
                         imported.categoryRules = [];
                     }
+                    if (!Array.isArray(imported.accrualRules)) {
+                        imported.accrualRules = [];
+                    }
                     if (!imported.budgets) {
                         imported.budgets = {};
                     }
@@ -8500,6 +8530,15 @@
                             }
                         });
                         
+                        // Accrual rules decide which month rows land in, so dropping them
+                        // on a merge silently changes the file's accrual months.
+                        if (!Array.isArray(data.accrualRules)) data.accrualRules = [];
+                        const accrualKey = r => `${r.type}|${window.FTAccrual ? window.FTAccrual.normalizeKeyword(r.keyword) : String(r.keyword).toLowerCase()}`;
+                        const haveAccrual = new Set(data.accrualRules.map(accrualKey));
+                        imported.accrualRules.forEach(r => {
+                            if (r && r.keyword && !haveAccrual.has(accrualKey(r))) { data.accrualRules.push(r); haveAccrual.add(accrualKey(r)); }
+                        });
+
                         Object.assign(data.budgets, imported.budgets);
                     }
                     

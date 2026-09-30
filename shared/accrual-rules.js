@@ -31,21 +31,39 @@
 
     const FLAG = { income: 'assignToCurrentMonth', expense: 'assignToPreviousMonth' };
 
-    // Merchant descriptions carry branch numbers and terminal ids ("שופרסל 1234"),
-    // so the same shop arrives as a dozen strings. Runs of 3+ digits are noise;
-    // shorter ones ("7 אחים") are part of the name. Punctuation becomes a word break,
-    // so "NETFLIX.COM" and "סופר - קניות" split into words the matcher can compare.
-    const _norm = new Map();
-    function normalizeMerchant(s) {
-        const key = String(s == null ? '' : s);
-        let v = _norm.get(key);
-        if (v === undefined) {
-            v = key.toLowerCase().replace(/\d{3,}/g, ' ').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
-            if (_norm.size > 20000) _norm.clear();
-            _norm.set(key, v);
-        }
-        return v;
+    function memo(fn) {
+        const cache = new Map();
+        return (s) => {
+            const key = String(s == null ? '' : s);
+            let v = cache.get(key);
+            if (v === undefined) {
+                v = fn(key);
+                if (cache.size > 20000) cache.clear();
+                cache.set(key, v);
+            }
+            return v;
+        };
     }
+
+    // The form a rule is matched in: lower case, punctuation as a word break
+    // ("NETFLIX.COM", "סופר - קניות"), and a break between letters and digits so
+    // "שופרסל1234" still contains the word "שופרסל". Digits are kept — "כביש 431"
+    // is a different road from "כביש 6", and a keyword that lost its number would
+    // quietly match both.
+    const normalizeKeyword = memo(s => s.toLowerCase()
+        .replace(/(\p{L})(\p{N})/gu, '$1 $2')
+        .replace(/(\p{N})(\p{L})/gu, '$1 $2')
+        .replace(/[^\p{L}\p{N}]+/gu, ' ')
+        .trim());
+
+    // The form rows are grouped in when suggesting a rule. Merchant descriptions carry
+    // branch numbers and terminal ids ("שופרסל 1234"), so the same shop arrives as a
+    // dozen strings; runs of 3+ digits are dropped, shorter ones ("7 אחים") kept. The
+    // result still matches every branch as a keyword, since the words are all there.
+    const normalizeMerchant = memo(s => normalizeKeyword(s)
+        .replace(/(^| )\p{N}{3,}(?= |$)/gu, ' ')
+        .replace(/ +/g, ' ')
+        .trim());
 
     function flagField(type) { return FLAG[type] || null; }
 
@@ -54,12 +72,12 @@
         // Whole words only. A plain substring match made "מים" (water) a rule for
         // "פעמים", "ימים" and "שמים" too, and a rule applies silently to every
         // future import.
-        const desc = normalizeMerchant(tx.desc);
+        const desc = normalizeKeyword(tx.desc);
         if (!desc) return null;
         const padded = ` ${desc} `;
         for (const r of rules) {
             if (!r || r.type !== tx.type) continue;
-            const kw = normalizeMerchant(r.keyword);
+            const kw = normalizeKeyword(r.keyword);
             if (kw && padded.includes(` ${kw} `)) return r;
         }
         return null;
@@ -189,7 +207,7 @@
     }
 
     const api = {
-        normalizeMerchant, flagField, ruleFor, templateFor,
+        normalizeMerchant, normalizeKeyword, flagField, ruleFor, templateFor,
         inheritedSource, inheritedFlag, effectiveFlag, explicitFor, applyExplicit,
         ruleImpact, removalImpact, suggestRules,
     };
