@@ -872,6 +872,7 @@
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
     <script src="shared/finance-summary.js" defer></script>
+    <script src="shared/accrual-rules.js" defer></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -1290,7 +1291,7 @@
                         <input type="hidden" id="edit-trans-type">
                         <div class="edit-field">
                             <label>תיאור</label>
-                            <input type="text" id="edit-desc" class="edit-input">
+                            <input type="text" id="edit-desc" class="edit-input" oninput="updateEditMonthHint()">
                         </div>
                         <div class="edit-field">
                             <label>סכום</label>
@@ -1338,6 +1339,15 @@
                                 ברירת מחדל: הוצאות מתויגות בצבירה לחודש שבו בוצעה הקנייה.
                                 סמן רק להוצאות שמשלמים בדיעבד עבור החודש הקודם (פעוטון, חשמל, מים, חשבונאי וכו').
                             </div>
+                        </div>
+                        <!-- Where the tick above comes from, and the offer to remember it
+                             for the merchant so it is not ticked by hand again next month. -->
+                        <div class="edit-field" id="edit-accrual-rule-field" style="display: none;">
+                            <div id="edit-accrual-source" style="font-size:0.75rem;opacity:0.75;"></div>
+                            <label id="edit-accrual-remember-row" class="flex items-center gap-2" style="cursor:pointer; display:none;">
+                                <input type="checkbox" id="edit-accrual-remember">
+                                <span id="edit-accrual-remember-label">זכור לכל העסקאות מבית העסק הזה</span>
+                            </label>
                         </div>
                         <div class="edit-field">
                             <label>תאריך עסקה אמיתי <span style="opacity:0.6;font-weight:normal;">(אופציונלי — מתי הכסף באמת זז)</span></label>
@@ -2026,6 +2036,27 @@
                             <div id="expense-rules-list" class="space-y-2"></div>
                         </div>
                     </div>
+                </div>
+
+                <div id="settings-accrual-panel" class="glass p-6 mb-6 settings-deck settings-deck--rules">
+                    <h3 class="text-xl font-semibold mb-2">שיוך לחודש — כללים זכורים</h3>
+                    <p class="text-sm text-gray-600 mb-4">
+                        במקום לסמן כל חודש מחדש "בדיעבד" או "שייך לחודש הקבלה": כלל אחד לבית עסק, וכל עסקה שהתיאור שלה מכיל את מילת החיפוש מסומנת לבד — גם עסקאות עבר.
+                        עסקה שסימנת אחרת בעצמך נשארת כמו שסימנת. משפיע רק על תצוגת הצבירה (דוחות, ניתוח, חודש בצבירה), לא על הסקירה החודשית.
+                    </p>
+
+                    <div id="accrual-settings-suggestions" class="mb-4" style="display: none;"></div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+                        <select id="accrual-rule-type" class="p-3 border rounded-lg">
+                            <option value="expense">הוצאה בדיעבד — שייכת לחודש הקודם</option>
+                            <option value="income">הכנסה — שייכת לחודש הקבלה</option>
+                        </select>
+                        <input type="text" id="accrual-rule-keyword" placeholder='מילת חיפוש (למשל: "פעוטון")' class="p-3 border rounded-lg col-span-2">
+                        <button onclick="addAccrualRuleFromForm()" class="btn btn-success text-white py-3 rounded-lg font-medium">הוסף כלל</button>
+                    </div>
+
+                    <div id="accrual-rules-list" class="space-y-2"></div>
                 </div>
 
                 <div class="glass p-6 mb-6 settings-deck settings-deck--budgets">
@@ -2756,6 +2787,10 @@
                     </div>
                 </div>
 
+                <!-- Merchants ticked by hand before but missed on some rows: the misses
+                     are what bends the accrual charts. Filled by renderAccrualSuggestions(). -->
+                <div id="accrual-tab-suggestions" class="glass p-4 mb-4" style="display: none;"></div>
+
                 <div id="accrual-stats" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
@@ -3042,6 +3077,7 @@
             incomeCategories: ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'],
             expenseCategories: ['מזון','תחבורה','קניות','בילויים','חשבונות','בריאות','חינוך','דיור','אחר'],
             categoryRules: [],
+            accrualRules: [],
             budgets: {},
             netWorthAssets: [],
             netWorthLiabilities: [],
@@ -3516,26 +3552,22 @@
             return day <= CYCLE_CUTOFF_DAY ? base : monthPlusOne(base);
         }
 
-        // Resolves whether an income transaction is flagged "current month" (vs. default previous month).
-        // Priority:
-        //   1) own explicit flag wins
-        //   2) matching fixedIncome with assignToCurrentMonth: true — only if tx.month falls
-        //      within the template's start..end range (a template introduced from May onwards
-        //      shouldn't retroactively re-shift older transactions)
-        //   3) default false (= shift previous month)
-        function incomeAssignsToCurrentMonth(tx) {
-            if (typeof tx.assignToCurrentMonth === 'boolean') return tx.assignToCurrentMonth;
-            const fi = (data && data.fixedIncomes) ? data.fixedIncomes : [];
-            const hit = fi.find(f =>
-                f.assignToCurrentMonth === true &&
-                f.description && tx.desc &&
-                (tx.desc === f.description ||
-                 tx.desc.includes(f.description) ||
-                 f.description.includes(tx.desc)) &&
-                f.start && f.end &&
-                tx.month && tx.month >= f.start && tx.month <= f.end
-            );
-            return !!hit;
+        // Everything shared/accrual-rules.js needs to resolve a row's flag.
+        function accrualCtx() {
+            return {
+                rules: (data && data.accrualRules) || [],
+                fixedIncomes: (data && data.fixedIncomes) || [],
+                legacyBoundary: LEGACY_BOUNDARY,
+            };
+        }
+
+        // Whether a row takes its accrual shift flag — its own boolean first, then a
+        // matching fixed-income template (income only, range-bound), then a remembered
+        // merchant rule. See shared/accrual-rules.js.
+        function accrualFlag(tx) {
+            if (window.FTAccrual) return window.FTAccrual.effectiveFlag(tx, accrualCtx());
+            const f = tx && (tx.type === 'income' ? 'assignToCurrentMonth' : tx.type === 'expense' ? 'assignToPreviousMonth' : null);
+            return !!(f && tx[f] === true);
         }
 
         // Returns YYYY-MM string for the accrual-basis month the transaction belongs to.
@@ -3543,7 +3575,7 @@
             if (!tx || !tx.month) return tx ? tx.month : null;
 
             if (tx.type === 'income') {
-                return incomeAssignsToCurrentMonth(tx) ? tx.month : monthMinusOne(tx.month);
+                return accrualFlag(tx) ? tx.month : monthMinusOne(tx.month);
             }
 
             if (tx.type === 'expense') {
@@ -3553,7 +3585,7 @@
                 else base = tx.month;
                 // In-arrears expense override: shift back one more month (e.g., daycare,
                 // utilities billed in arrears).
-                if (tx.assignToPreviousMonth === true) return monthMinusOne(base);
+                if (accrualFlag(tx)) return monthMinusOne(base);
                 return base;
             }
 
@@ -3619,14 +3651,14 @@
             }
             if(tab==='analysis') { updateAnalysis(); }
             if(tab==='tithe') { updateTithe(); renderDonations(); }
-            if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
+            if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); renderAccrualRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
             if(tab==='networth') { renderNetWorth(); }
             if(tab==='bills') { renderBills(); }
             if(tab==='cashflow') { renderCashFlow(); renderIncomeGrowth(); }
             if(tab==='fire') { renderFIRE(); }
             if(tab==='debt') { renderDebtSimulator(); }
             if(tab==='migrate') { initMigrateTab(); }
-            if(tab==='accrual') { initAccrualTab(); }
+            if(tab==='accrual') { initAccrualTab(); renderAccrualSuggestions(); }
         }
 
         // ========== Accrual Month View ==========
@@ -3829,24 +3861,32 @@
 
         // Returns a short Hebrew explanation of why a transaction landed in `month` accrual.
         function explainAssignment(t, month) {
-            if (t.type === 'income') {
-                if (t.month === month) {
-                    // Stayed in same month — either flagged or via fixedIncome inheritance
-                    if (t.assignToCurrentMonth === true) return `תויג ל-${t.month} • מסומן: שייך לחודש הקבלה`;
-                    if (incomeAssignsToCurrentMonth(t)) return `תויג ל-${t.month} • שייך לחודש הקבלה (לפי תבנית תואמת)`;
-                    return `תויג ל-${t.month}`;
+            // Why the flag applies: the row's own tick, a template, or a remembered rule.
+            const flagWhy = () => {
+                const own = t.type === 'income' ? t.assignToCurrentMonth : t.assignToPreviousMonth;
+                if (own === true) return 'מסומן';
+                const src = window.FTAccrual ? window.FTAccrual.inheritedSource(t, accrualCtx()) : null;
+                if (src === 'template') return 'לפי תבנית תואמת';
+                if (src === 'rule') {
+                    const r = window.FTAccrual.ruleFor(t, accrualCtx().rules);
+                    return `לפי כלל "${r ? r.keyword : ''}"`;
                 }
+                return 'מסומן';
+            };
+            if (t.type === 'income') {
+                if (accrualFlag(t)) return `תויג ל-${t.month} • שייך לחודש הקבלה (${flagWhy()})`;
                 // Shifted -1 from t.month to month
                 return `תויג ל-${t.month} • הועבר אחורה חודש (כלל ברירת מחדל להכנסה)`;
             }
             if (t.type === 'expense') {
+                const arrears = accrualFlag(t);
                 if (t.transactionDate) {
                     const calMonth = monthFromDate(t.transactionDate);
-                    if (t.assignToPreviousMonth) return `תאריך עסקה ${t.transactionDate} • מסומן: בדיעבד → ${month}`;
+                    if (arrears) return `תאריך עסקה ${t.transactionDate} • בדיעבד (${flagWhy()}) → ${month}`;
                     return `תאריך עסקה ${t.transactionDate} (${calMonth}) • תויג במערכת ל-${t.month}`;
                 }
                 if (t.month <= LEGACY_BOUNDARY) return `תויג ל-${t.month} • לגאסי מצרפי, הועבר אחורה חודש`;
-                if (t.assignToPreviousMonth) return `תויג ל-${t.month} • מסומן: בדיעבד → ${month}`;
+                if (arrears) return `תויג ל-${t.month} • בדיעבד (${flagWhy()}) → ${month}`;
                 return `תויג ל-${t.month} • אין תאריך עסקה`;
             }
             return `תויג ל-${t.month}`;
@@ -4767,6 +4807,7 @@
 
                     // Ensure all required fields exist
                     if (!data.categoryRules) data.categoryRules = [];
+                    if (!data.accrualRules) data.accrualRules = [];
                     if (!data.budgets) data.budgets = {};
                     if (!data.payslips) data.payslips = [];
                     if (!data.incomeCategories) data.incomeCategories = ['משכורת','פרילנס','השקעות','מתנות','דמי שכירות','אחר'];
@@ -4814,6 +4855,9 @@
                     data = JSON.parse(saved);
                     if (!data.categoryRules) {
                         data.categoryRules = [];
+                    }
+                    if (!data.accrualRules) {
+                        data.accrualRules = [];
                     }
                     if (!data.budgets) {
                         data.budgets = {};
@@ -4936,6 +4980,25 @@
             if (c._isDuplicate && !wasDuplicate) c._included = false;
         }
 
+        function previewFlagField(c) {
+            return c.type === 'income' ? 'assignToCurrentMonth' : c.type === 'expense' ? 'assignToPreviousMonth' : null;
+        }
+
+        // Until the user touches a row's accrual box, the box follows what the row would
+        // inherit — and editing the description, date or month can change that. Without
+        // this, a row opened as "חשמל" and renamed kept the rule's tick and was saved
+        // with it as if chosen by hand.
+        function syncPreviewAccrualFlag(c, i) {
+            const f = previewFlagField(c);
+            if (!f || c._flagTouched) return;
+            const probe = { ...c };
+            delete probe[f];
+            c[f] = accrualFlag(probe);
+            if (i < 0) return;
+            const box = document.querySelector(`#ipv-tbody input[data-i="${i}"][data-f="${f}"]`);
+            if (box) box.checked = c[f];
+        }
+
         function showImportPreview({ candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll }) {
             for (const c of candidates) {
                 // Every row carries its own billing month. It defaults to the month
@@ -4945,6 +5008,12 @@
                 if (!c.month) c.month = selectedMonth;
                 c._dateMonth = cycleMonthFromDate(c.transactionDate);
                 c._included = true;
+                // Pre-tick what a remembered rule (or income template) already says, so the
+                // preview shows the month the row will really land in. A flag the source
+                // file already carried counts as the user's own.
+                const flagField = previewFlagField(c);
+                c._flagTouched = !!(flagField && typeof c[flagField] === 'boolean');
+                syncPreviewAccrualFlag(c, -1);
                 markImportPreviewDuplicate(c); // owns the "don't re-import dupes" default
             }
             importPreviewState = { candidates, selectedMonth, fileLabel, onConfirmed, onDismissAll };
@@ -5106,9 +5175,11 @@
                 renderImportPreviewTable();
             } else if (f === 'assignToCurrentMonth' || f === 'assignToPreviousMonth') {
                 c[f] = el.checked;
+                c._flagTouched = true;
             } else {
                 c[f] = el.value;
             }
+            if (f === 'desc' || f === 'transactionDate' || f === 'month') syncPreviewAccrualFlag(c, i);
         }
 
         function ipvBulkAction(action) {
@@ -5179,8 +5250,9 @@
                 if (c.transactionDate) tx.transactionDate = c.transactionDate;
                 if (c.earner) tx.earner = c.earner;
                 if (c.titheExempt) tx.titheExempt = true;
-                if (c.type === 'income' && c.assignToCurrentMonth) tx.assignToCurrentMonth = true;
-                if (c.type === 'expense' && c.assignToPreviousMonth) tx.assignToPreviousMonth = true;
+                // An untouched box stores nothing, so the row keeps following whatever it
+                // inherits by its final description; a touched one stores only a disagreement.
+                if (c._flagTouched && previewFlagField(c)) setEditAccrualFlag(tx, !!c[previewFlagField(c)]);
                 return tx;
             });
 
@@ -6366,6 +6438,134 @@
             document.getElementById('expense-rules-list').innerHTML = expenseHtml;
         }
 
+        // ========== Accrual-month rules (shared/accrual-rules.js) ==========
+        function accrualFlagName(type) {
+            return type === 'income' ? 'שייך לחודש הקבלה' : 'בדיעבד';
+        }
+
+        // A flipped flag moves a row exactly one month: income with the flag stays in
+        // its received month (without it, one back); an expense with it goes one back.
+        function accrualMoveMonths(move) {
+            const from = computeAssignedMonth(move.tx);
+            const back = move.tx.type === 'income' ? !move.after : move.after;
+            return { from, to: back ? monthMinusOne(from) : monthPlusOne(from) };
+        }
+
+        function describeAccrualMoves(moves) {
+            if (!moves.length) return 'אף עסקה קיימת לא זזה — הכלל יחול על עסקאות שייכנסו מעכשיו.';
+            const lines = moves.slice(0, 8).map(m => {
+                const { from, to } = accrualMoveMonths(m);
+                return `• ${m.tx.desc} — ₪${Math.round(m.tx.amt || 0).toLocaleString('he-IL')}: מ${getMonthName(from)} ל${getMonthName(to)}`;
+            });
+            if (moves.length > 8) lines.push(`• ועוד ${moves.length - 8}`);
+            return `${moves.length} עסקאות קיימות יעברו לחודש צבירה אחר:\n${lines.join('\n')}`;
+        }
+
+        function describeAccrualFuture(type, kw) {
+            return `הכלל יחול גם על כל ${type === 'income' ? 'הכנסה' : 'הוצאה'} עתידית שבתיאור שלה מופיע "${kw}" כמילה שלמה.`;
+        }
+
+        function refreshAccrualViews() {
+            renderAccrualRules();
+            const accrualTab = document.getElementById('tab-accrual');
+            if (accrualTab && !accrualTab.classList.contains('hidden')) renderAccrualMonth();
+        }
+
+        // Adding a rule moves numbers in past months, so it always goes through a
+        // confirm that lists what moves. Returns true when the rule was added.
+        function createAccrualRule(type, keyword) {
+            const A = window.FTAccrual;
+            if (!A) return false;
+            const kw = A.normalizeKeyword(keyword);
+            if (!kw) { notify('מלא מילת חיפוש'); return false; }
+            if (!data.accrualRules) data.accrualRules = [];
+            if (data.accrualRules.some(r => r.type === type && A.normalizeKeyword(r.keyword) === kw)) {
+                notify('כלל כזה כבר קיים');
+                return false;
+            }
+            const rule = { id: Date.now(), type, keyword: kw, createdAt: new Date().toISOString() };
+            const moves = A.ruleImpact(rule, data.transactions, accrualCtx());
+            const kind = type === 'income' ? 'הכנסה' : 'הוצאה';
+            if (!confirm(`כלל חדש: כל ${kind} שהתיאור שלה מכיל "${kw}" ← "${accrualFlagName(type)}".\n\n${describeAccrualMoves(moves)}\n\n${describeAccrualFuture(type, kw)}\n\nליצור את הכלל?`)) return false;
+            data.accrualRules.push(rule);
+            saveToLocalStorage();
+            refreshAccrualViews();
+            notify(moves.length ? `הכלל נוסף — ${moves.length} עסקאות עברו חודש צבירה` : 'הכלל נוסף');
+            return true;
+        }
+
+        function addAccrualRuleFromForm() {
+            const typeEl = document.getElementById('accrual-rule-type');
+            const kwEl = document.getElementById('accrual-rule-keyword');
+            if (!typeEl || !kwEl) return;
+            if (createAccrualRule(typeEl.value, kwEl.value)) kwEl.value = '';
+        }
+
+        function deleteAccrualRule(id) {
+            const A = window.FTAccrual;
+            const rule = (data.accrualRules || []).find(r => r.id === id);
+            if (!A || !rule) return;
+            const moves = A.removalImpact(id, data.transactions, accrualCtx());
+            if (!confirm(`למחוק את הכלל "${rule.keyword}"?\n\n${moves.length ? describeAccrualMoves(moves).replace('יעברו', 'יחזרו') : 'אף עסקה לא זזה.'}`)) return;
+            data.accrualRules = data.accrualRules.filter(r => r.id !== id);
+            saveToLocalStorage();
+            refreshAccrualViews();
+            notify('הכלל נמחק');
+        }
+
+        let _accrualSuggestions = [];
+
+        function createAccrualRuleFromSuggestion(i) {
+            const s = _accrualSuggestions[i];
+            if (s) createAccrualRule(s.type, s.keyword);
+        }
+
+        function renderAccrualSuggestions() {
+            const A = window.FTAccrual;
+            _accrualSuggestions = A ? A.suggestRules(data.transactions, accrualCtx()) : [];
+            const html = _accrualSuggestions.length ? `
+                <h4 class="font-semibold mb-1">נראה שפספסת סימונים</h4>
+                <p class="text-xs text-gray-500 mb-2">בתי עסק שסימנת בעבר, אבל לא בכל העסקאות שלהם. כלל אחד מתקן את כולן, ואת הבאות.</p>
+                <div class="space-y-2">
+                ${_accrualSuggestions.map((s, i) => `
+                    <div class="settings-list-row">
+                        <span class="settings-list-row__code">${s.type === 'income' ? 'IN' : 'OUT'}</span>
+                        <div class="settings-list-row__copy">
+                            <span class="font-medium">"${escapeHtml(s.keyword)}"</span>
+                            <span class="text-gray-600"> — סומן "${accrualFlagName(s.type)}" ב-${s.flagged} מתוך ${s.total}. כלל יזיז ${s.moves.length}${s.optedOut ? ` (${s.optedOut} מסומנות כחריגה — לא יזוזו)` : ''}</span>
+                        </div>
+                        <div class="settings-list-row__actions">
+                            <button onclick="createAccrualRuleFromSuggestion(${i})" class="text-blue-500 hover:text-blue-700 px-2">צור כלל</button>
+                        </div>
+                    </div>`).join('')}
+                </div>` : '';
+            ['accrual-settings-suggestions', 'accrual-tab-suggestions'].forEach(id => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.innerHTML = html;
+                el.style.display = html ? '' : 'none';
+            });
+        }
+
+        function renderAccrualRules() {
+            const listEl = document.getElementById('accrual-rules-list');
+            if (listEl) {
+                const rules = data.accrualRules || [];
+                listEl.innerHTML = rules.length ? rules.map(r => `
+                    <div class="settings-list-row settings-list-row--${r.type === 'income' ? 'income' : 'expense'}-rule">
+                        <span class="settings-list-row__code">${r.type === 'income' ? 'IN' : 'OUT'}</span>
+                        <div class="settings-list-row__copy">
+                            <span class="font-medium">"${escapeHtml(r.keyword)}"</span>
+                            <span class="text-gray-600"> → ${accrualFlagName(r.type)}</span>
+                        </div>
+                        <div class="settings-list-row__actions">
+                            <button onclick="deleteAccrualRule(${r.id})" class="text-red-500 hover:text-red-700 px-2">מחק</button>
+                        </div>
+                    </div>`).join('') : '<div class="text-gray-500 text-sm p-2">אין כללים</div>';
+            }
+            renderAccrualSuggestions();
+        }
+
         function updateRuleEarnerVisibility() {
             const type = document.getElementById('rule-type').value;
             const earnerSelect = document.getElementById('rule-earner');
@@ -6609,15 +6809,10 @@
                 if (dateEl.value) preview.transactionDate = dateEl.value;
                 else delete preview.transactionDate;
             }
-            if (trans.type === 'income') {
-                const acEl = document.getElementById('edit-assign-current');
-                if (acEl && acEl.checked) preview.assignToCurrentMonth = true;
-                else delete preview.assignToCurrentMonth;
-            } else if (trans.type === 'expense') {
-                const apEl = document.getElementById('edit-assign-prev');
-                if (apEl && apEl.checked) preview.assignToPreviousMonth = true;
-                else delete preview.assignToPreviousMonth;
-            }
+            const descEl = document.getElementById('edit-desc');
+            if (descEl && descEl.value.trim()) preview.desc = descEl.value.trim();
+            setEditAccrualFlag(preview, editAccrualChecked(trans.type));
+            updateEditAccrualRuleUI(preview);
 
             const accrual = computeAssignedMonth(preview);
             const parts = [];
@@ -6639,6 +6834,50 @@
                 opt.textContent = y;
                 el.add(opt, sorted.indexOf(Number(y)));
             });
+        }
+
+        function editAccrualChecked(type) {
+            const el = document.getElementById(type === 'income' ? 'edit-assign-current' : 'edit-assign-prev');
+            return !!(el && el.checked);
+        }
+
+        // Store the tick only where it disagrees with what the row would inherit, so a
+        // row that agrees with its rule keeps following it, and one that disagrees says so.
+        function setEditAccrualFlag(tx, checked) {
+            if (tx.type !== 'income' && tx.type !== 'expense') return;
+            if (window.FTAccrual) { window.FTAccrual.applyExplicit(tx, checked, accrualCtx()); return; }
+            const f = tx.type === 'income' ? 'assignToCurrentMonth' : 'assignToPreviousMonth';
+            if (checked) tx[f] = true; else delete tx[f];
+        }
+
+        function updateEditAccrualRuleUI(preview) {
+            const field = document.getElementById('edit-accrual-rule-field');
+            const srcEl = document.getElementById('edit-accrual-source');
+            const row = document.getElementById('edit-accrual-remember-row');
+            const labelEl = document.getElementById('edit-accrual-remember-label');
+            const rememberEl = document.getElementById('edit-accrual-remember');
+            if (!field || !srcEl || !row || !window.FTAccrual) return;
+            const A = window.FTAccrual;
+            const ctx = accrualCtx();
+            const checked = editAccrualChecked(preview.type);
+            const legacy = !preview.transactionDate && preview.month <= LEGACY_BOUNDARY;
+            const rule = legacy ? null : A.ruleFor(preview, ctx.rules);
+            const keyword = A.normalizeMerchant(preview.desc);
+            const flagName = preview.type === 'income' ? 'שייך לחודש הקבלה' : 'בדיעבד';
+
+            let src = '';
+            if (rule) {
+                src = checked
+                    ? `✓ מסומן אוטומטית לפי הכלל "${rule.keyword}"`
+                    : `הכלל "${rule.keyword}" מסמן עסקאות כאלה כ"${flagName}" — העסקה הזו חריגה לכלל ולא תסומן`;
+            }
+            const canRemember = checked && !rule && !legacy && !!keyword && !A.templateFor(preview, ctx.fixedIncomes);
+            srcEl.textContent = src;
+            srcEl.style.display = src ? '' : 'none';
+            row.style.display = canRemember ? '' : 'none';
+            if (canRemember && labelEl) labelEl.textContent = `זכור: כל עסקה עם "${keyword}" היא "${flagName}"`;
+            if (!canRemember && rememberEl) rememberEl.checked = false;
+            field.style.display = (src || canRemember) ? '' : 'none';
         }
 
         function startEdit(id) {
@@ -6667,18 +6906,20 @@
                 document.getElementById('edit-exempt').checked = trans.titheExempt || false;
                 document.getElementById('edit-earner').value = trans.earner || '';
                 const acEl = document.getElementById('edit-assign-current');
-                if (acEl) acEl.checked = trans.assignToCurrentMonth === true;
+                if (acEl) acEl.checked = accrualFlag(trans);
             } else {
                 exemptField.style.display = 'none';
                 earnerField.style.display = 'none';
                 if (assignCurrentField) assignCurrentField.style.display = 'none';
                 if (assignPrevField) assignPrevField.style.display = '';
                 const apEl = document.getElementById('edit-assign-prev');
-                if (apEl) apEl.checked = trans.assignToPreviousMonth === true;
+                if (apEl) apEl.checked = accrualFlag(trans);
             }
 
             const dateEl = document.getElementById('edit-transaction-date');
             if (dateEl) dateEl.value = trans.transactionDate || '';
+            const rememberEl = document.getElementById('edit-accrual-remember');
+            if (rememberEl) rememberEl.checked = false;
 
             const monthSel = document.getElementById('edit-month');
             if (monthSel) {
@@ -6721,19 +6962,6 @@
             if (trans.type === 'income') {
                 trans.titheExempt = document.getElementById('edit-exempt').checked;
                 trans.earner = document.getElementById('edit-earner').value || null;
-                const acEl = document.getElementById('edit-assign-current');
-                if (acEl && acEl.checked) {
-                    trans.assignToCurrentMonth = true;
-                } else {
-                    delete trans.assignToCurrentMonth;
-                }
-            } else if (trans.type === 'expense') {
-                const apEl = document.getElementById('edit-assign-prev');
-                if (apEl && apEl.checked) {
-                    trans.assignToPreviousMonth = true;
-                } else {
-                    delete trans.assignToPreviousMonth;
-                }
             }
 
             const dateEl = document.getElementById('edit-transaction-date');
@@ -6744,6 +6972,13 @@
                 delete trans.transactionDate;
             }
 
+            // After desc, month and date are final — each can change what the row inherits.
+            const flagChecked = editAccrualChecked(trans.type);
+            setEditAccrualFlag(trans, flagChecked);
+            const rememberEl = document.getElementById('edit-accrual-remember');
+            const rememberKeyword = (rememberEl && rememberEl.checked && flagChecked && window.FTAccrual)
+                ? window.FTAccrual.normalizeMerchant(trans.desc) : '';
+
             if (newMonth !== prevMonth) ensureYearInSelectors(newMonth.slice(0, 4));
 
             saveToLocalStorage();
@@ -6752,6 +6987,7 @@
             updateOverview();
             updateTithe();
             notify(newMonth !== prevMonth ? `הרשומה הועברה ל${getMonthName(newMonth)}` : 'הרשומה עודכנה');
+            if (rememberKeyword) createAccrualRule(trans.type, rememberKeyword);
         }
 
         // Init
@@ -8262,6 +8498,9 @@
                     if (!imported.categoryRules) {
                         imported.categoryRules = [];
                     }
+                    if (!Array.isArray(imported.accrualRules)) {
+                        imported.accrualRules = [];
+                    }
                     if (!imported.budgets) {
                         imported.budgets = {};
                     }
@@ -8291,6 +8530,15 @@
                             }
                         });
                         
+                        // Accrual rules decide which month rows land in, so dropping them
+                        // on a merge silently changes the file's accrual months.
+                        if (!Array.isArray(data.accrualRules)) data.accrualRules = [];
+                        const accrualKey = r => `${r.type}|${window.FTAccrual ? window.FTAccrual.normalizeKeyword(r.keyword) : String(r.keyword).toLowerCase()}`;
+                        const haveAccrual = new Set(data.accrualRules.map(accrualKey));
+                        imported.accrualRules.forEach(r => {
+                            if (r && r.keyword && !haveAccrual.has(accrualKey(r))) { data.accrualRules.push(r); haveAccrual.add(accrualKey(r)); }
+                        });
+
                         Object.assign(data.budgets, imported.budgets);
                     }
                     
@@ -10524,6 +10772,9 @@
         window.delCat = delCat;
         window.addCategoryRuleFromForm = addCategoryRuleFromForm;
         window.deleteCategoryRule = deleteCategoryRule;
+        window.addAccrualRuleFromForm = addAccrualRuleFromForm;
+        window.deleteAccrualRule = deleteAccrualRule;
+        window.createAccrualRuleFromSuggestion = createAccrualRuleFromSuggestion;
         window.editCategoryRule = editCategoryRule;
         window.updateCategoryRule = updateCategoryRule;
         window.cancelEditRule = cancelEditRule;
