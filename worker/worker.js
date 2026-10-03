@@ -214,8 +214,12 @@ async function handleTransactionsApi(request, env, url, CORS) {
 // a billable secret in the browser: any XSS, any extension with storage access,
 // any shared machine could walk off with it.
 //
-// The key lives here now as a Worker secret and never reaches the client. The
-// browser proves who it is with the Firebase ID token it already holds.
+// The key lives here as a Worker secret and never reaches the client. The
+// browser proves who it is with the Firebase ID token it already holds. There
+// is no longer a client-side path at all: the assistant and finance.html's
+// category classifier both come through here, and neither can read or store a
+// key. A 503 from this route therefore means "nobody can answer", not "the
+// caller may use its own key" — that fallback existed and is gone.
 //
 // Sign-in is a Google popup, open to anyone with a Google account, so a VALID
 // TOKEN IS NOT PERMISSION TO SPEND MONEY. AI_ALLOWED_UIDS is the real gate; with
@@ -259,8 +263,9 @@ async function handleAiChat(request, env, origin, CORS) {
   // missing Origin here means something that is not our site, and this is the
   // one route where a request costs money.
   if (!isAllowedOrigin(origin)) return json({ error: 'origin required' }, 403);
-  // Distinct from 403 on purpose: the client falls back to its old local mode
-  // on 503, and only tells the user they lack access on 403.
+  // Distinct from 403 on purpose: 503 is "this deployment has no key", 403 is
+  // "this account is not allowed one". Both are dead ends for the caller now,
+  // but they are different things to go and fix.
   if (!env.ANTHROPIC_API_KEY) return json({ error: 'ai_not_configured' }, 503);
 
   const uid = await uidFromRequest(request, env);

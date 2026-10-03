@@ -11,6 +11,7 @@ import {
     where,
     getDocs as firestoreGetDocs,
     deleteDoc as firestoreDeleteDoc,
+    runTransaction as firestoreRunTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
 
 // Your web app's Firebase configuration
@@ -106,5 +107,13 @@ async function deleteDoc(ref) {
     return firestoreDeleteDoc(ref);
 }
 
+async function runTransaction(updateFunction, options) {
+    if (isDemoModeActive()) {
+        console.info('[Finance Tracker] Demo mode: Firestore transaction blocked.');
+        return;
+    }
+    return firestoreRunTransaction(db, updateFunction, options);
+}
+
 // Export for use in other files (reads/writes are gated on demo mode above)
-export { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc };
+export { auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, doc, setDoc, getDoc, collection, query, where, getDocs, deleteDoc, runTransaction };

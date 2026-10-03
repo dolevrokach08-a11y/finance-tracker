@@ -108,14 +108,23 @@ function InfoTip({ text }) {
   );
 }
 
+function sliderCeiling(value, max, step) {
+  const numericValue = Number(value);
+  const numericMax = Number(max);
+  const numericStep = Number(step) > 0 ? Number(step) : 1;
+  if (!Number.isFinite(numericValue) || !Number.isFinite(numericMax)) return max;
+  return Math.max(numericMax, Math.ceil(numericValue / numericStep) * numericStep);
+}
+
 function Sl({ label, value, onChange, min, max, step, suf, tip, wide }) {
+  const effectiveMax = sliderCeiling(value, max, step);
   return (
     <div className={`tax-slider${wide ? ' tax-slider--wide' : ''}`} style={{ gridColumn: wide ? "1 / -1" : undefined }}>
       <div className="tax-slider__head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
         <label className="tax-slider__label" style={{ fontSize: 12, color: "hsl(215, 12%, 52%)", display: "flex", alignItems: "center", gap: 4 }}>{label}{tip && <InfoTip text={tip} />}</label>
         <span className="tax-slider__value" style={{ fontSize: 13, fontWeight: 700, color: "hsl(210, 20%, 92%)" }}>{value < 0 ? "\u2014" : value.toLocaleString("he-IL")} {value >= 0 ? suf : ""}</span>
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} />
+      <input type="range" min={min} max={effectiveMax} step={step} value={value} onChange={e => onChange(+e.target.value)} />
     </div>
   );
 }
@@ -1001,6 +1010,28 @@ function App() {
   const [det, setDet] = useState(false);
   const [workspace, setWorkspace] = useState('household');
 
+  const payslipSyncMessage = useCallback((status) => {
+    if (!status) return '';
+    if (status.state === 'stored-local') return 'נשמר במכשיר';
+    if (status.state === 'pending') return `נשמר במכשיר — ${status.pendingCount || 1} ממתינים לסנכרון`;
+    if (status.state === 'syncing') return 'מסנכרן את התלושים לענן...';
+    if (status.state === 'cloud') return 'נשמר בענן';
+    if (status.state === 'conflict') return 'נשמר במכשיר — נדרשת הכרעה בהתנגשות';
+    if (status.state === 'error') return 'נשמר במכשיר — הסנכרון נכשל וינוסה שוב';
+    return '';
+  }, []);
+
+  useEffect(() => {
+    const handler = event => {
+      const status = event.detail;
+      const message = payslipSyncMessage(status);
+      if (message) setPayslipStatus(message);
+    };
+    document.addEventListener('payslipSyncStatusChanged', handler);
+    if (window.__payslipSyncState) handler({ detail: window.__payslipSyncState });
+    return () => document.removeEventListener('payslipSyncStatusChanged', handler);
+  }, [payslipSyncMessage]);
+
   // CPI Tax Simulator state
   const [cpiSim, setCpiSim] = useState(null);
   const [cpiLoading, setCpiLoading] = useState(false);
@@ -1312,14 +1343,15 @@ function App() {
     if (savedCount > 0) {
       setPayslips([...window.__payslipData.payslips]);
       setPendingPayslip(null);
-      setPayslipStatus(`טופס 106 נשמר — ${savedCount} חודשים`);
+      const syncText = payslipSyncMessage(window.__payslipSyncState);
+      setPayslipStatus(`${syncText || 'נשמר במכשיר'} — ${savedCount} חודשים מטופס 106`);
       applyEarnerAverage(earner, year);
       setTimeout(() => setPayslipStatus(''), 3000);
     } else {
       setPayslipStatus('שגיאה בשמירה');
       setTimeout(() => setPayslipStatus(''), 3000);
     }
-  }, [pendingPayslip, payslipEarner, applyEarnerAverage]);
+  }, [pendingPayslip, payslipEarner, applyEarnerAverage, payslipSyncMessage]);
 
   const confirmPayslipUpload = useCallback(async () => {
     if (!pendingPayslip) return;
@@ -1356,14 +1388,15 @@ function App() {
       const sameMonth = saved.filter(p => p.month === payslip.month && p.earner === payslip.earner);
       setPayslips([...saved]);
       setPendingPayslip(null);
-      setPayslipStatus(sameMonth.length > 1 ? `נשמר — ${sameMonth.length} תלושים לחודש ${monthKey}` : 'נשמר בהצלחה');
+      const syncText = payslipSyncMessage(window.__payslipSyncState) || 'נשמר במכשיר';
+      setPayslipStatus(sameMonth.length > 1 ? `${syncText} — ${sameMonth.length} תלושים לחודש ${monthKey}` : syncText);
       if (payslip.gross && payslip.earner) applyEarnerAverage(payslip.earner, monthKey.slice(0, 4));
       setTimeout(() => setPayslipStatus(''), 2500);
     } else {
       setPayslipStatus('שגיאה בשמירה');
       setTimeout(() => setPayslipStatus(''), 3000);
     }
-  }, [pendingPayslip, payslipEarner, applyEarnerAverage]);
+  }, [pendingPayslip, payslipEarner, applyEarnerAverage, payslipSyncMessage]);
 
   const handleDeletePayslip = useCallback(async (id) => {
     if (!confirm('למחוק את התלוש?')) return;

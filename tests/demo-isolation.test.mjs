@@ -17,7 +17,7 @@ globalThis.localStorage = new MemoryStorage();
 globalThis.sessionStorage = new MemoryStorage();
 
 await import('../shared/user-storage.js');
-const { enterDemoMode, exitDemoMode } = await import('../demo-data.js');
+const { enterDemoMode, exitDemoMode, generateDemoFinanceData } = await import('../demo-data.js');
 
 function reset(seed = {}) {
     globalThis.localStorage = new MemoryStorage(seed.local);
@@ -57,5 +57,21 @@ assert.notEqual(JSON.parse(localStorage.getItem('portfolio')).secret, 'legacy po
 exitDemoMode();
 window.UserStorage.syncToUser('real-user-2');
 assert.equal(JSON.parse(localStorage.getItem('portfolio')).secret, 'legacy portfolio');
+
+// Fixed incomes/expenses use `description`/`category` (see addFixedIncome/
+// addFixedExpense in finance.html) — a different schema from the `desc`/`cat`
+// transactions use. The demo fixture once wrote `desc` for these too, so
+// renderFixedItems() (which reads `f.description`/`f.category`) showed
+// "undefined" for every fixed income/expense card in demo mode.
+{
+    const demo = generateDemoFinanceData();
+    for (const f of [...demo.fixedIncomes, ...demo.fixedExpenses]) {
+        assert.ok(typeof f.description === 'string' && f.description.length > 0,
+            `fixed record ${f.id} must have a non-empty description, not desc`);
+        assert.ok(typeof f.category === 'string' && f.category.length > 0,
+            `fixed record ${f.id} must have a category`);
+        assert.equal(f.desc, undefined, `fixed record ${f.id} must not carry the transaction-schema 'desc' field`);
+    }
+}
 
 console.log('Demo isolation tests passed.');
