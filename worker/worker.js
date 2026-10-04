@@ -302,6 +302,17 @@ async function handleAiChat(request, env, origin, CORS) {
     }
   }
 
+  // The system prompt comes as one string, or as up to two strings: what holds
+  // still for the conversation first, what moves second. The first block gets a
+  // cache breakpoint, so a follow-up question rereads the user's whole finance
+  // history at a tenth of the price instead of paying for it again. Anything
+  // that is not a non-empty string is dropped, as before.
+  const rawSystem = body && body.system;
+  const systemParts = (Array.isArray(rawSystem) ? rawSystem.slice(0, 2) : [rawSystem])
+    .filter(s => typeof s === 'string' && s);
+  const system = systemParts.map((text, i) =>
+    i === 0 ? { type: 'text', text, cache_control: { type: 'ephemeral' } } : { type: 'text', text });
+
   // Only these fields are forwarded. Anything else the caller sends — tools, a
   // different endpoint, extra headers — is dropped rather than proxied blind.
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
@@ -317,7 +328,7 @@ async function handleAiChat(request, env, origin, CORS) {
       max_tokens: Math.min(Number(body && body.max_tokens) || AI_MAX_TOKENS, AI_MAX_TOKENS),
       ...(spec.effort ? { output_config: { effort: spec.effort } } : {}),
       ...(spec.fallback ? { fallbacks: 'default' } : {}),
-      ...(body && typeof body.system === 'string' && body.system ? { system: body.system } : {}),
+      ...(system.length ? { system } : {}),
       messages
     })
   });

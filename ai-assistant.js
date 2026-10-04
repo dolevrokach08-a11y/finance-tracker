@@ -22,6 +22,11 @@ function aiEscapeHTML(text) {
         .replace(/'/g, '&#39;');
 }
 
+// Characters of transaction rows sent to the model — roughly 3,000 rows.
+// The Worker refuses bodies over 512 KB, and the portfolio and the chat
+// history share that, so this leaves them room.
+const AI_TX_ROWS_BUDGET = 200000;
+
 // ==================== AI ASSISTANT COMPONENT ====================
 
 class FinancialAIAssistant {
@@ -799,6 +804,133 @@ ${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v
 === סוף ANALYTICS ===`;
     }
 
+    // ---- Finance context for the model ----
+    // Everything the user has entered, not a sample. It used to be the last 50
+    // entries of the stored array — but that array is in entry order, not date
+    // order (an old statement imported last sits at the end), so "the last 50"
+    // was never "the most recent 50", and nothing told the model it was partial.
+    //
+    // Month totals come from shared/finance-summary.js, the same function the
+    // home card uses, so the model quotes the app's numbers instead of summing
+    // rows itself and skipping the template dedup and the tithe cap.
+    //
+    // If the rows outgrow the budget the oldest are dropped, and the header says
+    // so; the month totals and category sums still cover every row.
+    _buildFinanceContext(financeData) {
+        const txs = Array.isArray(financeData.transactions) ? financeData.transactions : [];
+        const typeLabel = { income: 'הכנסה', expense: 'הוצאה', 'manual-tithe': 'מעשר ידני' };
+        const clean = (v) => String(v ?? '').replace(/[\t\r\n|]+/g, ' ').trim();
+        const dayOf = (t) => {
+            const m = String(t.transactionDate || t.date || '').match(/^\d{4}-\d{2}-\d{2}/);
+            return m ? m[0] : '';
+        };
+
+        // Month first (the app's own assignment), then transaction date, then
+        // entry order — so rows without a date keep the order they were entered.
+        const ordered = txs
+            .map((t, i) => ({ t, i, month: String(t.month || ''), day: dayOf(t) }))
+            .sort((a, b) => a.month.localeCompare(b.month) || a.day.localeCompare(b.day) || a.i - b.i);
+
+        const rows = ordered.map(({ t, month, day }) => [
+            month, day, typeLabel[t.type] || clean(t.type), Number(t.amt) || 0,
+            clean(t.cat), clean(t.desc), t.titheExempt ? 'פטור ממעשר' : ''
+        ].join('|'));
+
+        let kept = 0, used = 0;
+        for (let k = rows.length - 1; k >= 0; k--) {
+            used += rows[k].length + 1;
+            if (used > AI_TX_ROWS_BUDGET) break;
+            kept++;
+        }
+        const shown = rows.slice(rows.length - kept);
+        const omitted = rows.length - kept;
+
+        // Every month from the first transaction up to now (or the last
+        // transaction, if it is later). With no transactions at all, the last
+        // year, so the fixed templates still have somewhere to show up.
+        const fin = window.FTFinance;
+        let summaryBlock = 'לא זמין (המודול לא נטען בדף הזה) — אל תחשב סכומים חודשיים בעצמך.';
+        if (fin) {
+            const now = fin.currentMonthKey();
+            const txMonths = ordered.map(o => o.month).filter(m => /^\d{4}-\d{2}$/.test(m));
+            let first = txMonths[0];
+            if (!first) {
+                const d = new Date();
+                d.setMonth(d.getMonth() - 11);
+                first = fin.currentMonthKey(d);
+            }
+            const lastTx = txMonths[txMonths.length - 1];
+            const last = lastTx && lastTx > now ? lastTx : now;
+            const r = (n) => Math.round(n);
+            summaryBlock = 'חודש|הכנסות|הוצאות|יתרה|מעשר|פנוי אחרי מעשר\n' +
+                fin.monthsInRange(first, last).map(m => {
+                    const s = fin.monthSummary(financeData, m);
+                    return s.hasData
+                        ? [m, r(s.inc), r(s.exp), r(s.bal), r(s.tithe), r(s.available)].join('|')
+                        : `${m}|—|—|—|—|—`;
+                }).join('\n');
+        }
+
+        // A plain sum of expense rows per category. It leaves the fixed expenses
+        // out on purpose — they are listed separately below — and the label says
+        // so, because the finance screen's breakdown adds them in.
+        const byCat = {};
+        ordered.forEach(({ t, month }) => {
+            if (t.type !== 'expense') return;
+            const cat = clean(t.cat) || 'ללא קטגוריה';
+            byCat[month] = byCat[month] || {};
+            byCat[month][cat] = (byCat[month][cat] || 0) + (Number(t.amt) || 0);
+        });
+        const catBlock = Object.keys(byCat).sort().map(m =>
+            `${m}: ` + Object.entries(byCat[m])
+                .sort((a, b) => b[1] - a[1])
+                .map(([c, v]) => `${c} ${Math.round(v)}`).join(', ')
+        ).join('\n') || '—';
+
+        const coverage = omitted > 0
+            ? `${kept} מתוך ${rows.length} עסקאות. ${omitted} הישנות ביותר הושמטו בגלל גודל — הסיכום החודשי והסכומים לפי קטגוריה כוללים גם אותן.`
+            : `כל ${rows.length} העסקאות.`;
+        const range = shown.length
+            ? ` טווח החודשים בשורות: ${ordered[omitted].month} עד ${ordered[ordered.length - 1].month}.`
+            : '';
+
+        return `
+=== נתוני מעקב כספי ===
+-- סיכום חודשי (בסיס מזומן, ₪) --
+אלה המספרים שהאפליקציה מציגה. כולל הכנסות והוצאות קבועות, בלי ספירה כפולה של תבנית שכבר יש לה עסקה, ומעשר מוגבל לרווח בפועל. "—" = אין נתונים לחודש.
+${summaryBlock}
+
+-- הוצאות לפי קטגוריה וחודש (סכום עסקאות בלבד, ללא הוצאות קבועות) --
+${catBlock}
+
+-- עסקאות --
+${coverage}${range}
+"חודש" הוא החודש שהאפליקציה שייכה אליו את העסקה, והוא לא תמיד החודש של תאריך העסקה.
+חודש|תאריך עסקה|סוג|סכום|קטגוריה|תיאור|הערה
+${shown.join('\n')}
+
+תקציבים: ${JSON.stringify(financeData.budgets || {})}
+קטגוריות הכנסה: ${JSON.stringify(financeData.incomeCategories || [])}
+קטגוריות הוצאה: ${JSON.stringify(financeData.expenseCategories || [])}
+הכנסות קבועות: ${JSON.stringify(financeData.fixedIncomes || [])}
+הוצאות קבועות: ${JSON.stringify(financeData.fixedExpenses || [])}
+=== סוף נתוני מעקב כספי ===`;
+    }
+
+    // The last ten turns. _handleSend has already recorded the question in
+    // this.messages, so it is not appended a second time — it used to be, and
+    // every question reached the model twice. The window starts on a user turn,
+    // since a conversation that opens with the assistant is rejected.
+    _historyForApi(userMessage) {
+        const history = this.messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
+        const last = history[history.length - 1];
+        if (!last || last.role !== 'user' || last.content !== userMessage) {
+            history.push({ role: 'user', content: userMessage });
+        }
+        while (history.length && history[0].role !== 'user') history.shift();
+        return history;
+    }
+
     // ---- Claude API Integration ----
     async _callClaudeAPI(userMessage, token) {
         const financeData = this.getFinanceData();
@@ -809,19 +941,12 @@ ${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v
         const hasPortfolio = (portfolioData.holdings && portfolioData.holdings.length > 0) ||
                              (portfolioData.bonds && portfolioData.bonds.length > 0);
 
+        // Two system blocks. The Worker caches the first, so it holds what stays
+        // put during a conversation: the instructions and the finance data. The
+        // portfolio goes second because it moves under the conversation — live
+        // prices, and cache ages counted in minutes — and would void the cache.
+        const financeSection = hasFinance ? this._buildFinanceContext(financeData) : '';
         let dataSection = '';
-
-        if (hasFinance) {
-            dataSection += `
-=== נתוני מעקב כספי ===
-עסקאות אחרונות (עד 50): ${JSON.stringify((financeData.transactions || []).slice(-50))}
-תקציבים: ${JSON.stringify(financeData.budgets || {})}
-קטגוריות הכנסה: ${JSON.stringify(financeData.incomeCategories || [])}
-קטגוריות הוצאה: ${JSON.stringify(financeData.expenseCategories || [])}
-הכנסות קבועות: ${JSON.stringify(financeData.fixedIncomes || [])}
-הוצאות קבועות: ${JSON.stringify(financeData.fixedExpenses || [])}
-=== סוף נתוני מעקב כספי ===`;
-        }
 
         if (hasPortfolio) {
             // The computed analytics section gives Claude the answers it
@@ -845,43 +970,36 @@ ${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v
 === סוף נתוני השקעות ===`;
         }
 
-        if (!hasFinance && !hasPortfolio) {
-            dataSection = `
+        const noData = !hasFinance && !hasPortfolio ? `
 === אין נתונים ===
 לא נמצאו נתונים בדף הנוכחי. ייתכן שהנתונים טרם נטענו או שהמשתמש בדף שלא מכיל נתונים.
-=== סוף ===`;
-        }
+=== סוף ===` : '';
 
-        const systemPrompt = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי ותיק השקעות.
-יש לך גישה מלאה לנתונים של המשתמש — הם מועברים אליך ישירות מהאפליקציה.
+        const stableBlock = `אתה עוזר פיננסי אישי חכם המשולב באפליקציית ניהול פיננסי ותיק השקעות.
+הנתונים של המשתמש מועברים אליך ישירות מהאפליקציה. כל אזור מציין מה הוא מכסה; אם כתוב שחלק הושמט, אל תציג תשובה כאילו ראית הכול.
 
-חשוב: הנתונים למטה הם הנתונים האמיתיים של המשתמש. אל תגיד שאין לך גישה — הנתונים כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
+חשוב: הנתונים בהמשך הם הנתונים האמיתיים של המשתמש. אל תגיד שאין לך גישה — הנתונים כבר מולך! נתח אותם ותן תשובות מבוססות נתונים.
 
-**העדף את סקשן ה-ANALYTICS המחושב** על פני חישוב מחדש מ-JSON הגלם: שם כבר יש לך TWR, P/L לכל אחזקה, הקצאה מול יעד, ותרגומי מטבע. השתמש ב-JSON הגלם רק כשצריך פרט ספציפי שלא מופיע ב-ANALYTICS.
-
-${dataSection}
+**העדף את המספרים המחושבים** על פני חישוב מחדש מנתוני הגלם: בתיק ההשקעות — סקשן ה-ANALYTICS (TWR, P/L לכל אחזקה, הקצאה מול יעד, תרגומי מטבע); במעקב הכספי — הסיכום החודשי והסכומים לפי קטגוריה. השתמש בשורות הגלם רק כשצריך פרט שלא מופיע שם.
 
 הנחיות:
 - תגיב בעברית, בצורה קצרה וברורה
-- השתמש במספרים מדויקים מהנתונים למעלה (מעדיף את סקשן ANALYTICS)
+- השתמש במספרים מדויקים מהנתונים
+- לסכומים חודשיים (הכנסות, הוצאות, יתרה, מעשר) צטט את הסיכום החודשי ואל תסכום שורות בעצמך — הסיכום כולל כללים שסכימה פשוטה מפספסת
+- הסיכום החודשי הוא בבסיס מזומן. לשונית "חודש בצבירה" במסך הכספים מחשבת אחרת ועשויה להראות מספרים שונים; אם שואלים עליה, אמור זאת
 - הצע פעולות קונקרטיות לשיפור המצב הפיננסי
 - אם יש נתוני השקעות, נתח ביצועים, הקצאה, וחשיפה למט"ח
 - אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים
-- אם TWR מראה '—' — ציין למשתמש שעליו לפתוח את טאב "סיכום" פעם אחת כדי שה-TWR יחושב וייקושש`;
+- אם TWR מראה '—' — ציין למשתמש שעליו לפתוח את טאב "סיכום" פעם אחת כדי שה-TWR יחושב וייקושש
+${financeSection}${noData}`;
 
         const payload = {
             model: this.model,
             // Room for the reply plus the thinking the 5.5 models always do,
             // which is billed out of the same budget. The Worker clamps to this.
             max_tokens: 8192,
-            system: systemPrompt,
-            messages: [
-                ...this.messages.slice(-10).map(m => ({
-                    role: m.role,
-                    content: m.content
-                })),
-                { role: 'user', content: userMessage }
-            ]
+            system: dataSection ? [stableBlock, dataSection] : [stableBlock],
+            messages: this._historyForApi(userMessage)
         };
 
         const viaWorker = await this._viaWorker(payload, token);

@@ -233,6 +233,33 @@ async function call(body, opts, env = ENV) {
     }
 }
 
+// ── 8b'. The system prompt: one block or two, the first one cached ──────────
+// The first block carries the whole finance history; without the breakpoint
+// every follow-up question would pay for it again in full.
+{
+    const token = await mintToken();
+    const systemFor = async (system) => {
+        await call({ ...VALID_BODY, system }, { token });
+        return JSON.parse(upstreamCalls[0].init.body).system;
+    };
+
+    assert.deepEqual(await systemFor('one string'), [
+        { type: 'text', text: 'one string', cache_control: { type: 'ephemeral' } },
+    ], 'a plain string still works, and is cached');
+
+    assert.deepEqual(await systemFor(['stable', 'moving']), [
+        { type: 'text', text: 'stable', cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: 'moving' },
+    ], 'only the first block is cached — the second changes under the conversation');
+
+    assert.equal((await systemFor(['a', 'b', 'c'])).length, 2, 'at most two blocks');
+    assert.deepEqual(await systemFor(['ok', { text: 'smuggled', cache_control: {} }]), [
+        { type: 'text', text: 'ok', cache_control: { type: 'ephemeral' } },
+    ], 'non-strings are dropped, never forwarded as blocks');
+    assert.equal(await systemFor(''), undefined);
+    assert.equal(await systemFor({ type: 'text', text: 'x' }), undefined);
+}
+
 // ── 8c. A classifier decline is named, not passed on as an empty answer ─────
 {
     const token = await mintToken();
