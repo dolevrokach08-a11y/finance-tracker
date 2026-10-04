@@ -97,7 +97,7 @@ function request(body, { token, method = 'POST' } = {}) {
 }
 
 const VALID_BODY = {
-    model: 'claude-sonnet-4-6',
+    model: 'claude-sonnet-5-5',
     system: 'system prompt',
     messages: [{ role: 'user', content: 'מה מצב התיק?' }],
 };
@@ -187,14 +187,76 @@ async function call(body, opts, env = ENV) {
     assert.equal(upstreamCalls.length, 1);
 
     const sent = JSON.parse(upstreamCalls[0].init.body);
-    assert.equal(sent.model, 'claude-sonnet-4-6', 'unknown models fall back to the default');
-    assert.equal(sent.max_tokens, 4096, 'max_tokens is clamped');
+    assert.equal(sent.model, 'claude-sonnet-5-5', 'unknown models fall back to the default');
+    assert.equal(sent.max_tokens, 8192, 'max_tokens is clamped');
     assert.equal(sent.tools, undefined, 'unforwarded fields are dropped');
     assert.equal(sent.metadata, undefined);
     assert.equal(upstreamCalls[0].init.headers['x-api-key'], ENV.ANTHROPIC_API_KEY);
 
     // The key must never come back out.
     assert.ok(!r.text.includes(ENV.ANTHROPIC_API_KEY));
+}
+
+// ── 8b. Each model gets the request shape it accepts ────────────────────────
+// The 5.5 models always think, so effort is what bounds them; Haiku 4.5
+// rejects `effort` outright, and a 400 there would kill the category classifier.
+{
+    const token = await mintToken();
+    const sentFor = async (model) => {
+        const r = await call({ ...VALID_BODY, model }, { token });
+        assert.equal(r.status, 200, `${model} should go through`);
+        return { body: JSON.parse(upstreamCalls[0].init.body), headers: upstreamCalls[0].init.headers };
+    };
+
+    const sonnet = await sentFor('claude-sonnet-5-5');
+    assert.equal(sonnet.body.model, 'claude-sonnet-5-5');
+    assert.deepEqual(sonnet.body.output_config, { effort: 'low' });
+    assert.equal(sonnet.body.fallbacks, 'default');
+    assert.equal(sonnet.headers['anthropic-beta'], 'server-side-fallback-2026-07-01');
+    assert.equal(sonnet.body.thinking, undefined, 'thinking cannot be disabled on 5.5 — never send it');
+
+    const opus = await sentFor('claude-opus-5-5');
+    assert.equal(opus.body.model, 'claude-opus-5-5');
+    assert.deepEqual(opus.body.output_config, { effort: 'medium' });
+    assert.equal(opus.body.fallbacks, 'default');
+
+    const haiku = await sentFor('claude-haiku-4-5');
+    assert.equal(haiku.body.model, 'claude-haiku-4-5');
+    assert.equal(haiku.body.output_config, undefined, 'Haiku 4.5 rejects effort');
+    assert.equal(haiku.body.fallbacks, undefined);
+    assert.equal(haiku.headers['anthropic-beta'], undefined);
+
+    // Retired names and prototype keys both land on the default, not on a 400.
+    for (const model of ['claude-sonnet-4-6', 'claude-opus-4-8', 'constructor', '__proto__']) {
+        const { body } = await sentFor(model);
+        assert.equal(body.model, 'claude-sonnet-5-5', `${model} should fall back to the default`);
+    }
+}
+
+// ── 8c. A classifier decline is named, not passed on as an empty answer ─────
+{
+    const token = await mintToken();
+    const previous = upstreamReply;
+    upstreamReply = () => new Response(JSON.stringify({
+        content: [{ type: 'thinking', thinking: '' }],
+        stop_reason: 'refusal',
+        stop_details: { type: 'refusal', category: 'cyber' },
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    const r = await call(VALID_BODY, { token });
+    assert.equal(r.status, 502);
+    assert.equal(r.json.error, 'model_refused');
+
+    // Thinking blocks ahead of the text must not end up in the answer.
+    upstreamReply = () => new Response(JSON.stringify({
+        content: [{ type: 'thinking', thinking: '' }, { type: 'text', text: 'תשובה' }],
+        stop_reason: 'end_turn',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    const ok = await call(VALID_BODY, { token });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.text, 'תשובה');
+
+    upstreamReply = previous;
 }
 
 // ── 9. Message shape is validated before anything is billed ─────────────────
