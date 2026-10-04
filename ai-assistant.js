@@ -26,14 +26,17 @@ function aiEscapeHTML(text) {
 
 class FinancialAIAssistant {
     constructor(options = {}) {
-        // Default to claude-sonnet-4-6 (stable alias). Stored legacy names from
-        // the previous generation are mapped to their current equivalents.
+        // Default to claude-sonnet-5-5. Stored names from earlier generations
+        // are mapped to their current equivalents — the Worker no longer
+        // accepts them and would otherwise swap in its default without a word.
         const legacyMap = {
-            'claude-sonnet-4-5': 'claude-sonnet-4-6',
-            'claude-opus-4-5': 'claude-opus-4-8'
+            'claude-sonnet-4-5': 'claude-sonnet-5-5',
+            'claude-sonnet-4-6': 'claude-sonnet-5-5',
+            'claude-opus-4-5': 'claude-opus-5-5',
+            'claude-opus-4-8': 'claude-opus-5-5'
         };
         const stored = localStorage.getItem('ai_model');
-        this.model = options.model || legacyMap[stored] || stored || 'claude-sonnet-4-6';
+        this.model = options.model || legacyMap[stored] || stored || 'claude-sonnet-5-5';
         this.getFinanceData = options.getFinanceData || (() => ({}));
         this.getPortfolioData = options.getPortfolioData || (() => ({}));
         this.isOpen = false;
@@ -441,9 +444,9 @@ class FinancialAIAssistant {
             <div class="ai-settings-panel" id="aiSettingsPanel">
                 <label for="aiModelSelect">מודל</label>
                 <select id="aiModelSelect">
-                    <option value="claude-sonnet-4-6" ${this.model === 'claude-sonnet-4-6' ? 'selected' : ''}>Claude Sonnet 4.6 (מהיר, מומלץ)</option>
+                    <option value="claude-sonnet-5-5" ${this.model === 'claude-sonnet-5-5' ? 'selected' : ''}>Claude Sonnet 5.5 (מהיר, מומלץ)</option>
                     <option value="claude-haiku-4-5" ${this.model === 'claude-haiku-4-5' ? 'selected' : ''}>Claude Haiku 4.5 (מהיר מאוד, זול)</option>
-                    <option value="claude-opus-4-8" ${this.model === 'claude-opus-4-8' ? 'selected' : ''}>Claude Opus 4.8 (חכם ביותר, יקר)</option>
+                    <option value="claude-opus-5-5" ${this.model === 'claude-opus-5-5' ? 'selected' : ''}>Claude Opus 5.5 (חכם ביותר, יקר)</option>
                 </select>
                 <button class="ai-settings-save" id="aiSettingsSave">שמור הגדרות</button>
                 <div class="ai-settings-info">
@@ -868,7 +871,9 @@ ${dataSection}
 
         const payload = {
             model: this.model,
-            max_tokens: 4096,
+            // Room for the reply plus the thinking the 5.5 models always do,
+            // which is billed out of the same budget. The Worker clamps to this.
+            max_tokens: 8192,
             system: systemPrompt,
             messages: [
                 ...this.messages.slice(-10).map(m => ({
@@ -984,6 +989,7 @@ ${dataSection}
             response.status === 403 ? 'החשבון הזה לא מורשה להשתמש בעוזר. צריך להוסיף את המזהה שלו ל-AI_ALLOWED_UIDS ב-Worker.' :
             response.status === 429 ? 'יותר מדי בקשות לעוזר. נסה שוב בעוד כמה דקות.' :
             response.status === 401 ? 'ההתחברות פגה. רענן את הדף והתחבר שוב.' :
+            detail.error === 'model_refused' ? 'המודל סירב לענות על השאלה הזאת. נסה לנסח אותה אחרת.' :
             `שגיאה מהשרת (${response.status}): ${String(detail.error || '').slice(0, 200)}`
         );
     }
@@ -1461,9 +1467,9 @@ ${dataSection}
 
     _modelDisplayName() {
         const names = {
-            'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+            'claude-sonnet-5-5': 'Claude Sonnet 5.5',
             'claude-haiku-4-5':  'Claude Haiku 4.5',
-            'claude-opus-4-8':   'Claude Opus 4.8'
+            'claude-opus-5-5':   'Claude Opus 5.5'
         };
         return names[this.model] || this.model;
     }

@@ -224,13 +224,24 @@ async function handleTransactionsApi(request, env, url, CORS) {
 // Sign-in is a Google popup, open to anyone with a Google account, so a VALID
 // TOKEN IS NOT PERMISSION TO SPEND MONEY. AI_ALLOWED_UIDS is the real gate; with
 // it unset this route stays shut.
-const AI_MODELS = new Set([
-  'claude-sonnet-4-6',
-  'claude-haiku-4-5',
-  'claude-opus-4-8'
+//
+// The two 5.5 models always think — it cannot be switched off — and that
+// thinking is billed out of max_tokens even though its text never comes back.
+// So they carry an explicit effort level (it is what decides how much they
+// think), and the cap below leaves room for thinking on top of the reply.
+// Haiku 4.5 is still the current Haiku; it rejects `effort`, so it gets none.
+//
+// `fallback` opts into Anthropic's server-side retry: when a safety classifier
+// declines a benign question, the same request is re-run on the model Anthropic
+// recommends for that kind of decline instead of coming back empty.
+const AI_MODELS = new Map([
+  ['claude-sonnet-5-5', { effort: 'low', fallback: true }],
+  ['claude-opus-5-5', { effort: 'medium', fallback: true }],
+  ['claude-haiku-4-5', {}]
 ]);
+const AI_DEFAULT_MODEL = 'claude-sonnet-5-5';
 
-const AI_MAX_TOKENS = 4096;
+const AI_MAX_TOKENS = 8192;
 const AI_MAX_MESSAGES = 20;
 // The system prompt carries the whole portfolio and finance document, so this
 // has to be generous; it exists to stop someone pushing megabytes through.
@@ -281,7 +292,8 @@ async function handleAiChat(request, env, origin, CORS) {
   let body;
   try { body = JSON.parse(raw); } catch { return json({ error: 'invalid json' }, 400); }
 
-  const model = AI_MODELS.has(body && body.model) ? body.model : 'claude-sonnet-4-6';
+  const model = AI_MODELS.has(body && body.model) ? body.model : AI_DEFAULT_MODEL;
+  const spec = AI_MODELS.get(model);
   const messages = Array.isArray(body && body.messages) ? body.messages.slice(-AI_MAX_MESSAGES) : null;
   if (!messages || !messages.length) return json({ error: 'missing messages' }, 400);
   for (const m of messages) {
@@ -297,11 +309,14 @@ async function handleAiChat(request, env, origin, CORS) {
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      ...(spec.fallback ? { 'anthropic-beta': 'server-side-fallback-2026-07-01' } : {})
     },
     body: JSON.stringify({
       model,
       max_tokens: Math.min(Number(body && body.max_tokens) || AI_MAX_TOKENS, AI_MAX_TOKENS),
+      ...(spec.effort ? { output_config: { effort: spec.effort } } : {}),
+      ...(spec.fallback ? { fallbacks: 'default' } : {}),
       ...(body && typeof body.system === 'string' && body.system ? { system: body.system } : {}),
       messages
     })
@@ -318,9 +333,16 @@ async function handleAiChat(request, env, origin, CORS) {
     }, 502);
   }
 
+  // Read by block type, not position: the 5.5 models put (empty) thinking
+  // blocks before the text, and a fallback adds a block of its own.
   const text = Array.isArray(data && data.content)
     ? data.content.filter(b => b && b.type === 'text').map(b => b.text).join('')
     : '';
+  // A decline is an HTTP 200 with no answer in it. Passed on as a 200 it would
+  // show up as an empty bubble, so it is named instead.
+  if (data && data.stop_reason === 'refusal' && !text) {
+    return json({ error: 'model_refused', upstreamStatus: upstream.status }, 502);
+  }
   return json({ text, model, usage: (data && data.usage) || null });
 }
 
