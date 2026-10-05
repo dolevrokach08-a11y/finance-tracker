@@ -247,6 +247,70 @@ const AI_MAX_MESSAGES = 20;
 // has to be generous; it exists to stop someone pushing megabytes through.
 const AI_MAX_BODY_BYTES = 512 * 1024;
 
+// The one tool the assistant may call, and only when the page asks for it
+// (`allowProposals`). It is defined here, not by the caller: the rule that a
+// browser cannot hand the model tools still holds. Calling it writes nothing —
+// the proposals come back to the page, which shows them for the user to tick,
+// and shared/ai-proposals.js applies the ticked ones on the finance screen.
+//
+// Every field is required and empty when it does not apply, so one flat shape
+// covers all three kinds under strict mode.
+const AI_PROPOSAL_TOOL = {
+  name: 'propose_changes',
+  description:
+    'Propose changes to the user\'s finance-tracker categories for the user to review. ' +
+    'Nothing is applied until the user approves each item in the app. ' +
+    'Kinds: "recategorize" moves one transaction (tx_id, from_category = its current category exactly as listed, to_category); ' +
+    '"add_category" adds a category (to_category); ' +
+    '"add_rule" makes future imports whose description contains keyword go to to_category. ' +
+    'A to_category that does not exist yet is created along with the change. ' +
+    'type is "income" or "expense". Leave fields that do not apply as empty strings. ' +
+    'reason is one short Hebrew sentence the user will read. At most 40 items.',
+  strict: true,
+  input_schema: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['proposals'],
+    properties: {
+      proposals: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['kind', 'type', 'tx_id', 'from_category', 'to_category', 'keyword', 'reason'],
+          properties: {
+            kind: { type: 'string', enum: ['recategorize', 'add_category', 'add_rule'] },
+            type: { type: 'string', enum: ['income', 'expense'] },
+            tx_id: { type: 'string' },
+            from_category: { type: 'string' },
+            to_category: { type: 'string' },
+            keyword: { type: 'string' },
+            reason: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+};
+const AI_MAX_PROPOSALS = 40;
+const AI_PROPOSAL_FIELDS = ['kind', 'type', 'tx_id', 'from_category', 'to_category', 'keyword', 'reason'];
+
+// Strict mode already shapes the input; this is the second gate, because what
+// leaves here is rendered on the page and then written to the user's data.
+function cleanProposals(input) {
+  const list = input && Array.isArray(input.proposals) ? input.proposals : [];
+  const out = [];
+  for (const p of list.slice(0, AI_MAX_PROPOSALS)) {
+    if (!p || typeof p !== 'object') continue;
+    const item = {};
+    for (const f of AI_PROPOSAL_FIELDS) item[f] = typeof p[f] === 'string' ? p[f].slice(0, 200) : '';
+    if (!['recategorize', 'add_category', 'add_rule'].includes(item.kind)) continue;
+    if (!['income', 'expense'].includes(item.type)) continue;
+    out.push(item);
+  }
+  return out;
+}
+
 // Best-effort throttle. Isolates are per-colo and short-lived, so this is a
 // speed bump against a runaway loop, not a billing guarantee — the guarantee is
 // the uid allowlist plus a spend limit set in the Anthropic console.
@@ -313,8 +377,11 @@ async function handleAiChat(request, env, origin, CORS) {
   const system = systemParts.map((text, i) =>
     i === 0 ? { type: 'text', text, cache_control: { type: 'ephemeral' } } : { type: 'text', text });
 
+  const allowProposals = !!(body && body.allowProposals === true);
+
   // Only these fields are forwarded. Anything else the caller sends — tools, a
   // different endpoint, extra headers — is dropped rather than proxied blind.
+  // The one tool there can be is the Worker's own.
   const upstream = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -328,6 +395,7 @@ async function handleAiChat(request, env, origin, CORS) {
       max_tokens: Math.min(Number(body && body.max_tokens) || AI_MAX_TOKENS, AI_MAX_TOKENS),
       ...(spec.effort ? { output_config: { effort: spec.effort } } : {}),
       ...(spec.fallback ? { fallbacks: 'default' } : {}),
+      ...(allowProposals ? { tools: [AI_PROPOSAL_TOOL] } : {}),
       ...(system.length ? { system } : {}),
       messages
     })
@@ -354,7 +422,24 @@ async function handleAiChat(request, env, origin, CORS) {
   if (data && data.stop_reason === 'refusal' && !text) {
     return json({ error: 'model_refused', upstreamStatus: upstream.status }, 502);
   }
-  return json({ text, model, usage: (data && data.usage) || null });
+
+  // The model is told to explain first and call the tool last, so its text is
+  // already the answer and there is no second round trip to finish the turn.
+  // A call cut off by max_tokens may carry a truncated list; it is dropped and
+  // said, rather than shown as if it were everything.
+  let proposals = [];
+  let proposalsCut = false;
+  if (allowProposals && Array.isArray(data && data.content)) {
+    const call = data.content.find(b => b && b.type === 'tool_use' && b.name === AI_PROPOSAL_TOOL.name);
+    if (call) {
+      if (data.stop_reason === 'max_tokens') proposalsCut = true;
+      else proposals = cleanProposals(call.input);
+    }
+  }
+  return json({
+    text, model, usage: (data && data.usage) || null,
+    ...(allowProposals ? { proposals, ...(proposalsCut ? { proposalsCut: true } : {}) } : {})
+  });
 }
 
 export default {

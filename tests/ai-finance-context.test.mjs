@@ -119,7 +119,7 @@ const summaryLine = (ctx, month) => ctx.split('\n').find(l => l.startsWith(month
         transactions: [{ id: 1, type: 'expense', desc: 'שורה|עם\nשבירה', amt: 5, cat: 'מזון', month: now }],
         fixedIncomes: [], fixedExpenses: [],
     });
-    assert.ok(rowsOf(ctx).some(r => r.endsWith('|שורה עם שבירה|')));
+    assert.ok(rowsOf(ctx).some(r => r.endsWith('|שורה עם שבירה||1')), 'the id is the last column');
 }
 
 // ── 6. The question goes out once, and the window opens on a user turn ──────

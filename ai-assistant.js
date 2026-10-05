@@ -50,6 +50,10 @@ class FinancialAIAssistant {
         this.container = null;
         this.settingsOpen = false;
         this.onAction = options.onAction || (() => {});
+        // Only the finance screen passes these: it owns the data and the save
+        // path. Elsewhere proposals are shown and carried over to it.
+        this.applyProposals = options.applyProposals || null;
+        this.undoProposals = options.undoProposals || null;
         // 'worker' | null-until-a-call-has-been-made.
         this.transport = null;
         this.hasAuth = false;
@@ -58,6 +62,7 @@ class FinancialAIAssistant {
         this._injectStyles();
         this._createDOM();
         this._bindEvents();
+        if (this.applyProposals) this._resumePendingProposals();
         // Cheap: firebase-config is already loaded on every non-demo page, and
         // getIdToken serves a cached token until it expires.
         this._authToken().then(token => {
@@ -297,6 +302,37 @@ class FinancialAIAssistant {
                 border-bottom-left-radius: 4px;
             }
             .ai-msg.assistant strong { color: hsl(142, 60%, 55%); }
+
+            /* Proposal card — functional first pass; the look is GPT's to set
+               (AGENTS.md, track B). Neutral on purpose: green and red mean
+               profit and loss in this app, not "applied" and "skipped". */
+            .ai-proposals {
+                align-self: stretch;
+                direction: rtl;
+                padding: 10px 12px;
+                border-radius: 12px;
+                background: hsl(220, 16%, 13%);
+                border: 1px solid hsl(220, 14%, 22%);
+                font-size: 0.8rem;
+                color: hsl(210, 20%, 88%);
+            }
+            .ai-proposals-title { font-weight: 600; margin-bottom: 6px; }
+            .ai-proposal {
+                display: flex;
+                gap: 8px;
+                align-items: flex-start;
+                padding: 6px 0;
+                border-top: 1px solid hsl(220, 14%, 18%);
+                cursor: pointer;
+            }
+            .ai-proposal input { margin-top: 3px; flex: none; }
+            .ai-proposal-reason { display: block; color: hsl(215, 12%, 55%); font-size: 0.72rem; }
+            .ai-proposal-new { color: hsl(215, 12%, 62%); font-size: 0.72rem; }
+            .ai-proposals-actions { display: flex; gap: 8px; margin-top: 8px; }
+            .ai-proposals-actions .ai-settings-save { width: auto; flex: 1; }
+            .ai-proposals-actions .ai-settings-save:disabled { opacity: 0.5; cursor: default; }
+            .ai-proposals-result { margin-top: 8px; color: hsl(215, 12%, 62%); font-size: 0.75rem; }
+            .ai-proposals-result:empty { display: none; }
 
             .ai-typing {
                 display: flex;
@@ -572,7 +608,19 @@ class FinancialAIAssistant {
                 ? await this._callClaudeAPI(text, token)
                 : await this._localAnalysis(text);
             typingEl.remove();
-            this._addMessage('assistant', response);
+            const reply = typeof response === 'string' ? { text: response } : response;
+            const proposals = Array.isArray(reply.proposals) ? reply.proposals : [];
+            this._addMessage('assistant', reply.text || (proposals.length ? 'הנה ההצעות שלי:' : ''));
+            if (proposals.length) {
+                this._renderProposals(proposals);
+                // The model reads its own past turns as plain text, so it is
+                // told here what it proposed — otherwise "why did you suggest
+                // that?" has nothing to refer to.
+                this.messages[this.messages.length - 1].content += '\n\n' + this._proposalsNote(proposals);
+            }
+            if (reply.proposalsCut) {
+                this._addMessage('assistant', 'רשימת ההצעות נחתכה באמצע ולא הוצגה. בקש פחות שינויים בבת אחת, למשל חודש אחד.');
+            }
         } catch (err) {
             typingEl.remove();
             // Errors we raised ourselves already say something actionable;
@@ -602,6 +650,145 @@ class FinancialAIAssistant {
 
     _escapeHTML(text) {
         return aiEscapeHTML(text);
+    }
+
+    // ---- Proposals (the assistant suggests, the user ticks, the screen applies) ----
+
+    _proposalLabel(p) {
+        const e = (v) => aiEscapeHTML(v);
+        const data = this.getFinanceData() || {};
+        const list = (p.type === 'income' ? data.incomeCategories : data.expenseCategories) || [];
+        const isNew = p.to_category && !list.includes(p.to_category.trim())
+            ? ' <span class="ai-proposal-new">(קטגוריה חדשה)</span>' : '';
+        const side = p.type === 'income' ? 'הכנסות' : 'הוצאות';
+
+        if (p.kind === 'recategorize') {
+            const tx = (data.transactions || []).find(t => String(t.id) === String(p.tx_id));
+            const what = tx
+                ? `${e(tx.desc || 'ללא תיאור')} · <bdi>${e(tx.month || '')}</bdi> · <bdi>₪${e(Math.round(Number(tx.amt) || 0).toLocaleString())}</bdi>`
+                : 'עסקה שלא נמצאה';
+            return `${what}<br>${e(p.from_category || 'ללא קטגוריה')} ← <strong>${e(p.to_category)}</strong>${isNew}`;
+        }
+        if (p.kind === 'add_category') return `קטגוריה חדשה ב${side}: <strong>${e(p.to_category)}</strong>`;
+        return `כלל לייבוא עתידי (${side}): תיאור שמכיל "${e(p.keyword)}" ← <strong>${e(p.to_category)}</strong>${isNew}`;
+    }
+
+    _proposalsNote(proposals) {
+        const line = (p) => p.kind === 'recategorize'
+            ? `recategorize ${p.tx_id}: ${p.from_category || '-'} → ${p.to_category}`
+            : p.kind === 'add_category'
+                ? `add_category ${p.type}: ${p.to_category}`
+                : `add_rule ${p.type}: "${p.keyword}" → ${p.to_category}`;
+        return `[הצעתי לאישור ${proposals.length} שינויים:\n${proposals.map(line).join('\n')}]`;
+    }
+
+    _renderProposals(proposals) {
+        const card = document.createElement('div');
+        card.className = 'ai-proposals';
+        card.innerHTML = `
+            <div class="ai-proposals-title">${proposals.length} הצעות לשינוי — סמן מה להחיל</div>
+            ${proposals.map((p, i) => `
+                <label class="ai-proposal">
+                    <input type="checkbox" data-i="${i}" checked>
+                    <span>${this._proposalLabel(p)}${p.reason ? `<span class="ai-proposal-reason">${aiEscapeHTML(p.reason)}</span>` : ''}</span>
+                </label>`).join('')}
+            <div class="ai-proposals-actions">
+                <button type="button" class="ai-settings-save" data-act="apply"></button>
+            </div>
+            <div class="ai-proposals-result" aria-live="polite"></div>`;
+        this.messagesContainer.appendChild(card);
+
+        const boxes = [...card.querySelectorAll('input[type=checkbox]')];
+        const applyBtn = card.querySelector('[data-act=apply]');
+        const result = card.querySelector('.ai-proposals-result');
+        const selected = () => boxes.filter(b => b.checked).map(b => proposals[Number(b.dataset.i)]);
+        const label = () => {
+            const n = selected().length;
+            applyBtn.disabled = n === 0;
+            applyBtn.textContent = this.applyProposals
+                ? `החל ${n} נבחרים`
+                : `פתח במסך הכספים להחלת ${n}`;
+        };
+        boxes.forEach(b => b.addEventListener('change', label));
+        label();
+
+        applyBtn.addEventListener('click', () => {
+            const chosen = selected();
+            if (!chosen.length) return;
+
+            // Away from the finance screen there is nothing here that can save.
+            // The choice travels with the tab, and the finance screen picks it
+            // up and asks again — the user still presses "apply" over there.
+            if (!this.applyProposals) {
+                try {
+                    sessionStorage.setItem('ai_pending_proposals', JSON.stringify({ at: Date.now(), proposals: chosen }));
+                } catch (e) {
+                    result.textContent = 'לא הצלחתי להעביר את ההצעות. פתח את מסך הכספים ובקש אותן שם.';
+                    return;
+                }
+                window.location.assign('finance.html');
+                return;
+            }
+
+            const outcome = this.applyProposals(chosen) || { applied: [], skipped: [], undo: [] };
+            boxes.forEach(b => { b.disabled = true; });
+            applyBtn.remove();
+
+            const lines = [`הוחלו ${outcome.applied.length} מתוך ${chosen.length}.`];
+            const txs = (this.getFinanceData() || {}).transactions || [];
+            const nameOf = (p) => {
+                if (p.kind !== 'recategorize') return p.keyword ? `"${p.keyword}"` : (p.to_category || '');
+                const tx = txs.find(t => String(t.id) === String(p.tx_id));
+                return tx ? (tx.desc || 'עסקה') : 'עסקה';
+            };
+            outcome.skipped.forEach(s => lines.push(`דולג: ${nameOf(s.proposal)} — ${s.reason}`));
+            result.innerHTML = lines.map(aiEscapeHTML).join('<br>');
+
+            if (outcome.undo.length && this.undoProposals) {
+                const undoBtn = document.createElement('button');
+                undoBtn.type = 'button';
+                undoBtn.className = 'ai-settings-save';
+                undoBtn.textContent = 'בטל את השינויים האלה';
+                undoBtn.addEventListener('click', () => {
+                    const r = this.undoProposals(outcome.undo) || { reverted: 0, kept: 0 };
+                    undoBtn.remove();
+                    result.innerHTML += '<br>' + aiEscapeHTML(r.kept
+                        ? `בוטלו ${r.reverted}. ${r.kept} נשארו כי השתנו או נמצאים בשימוש מאז.`
+                        : `בוטל. הנתונים חזרו למצבם הקודם.`);
+                });
+                card.querySelector('.ai-proposals-actions').appendChild(undoBtn);
+            }
+            this._scrollToBottom();
+        });
+
+        this._scrollToBottom();
+    }
+
+    // Proposals carried over from another screen (see _renderProposals). Read
+    // once and removed, and only if recent — an old list in a tab left open
+    // overnight describes data that may have moved on.
+    _resumePendingProposals() {
+        let pending = null;
+        try {
+            const raw = sessionStorage.getItem('ai_pending_proposals');
+            sessionStorage.removeItem('ai_pending_proposals');
+            pending = raw ? JSON.parse(raw) : null;
+        } catch (e) { return; }
+        if (!pending || !Array.isArray(pending.proposals) || !pending.proposals.length) return;
+        if (Date.now() - (pending.at || 0) > 30 * 60 * 1000) return;
+
+        // The finance data loads after this constructor runs; the labels need it.
+        const show = () => {
+            if (!this.isOpen) this.toggle();
+            this._addMessage('assistant', 'אלה ההצעות שבחרת במסך הקודם. כאן אפשר להחיל אותן:');
+            this._renderProposals(pending.proposals);
+        };
+        const ready = () => ((this.getFinanceData() || {}).transactions || []).length > 0;
+        if (ready()) { show(); return; }
+        let tries = 0;
+        const wait = setInterval(() => {
+            if (ready() || ++tries > 40) { clearInterval(wait); show(); }
+        }, 250);
     }
 
     _formatResponse(text) {
@@ -833,7 +1020,7 @@ ${Object.entries(benchmarksInfo.indices).map(([k, v]) => `${v.label} (${k}): ${v
 
         const rows = ordered.map(({ t, month, day }) => [
             month, day, typeLabel[t.type] || clean(t.type), Number(t.amt) || 0,
-            clean(t.cat), clean(t.desc), t.titheExempt ? 'פטור ממעשר' : ''
+            clean(t.cat), clean(t.desc), t.titheExempt ? 'פטור ממעשר' : '', clean(t.id)
         ].join('|'));
 
         let kept = 0, used = 0;
@@ -906,7 +1093,7 @@ ${catBlock}
 -- עסקאות --
 ${coverage}${range}
 "חודש" הוא החודש שהאפליקציה שייכה אליו את העסקה, והוא לא תמיד החודש של תאריך העסקה.
-חודש|תאריך עסקה|סוג|סכום|קטגוריה|תיאור|הערה
+חודש|תאריך עסקה|סוג|סכום|קטגוריה|תיאור|הערה|מזהה
 ${shown.join('\n')}
 
 תקציבים: ${JSON.stringify(financeData.budgets || {})}
@@ -991,6 +1178,14 @@ ${shown.join('\n')}
 - אם יש נתוני השקעות, נתח ביצועים, הקצאה, וחשיפה למט"ח
 - אם שדה מסוים ריק, ציין זאת למשתמש והמלץ להוסיף נתונים
 - אם TWR מראה '—' — ציין למשתמש שעליו לפתוח את טאב "סיכום" פעם אחת כדי שה-TWR יחושב וייקושש
+
+הצעת שינויים (הכלי propose_changes):
+- השתמש בו כשהמשתמש מבקש לתקן, לסדר או להציע סיווגים, או כשאתה מצביע על עסקאות שמסווגות לא נכון ומציע לתקן
+- כתוב קודם הסבר קצר, ורק אז קרא לכלי — כצעד האחרון בתשובה
+- שום דבר לא משתנה עד שהמשתמש מסמן ומאשר במסך. אל תכתוב שביצעת שינוי; כתוב שהצעת
+- ב-recategorize: tx_id מעמודת המזהה, ו-from_category בדיוק כפי שמופיע בשורה (ריק אם אין קטגוריה)
+- קטגוריה שעוד לא קיימת נוצרת יחד עם השינוי — אין צורך בהצעת add_category נפרדת עבורה
+- כלל (add_rule) חל רק על ייבוא עתידי. עסקאות קיימות שצריכות לעבור — הצע אותן כ-recategorize
 ${financeSection}${noData}`;
 
         const payload = {
@@ -998,6 +1193,9 @@ ${financeSection}${noData}`;
             // Room for the reply plus the thinking the 5.5 models always do,
             // which is billed out of the same budget. The Worker clamps to this.
             max_tokens: 8192,
+            // Lets the Worker attach its one tool. Nothing is written by it;
+            // proposals come back for the user to tick.
+            allowProposals: true,
             system: dataSection ? [stableBlock, dataSection] : [stableBlock],
             messages: this._historyForApi(userMessage)
         };
@@ -1071,7 +1269,7 @@ ${financeSection}${noData}`;
         }
     }
 
-    /** @returns {Promise<string|null>} text, or null when the Worker is unreachable. */
+    /** @returns {Promise<{text, proposals, proposalsCut}|null>} null when the Worker is unreachable. */
     async _viaWorker(payload, token) {
         const endpoint = (window.FTData && window.FTData.aiApi)
             ? window.FTData.aiApi()
@@ -1096,7 +1294,11 @@ ${financeSection}${noData}`;
             this.transport = 'worker';
             this._updateStatus();
             const data = await response.json();
-            return data.text || '';
+            return {
+                text: data.text || '',
+                proposals: Array.isArray(data.proposals) ? data.proposals : [],
+                proposalsCut: !!data.proposalsCut
+            };
         }
 
         const detail = await response.json().catch(() => ({}));
