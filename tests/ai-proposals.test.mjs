@@ -120,4 +120,27 @@ const snapshot = (d) => JSON.stringify(d);
     assert.equal(r.kept, 2);
 }
 
+// ── 7. Undo does not delete a rule the user edited in place ────────────────
+// Found by GPT in the relay round: editing a rule in finance.html keeps its id
+// and rewrites its fields (updateCategoryRule), so matching on id alone deleted
+// the user's own rule and reported it as reverted.
+{
+    const data = fresh();
+    const out = apply(data, [P({ kind: 'add_rule', keyword: 'נטפליקס', to_category: 'בילויים' })]);
+    const rule = data.categoryRules.find(r => r.keyword === 'נטפליקס');
+    rule.keyword = 'דיסני';                         // the user edits it on the rules screen
+    rule.category = 'קניות';
+    const r = undo(data, out.undo);
+    assert.ok(data.categoryRules.some(x => x.keyword === 'דיסני' && x.category === 'קניות'),
+        'the edited rule must survive');
+    assert.equal(r.reverted, 0);
+    assert.equal(r.kept, 1);
+
+    // Untouched, the same undo still removes it.
+    const data2 = fresh();
+    const out2 = apply(data2, [P({ kind: 'add_rule', keyword: 'נטפליקס', to_category: 'בילויים' })]);
+    assert.equal(undo(data2, out2.undo).reverted, 1);
+    assert.equal(snapshot(data2), snapshot(fresh()));
+}
+
 console.log('✓ ai proposals: three kinds, stale guard, honest undo');

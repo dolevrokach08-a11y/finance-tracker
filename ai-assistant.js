@@ -303,35 +303,63 @@ class FinancialAIAssistant {
             }
             .ai-msg.assistant strong { color: hsl(142, 60%, 55%); }
 
-            /* Proposal card — functional first pass; the look is GPT's to set
-               (AGENTS.md, track B). Neutral on purpose: green and red mean
-               profit and loss in this app, not "applied" and "skipped". */
+            /* Proposal card. Spec from GPT's relay round (2026-10-06): nothing
+               ticked on open, select/clear all as deliberate actions, a bounded
+               list with header and footer that stay put, and the outcome shown on
+               each row. It follows the panel, which is dark in both themes; the
+               action uses the neutral secondary accent, because green and red
+               mean profit and loss in this app. */
             .ai-proposals {
                 align-self: stretch;
                 direction: rtl;
-                padding: 10px 12px;
                 border-radius: 12px;
                 background: hsl(220, 16%, 13%);
                 border: 1px solid hsl(220, 14%, 22%);
                 font-size: 0.8rem;
                 color: hsl(210, 20%, 88%);
+                overflow: hidden;
             }
-            .ai-proposals-title { font-weight: 600; margin-bottom: 6px; }
-            .ai-proposal {
+            .ai-proposals-head, .ai-proposals-foot {
                 display: flex;
+                align-items: center;
                 gap: 8px;
-                align-items: flex-start;
-                padding: 6px 0;
-                border-top: 1px solid hsl(220, 14%, 18%);
-                cursor: pointer;
+                padding: 8px 12px;
+                background: hsl(220, 16%, 15%);
             }
+            .ai-proposals-head { border-bottom: 1px solid hsl(220, 14%, 20%); flex-wrap: wrap; }
+            .ai-proposals-foot { border-top: 1px solid hsl(220, 14%, 20%); flex-wrap: wrap; }
+            .ai-proposals-title { font-weight: 600; flex: 1; min-width: 10em; }
+            .ai-proposals-link {
+                background: none; border: none; padding: 2px 4px; cursor: pointer;
+                color: var(--accent-secondary, #6c8cff); font: inherit; font-size: 0.75rem;
+            }
+            .ai-proposals-link:disabled { color: hsl(215, 12%, 45%); cursor: default; }
+            .ai-proposals-list { max-height: 240px; overflow-y: auto; padding: 0 12px; }
+            .ai-proposal {
+                display: flex; gap: 8px; align-items: flex-start;
+                padding: 7px 0; border-top: 1px solid hsl(220, 14%, 18%); cursor: pointer;
+            }
+            .ai-proposal:first-child { border-top: none; }
             .ai-proposal input { margin-top: 3px; flex: none; }
-            .ai-proposal-reason { display: block; color: hsl(215, 12%, 55%); font-size: 0.72rem; }
+            .ai-proposal-body { min-width: 0; flex: 1; }
+            .ai-proposal-reason {
+                display: block; color: hsl(215, 12%, 58%); font-size: 0.72rem;
+                white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            }
             .ai-proposal-new { color: hsl(215, 12%, 62%); font-size: 0.72rem; }
-            .ai-proposals-actions { display: flex; gap: 8px; margin-top: 8px; }
-            .ai-proposals-actions .ai-settings-save { width: auto; flex: 1; }
-            .ai-proposals-actions .ai-settings-save:disabled { opacity: 0.5; cursor: default; }
-            .ai-proposals-result { margin-top: 8px; color: hsl(215, 12%, 62%); font-size: 0.75rem; }
+            .ai-proposal-status { display: block; margin-top: 2px; font-size: 0.72rem; color: hsl(210, 20%, 80%); }
+            .ai-proposal-status:empty { display: none; }
+            .ai-proposals-count { flex: 1; color: hsl(215, 12%, 62%); font-size: 0.75rem; }
+            .ai-proposals-action {
+                padding: 7px 14px; border-radius: 8px; border: none; cursor: pointer;
+                background: var(--accent-secondary, #6c8cff); color: #fff;
+                font: inherit; font-size: 0.78rem; font-weight: 600;
+            }
+            .ai-proposals-action.secondary {
+                background: none; color: hsl(210, 20%, 88%); border: 1px solid hsl(220, 14%, 30%);
+            }
+            .ai-proposals-action:disabled { opacity: 0.45; cursor: default; }
+            .ai-proposals-result { padding: 0 12px 8px; color: hsl(215, 12%, 62%); font-size: 0.75rem; }
             .ai-proposals-result:empty { display: none; }
 
             .ai-typing {
@@ -682,43 +710,60 @@ class FinancialAIAssistant {
         return `[הצעתי לאישור ${proposals.length} שינויים:\n${proposals.map(line).join('\n')}]`;
     }
 
-    _renderProposals(proposals) {
+    _renderProposals(proposals, { title } = {}) {
         const card = document.createElement('div');
         card.className = 'ai-proposals';
+        const n = proposals.length;
         card.innerHTML = `
-            <div class="ai-proposals-title">${proposals.length} הצעות לשינוי — סמן מה להחיל</div>
-            ${proposals.map((p, i) => `
-                <label class="ai-proposal">
-                    <input type="checkbox" data-i="${i}" checked>
-                    <span>${this._proposalLabel(p)}${p.reason ? `<span class="ai-proposal-reason">${aiEscapeHTML(p.reason)}</span>` : ''}</span>
-                </label>`).join('')}
-            <div class="ai-proposals-actions">
-                <button type="button" class="ai-settings-save" data-act="apply"></button>
+            <div class="ai-proposals-head">
+                <span class="ai-proposals-title">${aiEscapeHTML(title || `${n} הצעות לשינוי`)}</span>
+                <button type="button" class="ai-proposals-link" data-act="all">בחר הכול</button>
+                <button type="button" class="ai-proposals-link" data-act="none">נקה הכול</button>
+            </div>
+            <div class="ai-proposals-list">
+                ${proposals.map((p, i) => `
+                    <label class="ai-proposal">
+                        <input type="checkbox" data-i="${i}">
+                        <span class="ai-proposal-body">${this._proposalLabel(p)}${p.reason
+                            ? `<span class="ai-proposal-reason" title="${aiEscapeHTML(p.reason)}">${aiEscapeHTML(p.reason)}</span>` : ''}<span class="ai-proposal-status" data-status="${i}"></span></span>
+                    </label>`).join('')}
+            </div>
+            <div class="ai-proposals-foot">
+                <span class="ai-proposals-count" aria-live="polite"></span>
+                <button type="button" class="ai-proposals-action" data-act="apply"></button>
             </div>
             <div class="ai-proposals-result" aria-live="polite"></div>`;
         this.messagesContainer.appendChild(card);
 
         const boxes = [...card.querySelectorAll('input[type=checkbox]')];
         const applyBtn = card.querySelector('[data-act=apply]');
+        const linkBtns = [...card.querySelectorAll('.ai-proposals-link')];
+        const countEl = card.querySelector('.ai-proposals-count');
         const result = card.querySelector('.ai-proposals-result');
+        const foot = card.querySelector('.ai-proposals-foot');
         const selected = () => boxes.filter(b => b.checked).map(b => proposals[Number(b.dataset.i)]);
-        const label = () => {
-            const n = selected().length;
-            applyBtn.disabled = n === 0;
-            applyBtn.textContent = this.applyProposals
-                ? `החל ${n} נבחרים`
-                : `פתח במסך הכספים להחלת ${n}`;
+
+        // Nothing is ticked on open. This is the one path by which the
+        // assistant causes a write, and a single click must not apply forty
+        // changes the user never looked at.
+        const refresh = () => {
+            const k = selected().length;
+            countEl.textContent = `נבחרו ${k} מתוך ${n}`;
+            applyBtn.disabled = k === 0;
+            applyBtn.textContent = this.applyProposals ? 'החל' : 'המשך במסך הכספים';
         };
-        boxes.forEach(b => b.addEventListener('change', label));
-        label();
+        boxes.forEach(b => b.addEventListener('change', refresh));
+        card.querySelector('[data-act=all]').addEventListener('click', () => { boxes.forEach(b => { b.checked = true; }); refresh(); });
+        card.querySelector('[data-act=none]').addEventListener('click', () => { boxes.forEach(b => { b.checked = false; }); refresh(); });
+        refresh();
 
         applyBtn.addEventListener('click', () => {
             const chosen = selected();
             if (!chosen.length) return;
 
             // Away from the finance screen there is nothing here that can save.
-            // The choice travels with the tab, and the finance screen picks it
-            // up and asks again — the user still presses "apply" over there.
+            // The list travels with the tab, and the finance screen shows it
+            // again, unticked — the move itself applies nothing.
             if (!this.applyProposals) {
                 try {
                     sessionStorage.setItem('ai_pending_proposals', JSON.stringify({ at: Date.now(), proposals: chosen }));
@@ -726,37 +771,45 @@ class FinancialAIAssistant {
                     result.textContent = 'לא הצלחתי להעביר את ההצעות. פתח את מסך הכספים ובקש אותן שם.';
                     return;
                 }
+                applyBtn.disabled = true;
+                applyBtn.textContent = 'מעביר למסך הכספים…';
+                linkBtns.forEach(b => { b.disabled = true; });
+                boxes.forEach(b => { b.disabled = true; });
                 window.location.assign('finance.html');
                 return;
             }
 
             const outcome = this.applyProposals(chosen) || { applied: [], skipped: [], undo: [] };
             boxes.forEach(b => { b.disabled = true; });
-            applyBtn.remove();
+            linkBtns.forEach(b => { b.disabled = true; });
 
-            const lines = [`הוחלו ${outcome.applied.length} מתוך ${chosen.length}.`];
-            const txs = (this.getFinanceData() || {}).transactions || [];
-            const nameOf = (p) => {
-                if (p.kind !== 'recategorize') return p.keyword ? `"${p.keyword}"` : (p.to_category || '');
-                const tx = txs.find(t => String(t.id) === String(p.tx_id));
-                return tx ? (tx.desc || 'עסקה') : 'עסקה';
+            // The outcome goes on the row it belongs to, in words: colour alone
+            // would say nothing, and green and red are taken.
+            const mark = (i, text) => {
+                const el = card.querySelector(`[data-status="${i}"]`);
+                if (el) el.textContent = text;
             };
-            outcome.skipped.forEach(s => lines.push(`דולג: ${nameOf(s.proposal)} — ${s.reason}`));
-            result.innerHTML = lines.map(aiEscapeHTML).join('<br>');
+            outcome.applied.forEach(a => mark(proposals.indexOf(a.proposal), '✓ הוחל'));
+            outcome.skipped.forEach(s => mark(proposals.indexOf(s.proposal), `⤼ דולג — ${s.reason}`));
+            boxes.forEach(b => { if (!b.checked) mark(b.dataset.i, '— לא נבחר'); });
+
+            countEl.textContent = `הוחלו ${outcome.applied.length} מתוך ${chosen.length} שנבחרו`
+                + (outcome.skipped.length ? ` · ${outcome.skipped.length} דולגו` : '');
+            applyBtn.remove();
 
             if (outcome.undo.length && this.undoProposals) {
                 const undoBtn = document.createElement('button');
                 undoBtn.type = 'button';
-                undoBtn.className = 'ai-settings-save';
+                undoBtn.className = 'ai-proposals-action secondary';
                 undoBtn.textContent = 'בטל את השינויים האלה';
                 undoBtn.addEventListener('click', () => {
                     const r = this.undoProposals(outcome.undo) || { reverted: 0, kept: 0 };
                     undoBtn.remove();
-                    result.innerHTML += '<br>' + aiEscapeHTML(r.kept
-                        ? `בוטלו ${r.reverted}. ${r.kept} נשארו כי השתנו או נמצאים בשימוש מאז.`
-                        : `בוטל. הנתונים חזרו למצבם הקודם.`);
+                    result.textContent = r.kept
+                        ? `בוטלו ${r.reverted}. ${r.kept} נשארו, כי שונו ביד או נמצאים בשימוש מאז.`
+                        : 'בוטל. הנתונים חזרו למצבם הקודם.';
                 });
-                card.querySelector('.ai-proposals-actions').appendChild(undoBtn);
+                foot.appendChild(undoBtn);
             }
             this._scrollToBottom();
         });
@@ -780,8 +833,8 @@ class FinancialAIAssistant {
         // The finance data loads after this constructor runs; the labels need it.
         const show = () => {
             if (!this.isOpen) this.toggle();
-            this._addMessage('assistant', 'אלה ההצעות שבחרת במסך הקודם. כאן אפשר להחיל אותן:');
-            this._renderProposals(pending.proposals);
+            this._addMessage('assistant', 'אלה ההצעות שבחרת במסך הקודם. שום דבר עוד לא הוחל — סמן שוב את מה שתרצה להחיל.');
+            this._renderProposals(pending.proposals, { title: 'הצעות שהועברו — נדרשת בדיקה מחדש' });
         };
         const ready = () => ((this.getFinanceData() || {}).transactions || []).length > 0;
         if (ready()) { show(); return; }

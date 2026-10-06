@@ -93,7 +93,10 @@
             const created = ensureCategory(data, p.type, category, undo);
             const rule = { id: Date.now() + (ruleSeq++), keyword, type: p.type, category, earner: null };
             data.categoryRules.push(rule);
-            undo.push({ op: 'rule_added', ruleId: rule.id });
+            // The whole rule, not just its id: editing a rule on the finance
+            // screen keeps the id and rewrites the fields, so the id alone
+            // cannot tell the assistant's rule from the user's edit of it.
+            undo.push({ op: 'rule_added', ruleId: rule.id, rule: { ...rule } });
             applied.push({ proposal: p, createdCategory: created });
         }
 
@@ -103,8 +106,8 @@
     /**
      * Reverses an apply(), newest step first. A step is only reverted when the
      * data still looks the way apply() left it — a transaction recategorized by
-     * hand in between keeps the user's choice, and a category that something
-     * now uses stays.
+     * hand in between keeps the user's choice, a rule edited by hand stays, and
+     * a category that something now uses stays.
      */
     function undo(data, steps) {
         let reverted = 0, kept = 0;
@@ -115,9 +118,12 @@
                 const tx = (data.transactions || []).find(t => t.id === s.txId);
                 if (tx && (tx.cat || '') === s.to) { tx.cat = s.from; reverted++; } else kept++;
             } else if (s.op === 'rule_added') {
-                const before = (data.categoryRules || []).length;
-                data.categoryRules = (data.categoryRules || []).filter(r => r.id !== s.ruleId);
-                if (data.categoryRules.length < before) reverted++; else kept++;
+                const rules = data.categoryRules || [];
+                const idx = rules.findIndex(r => r.id === s.ruleId);
+                const r = rules[idx];
+                const untouched = r && s.rule &&
+                    ['keyword', 'type', 'category', 'earner'].every(k => (r[k] ?? null) === (s.rule[k] ?? null));
+                if (untouched) { rules.splice(idx, 1); reverted++; } else kept++;
             } else if (s.op === 'category_added') {
                 const list = listFor(data, s.type);
                 const inUse = (data.transactions || []).some(t => t.type === s.type && t.cat === s.name) ||
