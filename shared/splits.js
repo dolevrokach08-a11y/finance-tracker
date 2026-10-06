@@ -48,11 +48,12 @@
         TA: 'Asia/Jerusalem', L: 'Europe/London', AS: 'Europe/Amsterdam',
         DE: 'Europe/Berlin', F: 'Europe/Berlin', PA: 'Europe/Paris', MI: 'Europe/Rome',
         SW: 'Europe/Zurich', TO: 'America/Toronto', AX: 'Australia/Sydney',
-        HK: 'Asia/Hong_Kong', T: 'Asia/Tokyo', SI: 'Asia/Singapore',
+        HK: 'Asia/Hong_Kong', T: 'Asia/Tokyo', SI: 'Asia/Singapore', NZ: 'Pacific/Auckland',
     };
 
-    // The choices the dialog offers. A zone outside this list is still valid on a
-    // record (validate() accepts any IANA zone); the dialog adds it when it meets one.
+    // The shortlist the dialog offers. It is not the limit: the dialog also takes
+    // any IANA zone typed in by hand (validate() accepts any zone Intl knows), so an
+    // exchange missing from here never forces a wrong date.
     const EXCHANGES = [
         { tz: 'America/New_York', label: 'ניו יורק (NYSE / Nasdaq)' },
         { tz: 'Asia/Jerusalem', label: 'תל אביב' },
@@ -67,6 +68,7 @@
         { tz: 'Asia/Hong_Kong', label: 'הונג קונג' },
         { tz: 'Asia/Tokyo', label: 'טוקיו' },
         { tz: 'Asia/Singapore', label: 'סינגפור' },
+        { tz: 'Pacific/Auckland', label: 'אוקלנד (NZX)' },
         { tz: 'UTC', label: 'UTC' },
     ];
 

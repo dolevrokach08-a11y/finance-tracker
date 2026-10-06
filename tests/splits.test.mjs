@@ -120,6 +120,14 @@ check('the same trade under a UTC guess would have been 10', S.adjustTrade(bhpTr
 const cspxTrade = { ...A, symbol: 'CSPX', assetId: 9, date: '2026-10-06T02:00:00.000Z' };
 const CSPX = { ...SPLIT, id: 'cspx', symbol: 'CSPX', assetId: 9 };
 check('CSPX recorded as London keeps a 02:00Z trade on the 6th (30)', S.adjustTrade(cspxTrade, [{ ...CSPX, tz: 'Europe/London' }]).shares, 30);
+// GPT round 4: a closed list still strands an exchange that is not on it. AIR.NZ at
+// 10:30 Auckland on 6 Oct (21:30Z on the 5th) is the new basis; under UTC it read as the 5th.
+const AIR = { ...SPLIT, id: 'air', symbol: 'AIR.NZ', assetId: 10 };
+const airTrade = { ...A, symbol: 'AIR.NZ', assetId: 10, date: '2026-10-05T21:30:00.000Z' };
+check('.NZ maps to Auckland', S.exchangeTimeZone('AIR.NZ'), 'Pacific/Auckland');
+check('AIR.NZ at 10:30 Auckland on the split day → new basis, 30', S.adjustTrade(airTrade, [AIR]).shares, 30);
+check('a zone typed by hand (not on the shortlist) is accepted and used',
+  [S.validate({ ...AIR, tz: 'America/Chicago' }).length, S.adjustTrade(airTrade, [{ ...AIR, tz: 'America/Chicago' }]).shares], [0, 10]); // 16:30 on the 5th
 check('every offered exchange is a valid zone', S.EXCHANGES.every(x => S.validate({ ...SPLIT, tz: x.tz }).length === 0), true);
 check('every suffix guess is among the offered exchanges', ['ETHA', 'X.TA', 'X.L', 'X.AS', 'X.DE', 'X.PA', 'X.MI', 'X.SW', 'X.TO', 'X.AX', 'X.HK', 'X.T', 'X.SI', 'X.ZZ']
   .every(x => S.EXCHANGES.some(e => e.tz === S.exchangeTimeZone(x))), true);
@@ -221,7 +229,10 @@ check('applying a split closes the edit form when it is open on that holding',
 check('the split is a row action, not a field of the edit form',
   page.includes('onclick="showSplitModal(${holding.id})"') && !page.includes('split-holding-btn'), true);
 check('the recorded zone is the one picked in the dialog, not the guess',
-  /tz: document\.getElementById\('split-tz'\)\.value/.test(page) && page.includes('<select id="split-tz">'), true);
+  /tz: readSplitTimeZone\(\)/.test(page) && page.includes('<select id="split-tz">'), true);
+check('the dialog offers any IANA zone beyond the shortlist ("אחר")',
+  page.includes('<option value="__other">') && page.includes('id="split-tz-other"') &&
+  /function readSplitTimeZone[\s\S]{0,300}split-tz-other/.test(page), true);
 check('the dialog is announced as a modal dialog with a name',
   /role="dialog" aria-modal="true" aria-labelledby="split-modal-title"/.test(page), true);
 

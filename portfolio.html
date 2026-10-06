@@ -10793,13 +10793,28 @@ ${msg}`, 'warning');
             return portfolio.holdings.find(h => h.id === splitHoldingId) || null;
         }
 
+        // The exchange shortlist, or — under "אחר" — any IANA zone typed by hand.
+        // An unknown zone fails FTSplits.validate and the preview says so.
+        function readSplitTimeZone() {
+            const sel = document.getElementById('split-tz');
+            if (sel.value !== '__other') return sel.value;
+            return document.getElementById('split-tz-other').value.trim();
+        }
+
+        function syncSplitTzOther() {
+            const other = document.getElementById('split-tz-other-group');
+            const isOther = document.getElementById('split-tz').value === '__other';
+            other.style.display = isOther ? '' : 'none';
+            if (isOther) document.getElementById('split-tz-other').focus();
+        }
+
         function readSplitForm(holding) {
             return {
                 id: 'split_' + Date.now(),
                 symbol: holding.symbol,
                 assetId: holding.id,
                 date: document.getElementById('split-date').value,
-                tz: document.getElementById('split-tz').value,
+                tz: readSplitTimeZone(),
                 from: parseFloat(document.getElementById('split-from').value),
                 to: parseFloat(document.getElementById('split-to').value),
             };
@@ -10883,6 +10898,9 @@ ${msg}`, 'warning');
                 : [{ tz: guessTz, label: guessTz }, ...window.FTSplits.EXCHANGES];
             const tzOptions = exchanges.map(x =>
                 `<option value="${splitEsc(x.tz)}"${x.tz === guessTz ? ' selected' : ''}>${splitEsc(x.label)}</option>`).join('');
+            let zones = [];
+            try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) { /* older engines: free text still works */ }
+            const allZones = zones.map(z => `<option value="${splitEsc(z)}"></option>`).join('');
             const tzLabel = tz => (window.FTSplits.EXCHANGES.find(x => x.tz === tz) || { label: tz }).label;
             const existingHtml = existing.length === 0 ? '' : `
                 <div style="margin-bottom: 15px;">
@@ -10912,7 +10930,11 @@ ${msg}`, 'warning');
                     </div>
                     <div class="form-group">
                         <label for="split-tz">הבורסה שבה הנייר נסחר</label>
-                        <select id="split-tz">${tzOptions}</select>
+                        <select id="split-tz">${tzOptions}<option value="__other">אחר — אזור זמן לפי שם…</option></select>
+                        <div id="split-tz-other-group" style="display: none; margin-top: 8px;">
+                            <input type="text" id="split-tz-other" list="split-tz-list" placeholder="Pacific/Auckland" aria-label="אזור זמן של הבורסה" autocomplete="off" spellcheck="false" style="width: 100%; box-sizing: border-box; direction: ltr;">
+                            <datalist id="split-tz-list">${allZones}</datalist>
+                        </div>
                         <small style="color: var(--text-secondary); font-size: 0.8rem;">נבחרה לפי הסימול, וזה רק ניחוש. בדוק מול הברוקר: אותו נייר יכול להיסחר בכמה בורסות.</small>
                     </div>
                     <div class="form-group">
@@ -10938,9 +10960,9 @@ ${msg}`, 'warning');
             modal.addEventListener('keydown', splitKeydown);
 
             document.getElementById('split-date').value = localToday();
-            ['split-date', 'split-from', 'split-to', 'split-tz'].forEach(id =>
+            ['split-date', 'split-from', 'split-to', 'split-tz-other'].forEach(id =>
                 document.getElementById(id).addEventListener('input', renderSplitPreview));
-            document.getElementById('split-tz').addEventListener('change', renderSplitPreview);
+            document.getElementById('split-tz').addEventListener('change', () => { syncSplitTzOther(); renderSplitPreview(); });
             renderSplitPreview();
             document.getElementById('split-date').focus();
         }
