@@ -39,6 +39,7 @@
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
+    <script src="shared/splits.js" defer></script>
     <script src="shared/portfolio-twr.js" defer></script>
     <script src="shared/load-script.js"></script>
     <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
@@ -2854,9 +2855,10 @@
                             <small style="color: var(--text-secondary); font-size: 0.8rem; display: block; margin-top: 2px;">סמן אם מס רווחי ההון מחושב לאחר הצמדה למדד</small>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px;">
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                         <button onclick="addHolding()" class="btn btn-success">✅ שמור</button>
                         <button onclick="hideAddHoldingForm()" class="btn" style="background: var(--text-muted); color: white;">❌ ביטול</button>
+                        <button id="split-holding-btn" type="button" onclick="showSplitModal()" class="btn" style="display: none;">⇅ איחוד / פיצול מניות</button>
                     </div>
                 </div>
 
@@ -7875,6 +7877,7 @@ function calculateTWRv3(startDate = null) {
                 withdrawals: portfolio.withdrawals || [],
                 purchases: portfolio.purchases || [],
                 sales: portfolio.sales || [],
+                splits: portfolio.splits || [],
                 snapshots: portfolio.snapshots || [],
                 cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
                 transactions: portfolio.transactions || [],
@@ -8174,6 +8177,7 @@ function calculateTWRv3(startDate = null) {
         function showAddHoldingForm() {
             editingHoldingId = null; // Reset editing mode
             document.getElementById('add-holding-form').style.display = 'block';
+            document.getElementById('split-holding-btn').style.display = 'none';
             // הצג שדה תאריך רק בהוספה חדשה
             const pdGroup = document.getElementById('purchase-date-group');
             if (pdGroup) pdGroup.style.display = '';
@@ -8186,6 +8190,7 @@ function calculateTWRv3(startDate = null) {
         
         function hideAddHoldingForm() {
             document.getElementById('add-holding-form').style.display = 'none';
+            document.getElementById('split-holding-btn').style.display = 'none';
             editingHoldingId = null;
             
             // Clear form
@@ -8553,6 +8558,7 @@ function calculateTWRv3(startDate = null) {
             
             // Show form
             document.getElementById('add-holding-form').style.display = 'block';
+            document.getElementById('split-holding-btn').style.display = '';
             
             // Scroll to form
             document.getElementById('add-holding-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -10684,21 +10690,26 @@ ${msg}`, 'warning');
             }
 
             // מצא את כל הקניות עבור החזקה זו
-            const purchases = portfolio.purchases.filter(p =>
+            const rawPurchases = portfolio.purchases.filter(p =>
                 (p.assetId && p.assetId === holding.id) ||
                 (!p.assetId && p.symbol === holding.symbol && p.assetType !== 'bonds')
             );
 
-            if (purchases.length === 0) {
+            if (rawPurchases.length === 0) {
                 console.log(`⚠️ No purchases found for ${symbol}`);
                 return;
             }
 
             // מצא את כל המכירות עבור החזקה זו
-            const sales = (portfolio.sales || []).filter(s =>
+            const rawSales = (portfolio.sales || []).filter(s =>
                 (s.assetId && s.assetId === holding.id) ||
                 (!s.assetId && s.symbol === holding.symbol && s.assetType !== 'bonds')
             );
+
+            // Trades stay as the broker wrote them; a split restates the older ones
+            // in today's units here (shared/splits.js). Amounts are untouched.
+            const purchases = window.FTSplits.adjustTrades(rawPurchases, portfolio.splits || []);
+            const sales = window.FTSplits.adjustTrades(rawSales, portfolio.splits || []);
 
             // סך כל המניות שנקנו + ממוצע משוקלל
             let totalSharesBought = 0;
@@ -10739,6 +10750,217 @@ ${msg}`, 'warning');
             if (currentShares <= 0) {
                 console.log(`🗑️ Holding ${symbol} has 0 shares after recalc`);
             }
+        }
+
+        // ===========================================
+        // SPLITS / REVERSE SPLITS
+        // ===========================================
+        // A split is recorded as an event (portfolio.splits) and never rewrites a
+        // purchase. The holding is updated once, here, by FTSplits.planHoldingChange;
+        // recalcHoldingFromPurchases reads the same events, so a later recalc agrees.
+
+        function splitEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // The same trade filters recalcHoldingFromPurchases uses, unadjusted.
+        function splitTradesFor(holding) {
+            const mine = t => (t.assetId && t.assetId === holding.id) ||
+                (!t.assetId && t.symbol === holding.symbol && t.assetType !== 'bonds');
+            return {
+                purchases: (portfolio.purchases || []).filter(mine),
+                sales: (portfolio.sales || []).filter(mine),
+            };
+        }
+
+        function splitsForHolding(holding) {
+            return (portfolio.splits || []).filter(s =>
+                (s.assetId != null && String(s.assetId) === String(holding.id)) ||
+                String(s.symbol || '').toUpperCase() === String(holding.symbol || '').toUpperCase());
+        }
+
+        function planSplitChange(holding, changed, adding) {
+            const prevSplits = portfolio.splits || [];
+            const nextSplits = adding ? [...prevSplits, changed] : prevSplits.filter(s => s !== changed);
+            const { purchases, sales } = splitTradesFor(holding);
+            return window.FTSplits.planHoldingChange({ holding, purchases, sales, prevSplits, nextSplits, changed });
+        }
+
+        function readSplitForm(holding) {
+            return {
+                id: 'split_' + Date.now(),
+                symbol: holding.symbol,
+                assetId: holding.id,
+                date: document.getElementById('split-date').value,
+                from: parseFloat(document.getElementById('split-from').value),
+                to: parseFloat(document.getElementById('split-to').value),
+            };
+        }
+
+        function splitPlanLines(holding, plan) {
+            const cs = getCurrencySymbol(holding.currency);
+            const price = Number(holding.currentPrice || 0);
+            const fmtUnits = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 6 });
+            const fmtMoney = n => cs + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const lines = [
+                ['יחידות', fmtUnits(holding.shares), fmtUnits(plan.shares)],
+                ['עלות ממוצעת', fmtMoney(holding.costBasis), fmtMoney(plan.costBasis)],
+            ];
+            if (price > 0) {
+                lines.push(['שווי במחיר הנוכחי (' + fmtMoney(price) + ')',
+                    fmtMoney(holding.shares * price), fmtMoney(plan.shares * price)]);
+            }
+            return lines;
+        }
+
+        function renderSplitPreview() {
+            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            const box = document.getElementById('split-preview');
+            if (!holding || !box) return;
+            const split = readSplitForm(holding);
+            const errors = window.FTSplits.validate(split);
+            if (errors.length) {
+                box.innerHTML = `<div style="color: var(--text-secondary);">${splitEsc(errors.join(' · '))}</div>`;
+                return;
+            }
+            const plan = planSplitChange(holding, split, true);
+            if (plan.error) {
+                box.innerHTML = `<div style="color: var(--loss);">${splitEsc(plan.error)}</div>`;
+                return;
+            }
+            const rows = splitPlanLines(holding, plan).map(([label, before, after]) =>
+                `<tr><td style="padding: 4px 0;">${splitEsc(label)}</td>` +
+                `<td style="padding: 4px 8px;"><bdi dir="ltr">${splitEsc(before)}</bdi></td>` +
+                `<td style="padding: 4px 0;"><bdi dir="ltr">${splitEsc(after)}</bdi></td></tr>`).join('');
+            box.innerHTML = `
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                    <thead><tr style="color: var(--text-secondary);"><th style="text-align: right; font-weight: 500;"></th><th style="text-align: right; font-weight: 500; padding: 0 8px;">עכשיו</th><th style="text-align: right; font-weight: 500;">אחרי</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+                    ${plan.method === 'scale'
+                        ? 'כל העסקאות של הנייר קודמות לתאריך, ולכן ההחזקה כולה מוכפלת ביחס.'
+                        : 'יש עסקאות אחרי התאריך, ולכן ההחזקה מחושבת מחדש מהיסטוריית הקניות והמכירות.'}
+                </div>`;
+        }
+
+        function showSplitModal() {
+            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            if (!holding) return;
+            closeSplitModal();
+
+            const existing = splitsForHolding(holding).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+            const existingHtml = existing.length === 0 ? '' : `
+                <div style="margin-bottom: 15px;">
+                    <div style="font-weight: 600; margin-bottom: 6px;">אירועים רשומים</div>
+                    ${existing.map(s => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border);">
+                            <span><bdi dir="ltr">${splitEsc(s.date)}</bdi> · כל <bdi dir="ltr">${splitEsc(s.from)}</bdi> יחידות הפכו ל־<bdi dir="ltr">${splitEsc(s.to)}</bdi></span>
+                            <button type="button" class="btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteSplit('${splitEsc(s.id)}')">מחק</button>
+                        </div>`).join('')}
+                </div>`;
+
+            const modal = document.createElement('div');
+            modal.id = 'split-modal';
+            modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+            modal.innerHTML = `
+                <div style="background: var(--bg-surface); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+                    <h3 style="margin: 0 0 10px 0;">⇅ איחוד / פיצול מניות · <bdi dir="ltr">${splitEsc(holding.symbol)}</bdi></h3>
+                    <p style="margin: 0 0 15px 0; font-size: 0.85rem; color: var(--text-secondary);">
+                        היסטוריית הקניות נשארת כמו בדוחות הברוקר. האירוע ממיר את העסקאות שלפני התאריך ליחידות של היום. הסכומים ששולמו לא משתנים.
+                    </p>
+                    ${existingHtml}
+                    <div class="form-group">
+                        <label>תאריך תחילת המסחר ביחס החדש</label>
+                        <input type="date" id="split-date" style="direction: ltr;">
+                    </div>
+                    <div class="form-group">
+                        <label>היחס</label>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <span>כל</span>
+                            <input type="number" id="split-from" min="0" step="any" value="3" style="width: 80px; direction: ltr;">
+                            <span>יחידות הפכו ל־</span>
+                            <input type="number" id="split-to" min="0" step="any" value="1" style="width: 80px; direction: ltr;">
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">איחוד 1 ל־3: כל 3 הפכו ל־1. פיצול 2 ל־1: כל 1 הפך ל־2.</small>
+                    </div>
+                    <div id="split-preview" style="padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;"></div>
+                    <p style="margin: 0 0 15px 0; font-size: 0.8rem; color: var(--text-secondary);">
+                        אם הברוקר פדה שארית של יחידה במזומן, רשום אותה בנפרד כמכירה.
+                    </p>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-success" style="flex: 1;" onclick="applySplit()">✅ רשום</button>
+                        <button type="button" class="btn" style="flex: 1; background: var(--text-muted); color: white;" onclick="closeSplitModal()">ביטול</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+
+            const now = new Date();
+            document.getElementById('split-date').value =
+                `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            ['split-date', 'split-from', 'split-to'].forEach(id =>
+                document.getElementById(id).addEventListener('input', renderSplitPreview));
+            renderSplitPreview();
+        }
+
+        function closeSplitModal() {
+            const modal = document.getElementById('split-modal');
+            if (modal) modal.remove();
+        }
+
+        // After a split the edit form still holds the old units; saving it would
+        // undo the split. Closing it is the only safe state.
+        function finishSplitChange(message) {
+            saveData();
+            closeSplitModal();
+            hideAddHoldingForm();
+            renderHoldingsList();
+            updateOverview();
+            notify(message, 'success');
+        }
+
+        function applySplit() {
+            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            if (!holding) return;
+            const split = readSplitForm(holding);
+            const errors = window.FTSplits.validate(split);
+            if (errors.length) { notify('❌ ' + errors.join(' · '), 'error'); return; }
+            if (splitsForHolding(holding).some(s => s.date === split.date)) {
+                notify('❌ כבר רשום אירוע לנייר הזה באותו תאריך', 'error');
+                return;
+            }
+            const plan = planSplitChange(holding, split, true);
+            if (plan.error) { notify('❌ ' + plan.error, 'error'); return; }
+
+            const summary = splitPlanLines(holding, plan).map(([l, b, a]) => `${l}: ${b} ← ${a}`).join('\n');
+            if (!confirm(`לרשום ${split.date}: כל ${split.from} יחידות של ${holding.symbol} הפכו ל־${split.to}?\n\n${summary}`)) return;
+
+            if (!Array.isArray(portfolio.splits)) portfolio.splits = [];
+            split.createdAt = new Date().toISOString();
+            portfolio.splits.push(split);
+            portfolio.splits.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+            holding.shares = plan.shares;
+            holding.costBasis = plan.costBasis;
+            holding.lastUpdate = new Date().toISOString();
+            console.log(`⇅ Split ${holding.symbol} ${split.from}→${split.to} @ ${split.date} (${plan.method})`, plan);
+            finishSplitChange('✅ האירוע נרשם וההחזקה עודכנה');
+        }
+
+        function deleteSplit(id) {
+            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            const split = (portfolio.splits || []).find(s => s.id === id);
+            if (!holding || !split) return;
+            const plan = planSplitChange(holding, split, false);
+            if (plan.error) { notify('❌ ' + plan.error, 'error'); return; }
+
+            const summary = splitPlanLines(holding, plan).map(([l, b, a]) => `${l}: ${b} ← ${a}`).join('\n');
+            if (!confirm(`למחוק את האירוע מ־${split.date} ולהחזיר את ההחזקה ליחידות הקודמות?\n\n${summary}`)) return;
+
+            portfolio.splits = portfolio.splits.filter(s => s !== split);
+            holding.shares = plan.shares;
+            holding.costBasis = plan.costBasis;
+            holding.lastUpdate = new Date().toISOString();
+            finishSplitChange('✅ האירוע נמחק וההחזקה הוחזרה');
         }
 
         // ===========================================
@@ -12409,6 +12631,7 @@ ${msg}`, 'warning');
                 withdrawals: [],
                 purchases: [],
                 sales: [],
+                splits: [],
                 snapshots: [],
                 watchlist: []
             };
@@ -15940,6 +16163,10 @@ ${msg}`, 'warning');
         window.hideEditPurchaseModal = hideEditPurchaseModal;
         window.submitEditPurchase = submitEditPurchase;
         window.recalcHoldingFromPurchases = recalcHoldingFromPurchases;
+        window.showSplitModal = showSplitModal;
+        window.closeSplitModal = closeSplitModal;
+        window.applySplit = applySplit;
+        window.deleteSplit = deleteSplit;
         window.deleteDeposit = deleteDeposit;
         window.deleteWithdrawal = deleteWithdrawal;
         window.showCalculateCapitalFromHoldings = showCalculateCapitalFromHoldings;

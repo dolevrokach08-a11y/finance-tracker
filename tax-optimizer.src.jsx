@@ -1048,6 +1048,7 @@ function App() {
       let holdings  = window.__portfolioHoldings;
       let purchases = window.__portfolioPurchases;
       let sales     = window.__portfolioSales;
+      let splits    = window.__portfolioSplits;
       let rates     = window.__portfolioRates;
       if (!holdings || holdings.length === 0) {
         try {
@@ -1057,6 +1058,7 @@ function App() {
             holdings  = p.holdings  || [];
             purchases = p.purchases || [];
             sales     = p.sales     || [];
+            splits    = p.splits    || [];
             // No invented rates. An empty object means currentFX falls through to the
             // real monthly series, and if that has nothing either it says so.
             rates     = p.rates     || {};
@@ -1066,7 +1068,16 @@ function App() {
       holdings  = holdings  || [];
       purchases = purchases || [];
       sales     = sales     || [];
+      splits    = splits    || [];
       rates     = rates     || {};
+
+      // A split restates older lots in today's units (shared/splits.js). Without it a
+      // reverse split leaves three old units priced at today's price — triple the gain.
+      if (splits.length > 0) {
+        if (!window.FTSplits) throw new Error('shared/splits.js did not load; lots cannot be split-adjusted');
+        purchases = window.FTSplits.adjustTrades(purchases, splits);
+        sales     = window.FTSplits.adjustTrades(sales, splits);
+      }
 
       const priced = holdings
         .map(h => {
