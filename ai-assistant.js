@@ -310,6 +310,11 @@ class FinancialAIAssistant {
                action uses the neutral secondary accent, because green and red
                mean profit and loss in this app. */
             .ai-proposals {
+                /* The message list is a height-capped flex column, and
+                   overflow: hidden lets a flex item shrink below its content —
+                   which cut the card down to one row and hid the apply button
+                   (seen at 375px). It keeps its height; the list scrolls. */
+                flex: none;
                 align-self: stretch;
                 direction: rtl;
                 border-radius: 12px;
@@ -805,6 +810,10 @@ class FinancialAIAssistant {
                 undoBtn.addEventListener('click', () => {
                     const r = this.undoProposals(outcome.undo) || { reverted: 0, kept: 0 };
                     undoBtn.remove();
+                    // A row still reading "applied" under "undone" contradicts
+                    // itself. Per-row results are only known when nothing was
+                    // kept; otherwise the line below says what stayed.
+                    if (!r.kept) outcome.applied.forEach(a => mark(proposals.indexOf(a.proposal), '↶ בוטל'));
                     result.textContent = r.kept
                         ? `בוטלו ${r.reverted}. ${r.kept} נשארו, כי שונו ביד או נמצאים בשימוש מאז.`
                         : 'בוטל. הנתונים חזרו למצבם הקודם.';
