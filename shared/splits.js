@@ -39,14 +39,36 @@
 
     const sym = s => String(s == null ? '' : s).trim().toUpperCase();
 
-    // Yahoo-style suffix → exchange zone. No suffix is a US listing; a bare
-    // security number or .TA is Tel Aviv. An unknown suffix gets UTC, and the
-    // dialog says which zone it used, so a wrong guess is visible.
+    // Yahoo-style suffix → exchange zone. This is a default, never the answer: a
+    // symbol does not identify its exchange (CSPX trades in London with no suffix),
+    // and an unknown suffix falls to UTC — BHP.AX at 10:30 Sydney would land on the
+    // previous day. The dialog lets the user pick the exchange before anything is
+    // recorded, and the record keeps what they picked.
     const SUFFIX_TZ = {
         TA: 'Asia/Jerusalem', L: 'Europe/London', AS: 'Europe/Amsterdam',
         DE: 'Europe/Berlin', F: 'Europe/Berlin', PA: 'Europe/Paris', MI: 'Europe/Rome',
-        SW: 'Europe/Zurich', TO: 'America/Toronto',
+        SW: 'Europe/Zurich', TO: 'America/Toronto', AX: 'Australia/Sydney',
+        HK: 'Asia/Hong_Kong', T: 'Asia/Tokyo', SI: 'Asia/Singapore',
     };
+
+    // The choices the dialog offers. A zone outside this list is still valid on a
+    // record (validate() accepts any IANA zone); the dialog adds it when it meets one.
+    const EXCHANGES = [
+        { tz: 'America/New_York', label: 'ניו יורק (NYSE / Nasdaq)' },
+        { tz: 'Asia/Jerusalem', label: 'תל אביב' },
+        { tz: 'Europe/London', label: 'לונדון' },
+        { tz: 'Europe/Amsterdam', label: 'אמסטרדם' },
+        { tz: 'Europe/Berlin', label: 'פרנקפורט / קסטרה' },
+        { tz: 'Europe/Paris', label: 'פריז' },
+        { tz: 'Europe/Rome', label: 'מילאנו' },
+        { tz: 'Europe/Zurich', label: 'ציריך' },
+        { tz: 'America/Toronto', label: 'טורונטו' },
+        { tz: 'Australia/Sydney', label: 'סידני' },
+        { tz: 'Asia/Hong_Kong', label: 'הונג קונג' },
+        { tz: 'Asia/Tokyo', label: 'טוקיו' },
+        { tz: 'Asia/Singapore', label: 'סינגפור' },
+        { tz: 'UTC', label: 'UTC' },
+    ];
 
     function exchangeTimeZone(symbol) {
         const s = sym(symbol);
@@ -233,7 +255,7 @@
     }
 
     const api = {
-        dayOf, exchangeTimeZone, splitTimeZone, validate, appliesTo, splitsAfter, adjustTrade, adjustTrades,
+        dayOf, exchangeTimeZone, splitTimeZone, EXCHANGES, validate, appliesTo, splitsAfter, adjustTrade, adjustTrades,
         fromHistory, planHoldingChange, roundUnits,
     };
     if (typeof window !== 'undefined') window.FTSplits = api;

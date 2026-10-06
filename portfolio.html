@@ -10799,7 +10799,7 @@ ${msg}`, 'warning');
                 symbol: holding.symbol,
                 assetId: holding.id,
                 date: document.getElementById('split-date').value,
-                tz: window.FTSplits.exchangeTimeZone(holding.symbol),
+                tz: document.getElementById('split-tz').value,
                 from: parseFloat(document.getElementById('split-from').value),
                 to: parseFloat(document.getElementById('split-to').value),
             };
@@ -10877,12 +10877,19 @@ ${msg}`, 'warning');
             splitOpener = opener;
 
             const existing = splitsForHolding(holding).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+            const guessTz = window.FTSplits.exchangeTimeZone(holding.symbol);
+            const exchanges = window.FTSplits.EXCHANGES.some(x => x.tz === guessTz)
+                ? window.FTSplits.EXCHANGES
+                : [{ tz: guessTz, label: guessTz }, ...window.FTSplits.EXCHANGES];
+            const tzOptions = exchanges.map(x =>
+                `<option value="${splitEsc(x.tz)}"${x.tz === guessTz ? ' selected' : ''}>${splitEsc(x.label)}</option>`).join('');
+            const tzLabel = tz => (window.FTSplits.EXCHANGES.find(x => x.tz === tz) || { label: tz }).label;
             const existingHtml = existing.length === 0 ? '' : `
                 <div style="margin-bottom: 15px;">
                     <div style="font-weight: 600; margin-bottom: 6px;">אירועים רשומים</div>
                     ${existing.map(s => `
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border);">
-                            <span><bdi dir="ltr">${splitEsc(s.date)}</bdi> · כל <bdi dir="ltr">${splitEsc(s.from)}</bdi> יחידות הפכו ל־<bdi dir="ltr">${splitEsc(s.to)}</bdi></span>
+                            <span><bdi dir="ltr">${splitEsc(s.date)}</bdi> · כל <bdi dir="ltr">${splitEsc(s.from)}</bdi> יחידות הפכו ל־<bdi dir="ltr">${splitEsc(s.to)}</bdi> · ${splitEsc(tzLabel(window.FTSplits.splitTimeZone(s)))}</span>
                             <button type="button" class="btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteSplit('${splitEsc(s.id)}')" aria-label="מחק את האירוע מ־${splitEsc(s.date)}">מחק</button>
                         </div>`).join('')}
                 </div>`;
@@ -10901,7 +10908,12 @@ ${msg}`, 'warning');
                     <div class="form-group">
                         <label for="split-date">תאריך תחילת המסחר ביחס החדש</label>
                         <input type="date" id="split-date" style="direction: ltr;">
-                        <small style="color: var(--text-secondary); font-size: 0.8rem;">לפי שעון הבורסה (<bdi dir="ltr">${splitEsc(window.FTSplits.exchangeTimeZone(holding.symbol))}</bdi>). עסקה מיום מוקדם יותר תומר; עסקה מהיום הזה ואילך כבר ביחידות החדשות.</small>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">לפי לוח השנה בבורסה שנבחרה למטה. עסקה מיום מוקדם יותר תומר; עסקה מהיום הזה ואילך כבר ביחידות החדשות.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="split-tz">הבורסה שבה הנייר נסחר</label>
+                        <select id="split-tz">${tzOptions}</select>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">נבחרה לפי הסימול, וזה רק ניחוש. בדוק מול הברוקר: אותו נייר יכול להיסחר בכמה בורסות.</small>
                     </div>
                     <div class="form-group">
                         <label id="split-ratio-label">היחס</label>
@@ -10926,8 +10938,9 @@ ${msg}`, 'warning');
             modal.addEventListener('keydown', splitKeydown);
 
             document.getElementById('split-date').value = localToday();
-            ['split-date', 'split-from', 'split-to'].forEach(id =>
+            ['split-date', 'split-from', 'split-to', 'split-tz'].forEach(id =>
                 document.getElementById(id).addEventListener('input', renderSplitPreview));
+            document.getElementById('split-tz').addEventListener('change', renderSplitPreview);
             renderSplitPreview();
             document.getElementById('split-date').focus();
         }

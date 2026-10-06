@@ -108,6 +108,21 @@ for (const tz of ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'Americ
   check(`form dates (noon UTC) keep their calendar day in ${tz}`, S.dayOf('2026-10-05T12:00:00.000Z', tz), '2026-10-05');
 }
 check('a bare YYYY-MM-DD is taken as is', S.dayOf('2026-10-05', 'Asia/Jerusalem'), '2026-10-05');
+
+// GPT round 3: a guess the user cannot correct is not a safeguard. BHP.AX at 10:30 Sydney
+// on 6 Oct (23:30Z on the 5th) is the new basis; under UTC it read as the 5th → 10.
+const BHP = { ...SPLIT, id: 'bhp', symbol: 'BHP.AX', assetId: 8 };
+const bhpTrade = { ...A, symbol: 'BHP.AX', assetId: 8, date: '2026-10-05T23:30:00.000Z' };
+check('.AX maps to Sydney', S.exchangeTimeZone('BHP.AX'), 'Australia/Sydney');
+check('BHP.AX at 10:30 Sydney on the split day → new basis, 30', S.adjustTrade(bhpTrade, [BHP]).shares, 30);
+check('the same trade under a UTC guess would have been 10', S.adjustTrade(bhpTrade, [{ ...BHP, tz: 'UTC' }]).shares, 10);
+// CSPX from the demo data: no suffix, guessed New York, actually London.
+const cspxTrade = { ...A, symbol: 'CSPX', assetId: 9, date: '2026-10-06T02:00:00.000Z' };
+const CSPX = { ...SPLIT, id: 'cspx', symbol: 'CSPX', assetId: 9 };
+check('CSPX recorded as London keeps a 02:00Z trade on the 6th (30)', S.adjustTrade(cspxTrade, [{ ...CSPX, tz: 'Europe/London' }]).shares, 30);
+check('every offered exchange is a valid zone', S.EXCHANGES.every(x => S.validate({ ...SPLIT, tz: x.tz }).length === 0), true);
+check('every suffix guess is among the offered exchanges', ['ETHA', 'X.TA', 'X.L', 'X.AS', 'X.DE', 'X.PA', 'X.MI', 'X.SW', 'X.TO', 'X.AX', 'X.HK', 'X.T', 'X.SI', 'X.ZZ']
+  .every(x => S.EXCHANGES.some(e => e.tz === S.exchangeTimeZone(x))), true);
 check('no splits → same array back', S.adjustTrades([A, B], []), [A, B]);
 
 const fwd = { ...SPLIT, id: 'f', from: 1, to: 2 };
@@ -205,6 +220,8 @@ check('applying a split closes the edit form when it is open on that holding',
   /function finishSplitChange[\s\S]{0,600}editingHoldingId === holdingId\) hideAddHoldingForm\(\)/.test(page), true);
 check('the split is a row action, not a field of the edit form',
   page.includes('onclick="showSplitModal(${holding.id})"') && !page.includes('split-holding-btn'), true);
+check('the recorded zone is the one picked in the dialog, not the guess',
+  /tz: document\.getElementById\('split-tz'\)\.value/.test(page) && page.includes('<select id="split-tz">'), true);
 check('the dialog is announced as a modal dialog with a name',
   /role="dialog" aria-modal="true" aria-labelledby="split-modal-title"/.test(page), true);
 
