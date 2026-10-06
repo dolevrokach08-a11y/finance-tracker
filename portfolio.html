@@ -10799,6 +10799,7 @@ ${msg}`, 'warning');
                 symbol: holding.symbol,
                 assetId: holding.id,
                 date: document.getElementById('split-date').value,
+                tz: window.FTSplits.exchangeTimeZone(holding.symbol),
                 from: parseFloat(document.getElementById('split-from').value),
                 to: parseFloat(document.getElementById('split-to').value),
             };
@@ -10900,7 +10901,7 @@ ${msg}`, 'warning');
                     <div class="form-group">
                         <label for="split-date">תאריך תחילת המסחר ביחס החדש</label>
                         <input type="date" id="split-date" style="direction: ltr;">
-                        <small style="color: var(--text-secondary); font-size: 0.8rem;">עסקה שהתאריך שלה ברשימת העסקאות מוקדם מזה תומר. עסקה מהתאריך הזה ואילך כבר ביחידות החדשות.</small>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">לפי שעון הבורסה (<bdi dir="ltr">${splitEsc(window.FTSplits.exchangeTimeZone(holding.symbol))}</bdi>). עסקה מיום מוקדם יותר תומר; עסקה מהיום הזה ואילך כבר ביחידות החדשות.</small>
                     </div>
                     <div class="form-group">
                         <label id="split-ratio-label">היחס</label>

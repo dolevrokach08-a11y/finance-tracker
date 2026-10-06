@@ -84,13 +84,30 @@ check('renamed holding still matched by assetId', S.adjustTrade({ ...A, symbol: 
 check('a different holding id is not matched by symbol', S.adjustTrade({ ...A, assetId: 2 }, [{ ...SPLIT, assetId: 1 }]).shares, 30);
 check('a trade with no holding id falls back to the symbol', S.adjustTrade({ ...A, assetId: null }, [SPLIT]).shares, 10);
 check('symbol match is case-insensitive', S.adjustTrade({ ...A, symbol: 'etha', assetId: undefined }, [SPLIT]).shares, 10);
-// GPT round 1, finding 3: the day is the one the app shows (Israel), not the UTC day.
-// 22:30Z on 5 Oct is 01:30 on 6 Oct in Israel — already the new basis.
-check('22:30Z on the eve is the split day in Israel → not converted',
-  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [SPLIT]).shares, 30);
-check('20:30Z on the eve is 23:30 the day before → converted',
-  S.adjustTrade({ ...A, date: '2026-10-05T20:30:00.000Z' }, [SPLIT]).shares, 10);
-check('a bare YYYY-MM-DD is taken as is', [S.dayOf('2026-10-05'), S.dayOf('2026-10-05T12:00:00.000Z')], ['2026-10-05', '2026-10-05']);
+// GPT rounds 1–2, the day boundary. The split takes effect at the exchange's open, so a
+// trade's day is its calendar day at the exchange. ETHA's 8-K: effective at the open
+// on 6 Oct 2026 on Nasdaq. 22:30Z on 5 Oct is 01:30 on the 6th in Israel and 18:30 on
+// the 5th in New York — still the old basis. The first version used the UTC day (right
+// here by accident); the round-1 fix used the Israeli day (wrong here); round 2 caught it.
+check('exchange zone from the symbol', ['ETHA', 'CSPX.L', '1159235', 'TEVA.TA', 'X.XX', ''].map(S.exchangeTimeZone),
+  ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'Asia/Jerusalem', 'UTC', 'UTC']);
+check('22:30Z on 5 Oct, ETHA (18:30 New York) → old basis, converted',
+  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [SPLIT]).shares, 10);
+check('00:30Z on 6 Oct, ETHA (20:30 New York on the 5th) → still converted',
+  S.adjustTrade({ ...A, date: '2026-10-06T00:30:00.000Z' }, [SPLIT]).shares, 10);
+check('13:30Z on 6 Oct, ETHA (09:30 New York, the open) → new basis',
+  S.adjustTrade({ ...A, date: '2026-10-06T13:30:00.000Z' }, [SPLIT]).shares, 30);
+const TASE = { ...SPLIT, id: 'ta', symbol: '1159235', assetId: 7 };
+const taTrade = { ...A, symbol: '1159235', assetId: 7 };
+check('22:30Z on 5 Oct, Tel Aviv security (01:30 on the 6th) → new basis',
+  S.adjustTrade({ ...taTrade, date: '2026-10-05T22:30:00.000Z' }, [TASE]).shares, 30);
+check("a split's own tz wins over its symbol",
+  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [{ ...SPLIT, tz: 'Asia/Jerusalem' }]).shares, 30);
+check('an unknown tz makes the split invalid', S.validate({ ...SPLIT, tz: 'Mars/Olympus' }).length, 1);
+for (const tz of ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'America/Toronto', 'UTC']) {
+  check(`form dates (noon UTC) keep their calendar day in ${tz}`, S.dayOf('2026-10-05T12:00:00.000Z', tz), '2026-10-05');
+}
+check('a bare YYYY-MM-DD is taken as is', S.dayOf('2026-10-05', 'Asia/Jerusalem'), '2026-10-05');
 check('no splits → same array back', S.adjustTrades([A, B], []), [A, B]);
 
 const fwd = { ...SPLIT, id: 'f', from: 1, to: 2 };

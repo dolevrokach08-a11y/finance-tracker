@@ -10,12 +10,17 @@
  * purchases stay as the broker wrote them, and the split is read on top of them.
  *
  * Record shape (portfolio.splits[]):
- *   { id, symbol, assetId, date: 'YYYY-MM-DD', from, to, createdAt }
+ *   { id, symbol, assetId, date: 'YYYY-MM-DD', tz, from, to, createdAt }
  *   `date` is the first trading day on the new basis. A trade dated before it is
- *   in the old units; a trade on or after it is already in the new ones. A trade's
- *   date is the day the app shows for it — Israel time — not its UTC day: a sale
- *   recorded "now" at 01:30 is stored as 22:30Z the previous day, and the
- *   transactions list shows it on the day it happened.
+ *   in the old units; a trade on or after it is already in the new ones.
+ *   `tz` is the exchange's time zone, and a trade's day is its calendar day *there*.
+ *   ETHA's split took effect at the open on 6 Oct on Nasdaq, so a sale at 22:30Z
+ *   on 5 Oct — 01:30 on the 6th in Israel, 18:30 on the 5th in New York — was
+ *   still on the old basis. Neither the UTC day nor the Israeli day says that for
+ *   every exchange; the exchange's own day does. Trades entered through the forms
+ *   are stored at noon UTC, which is the same calendar day in every zone this
+ *   maps to, so only full timestamps (a sale recorded "now", imports) can differ.
+ *   A record without `tz` takes the zone from its symbol (exchangeTimeZone).
  *   `from` → `to`: every `from` units became `to` units. ETHA: from 3, to 1.
  *
  * What a split changes: units ×to/from, per-unit prices ×from/to.
@@ -34,16 +39,49 @@
 
     const sym = s => String(s == null ? '' : s).trim().toUpperCase();
 
-    const IL_DAY = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
-    });
+    // Yahoo-style suffix → exchange zone. No suffix is a US listing; a bare
+    // security number or .TA is Tel Aviv. An unknown suffix gets UTC, and the
+    // dialog says which zone it used, so a wrong guess is visible.
+    const SUFFIX_TZ = {
+        TA: 'Asia/Jerusalem', L: 'Europe/London', AS: 'Europe/Amsterdam',
+        DE: 'Europe/Berlin', F: 'Europe/Berlin', PA: 'Europe/Paris', MI: 'Europe/Rome',
+        SW: 'Europe/Zurich', TO: 'America/Toronto',
+    };
 
-    /** 'YYYY-MM-DD' of a stored trade date in Israel time, or null. A bare day is taken as is. */
-    function dayOf(d) {
+    function exchangeTimeZone(symbol) {
+        const s = sym(symbol);
+        if (!s) return 'UTC';
+        if (/^\d{5,9}$/.test(s)) return 'Asia/Jerusalem';
+        const dot = s.lastIndexOf('.');
+        if (dot < 0) return 'America/New_York';
+        return SUFFIX_TZ[s.slice(dot + 1)] || 'UTC';
+    }
+
+    const dayFormats = new Map();
+    function dayFormat(tz) {
+        if (!dayFormats.has(tz)) {
+            dayFormats.set(tz, new Intl.DateTimeFormat('en-CA', {
+                timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+            }));
+        }
+        return dayFormats.get(tz);
+    }
+
+    function isValidTimeZone(tz) {
+        try { dayFormat(tz); return true; } catch (e) { return false; }
+    }
+
+    /** The split's exchange zone: its own, else the one its symbol implies. */
+    function splitTimeZone(split) {
+        return (split && split.tz) || exchangeTimeZone(split && split.symbol);
+    }
+
+    /** 'YYYY-MM-DD' of a stored trade date at the given zone, or null. A bare day is taken as is. */
+    function dayOf(d, tz) {
         if (!d) return null;
         if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
         const t = new Date(d);
-        return isNaN(t) ? null : IL_DAY.format(t);
+        return isNaN(t) ? null : dayFormat(tz || 'UTC').format(t);
     }
 
     function isValidDay(s) {
@@ -60,6 +98,7 @@
         const from = Number(split && split.from), to = Number(split && split.to);
         if (!(from > 0) || !(to > 0)) errors.push('היחס חייב להיות שני מספרים חיוביים');
         else if (from === to) errors.push('יחס של אחד לאחד אינו פיצול');
+        if (split && split.tz != null && !isValidTimeZone(split.tz)) errors.push('אזור זמן לא מוכר');
         return errors;
     }
 
@@ -80,10 +119,10 @@
 
     /** Splits that took effect after the trade, oldest first. */
     function splitsAfter(trade, splits) {
-        const day = dayOf(trade && trade.date);
-        if (!day) return [];
+        if (!trade || !dayOf(trade.date)) return [];
         return (splits || [])
-            .filter(s => validate(s).length === 0 && appliesTo(s, trade) && day < s.date)
+            .filter(s => validate(s).length === 0 && appliesTo(s, trade) &&
+                dayOf(trade.date, splitTimeZone(s)) < s.date)
             .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
     }
 
@@ -161,7 +200,7 @@
 
         const trades = [...(purchases || []), ...(sales || [])];
         const onNewBasis = trades.some(t => {
-            const d = dayOf(t.date);
+            const d = dayOf(t.date, splitTimeZone(changed));
             return d && d >= changed.date;
         });
 
@@ -194,7 +233,7 @@
     }
 
     const api = {
-        dayOf, validate, appliesTo, splitsAfter, adjustTrade, adjustTrades,
+        dayOf, exchangeTimeZone, splitTimeZone, validate, appliesTo, splitsAfter, adjustTrade, adjustTrades,
         fromHistory, planHoldingChange, roundUnits,
     };
     if (typeof window !== 'undefined') window.FTSplits = api;
