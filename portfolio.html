@@ -2855,10 +2855,9 @@
                             <small style="color: var(--text-secondary); font-size: 0.8rem; display: block; margin-top: 2px;">סמן אם מס רווחי ההון מחושב לאחר הצמדה למדד</small>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 10px;">
                         <button onclick="addHolding()" class="btn btn-success">✅ שמור</button>
                         <button onclick="hideAddHoldingForm()" class="btn" style="background: var(--text-muted); color: white;">❌ ביטול</button>
-                        <button id="split-holding-btn" type="button" onclick="showSplitModal()" class="btn" style="display: none;">⇅ איחוד / פיצול מניות</button>
                     </div>
                 </div>
 
@@ -8177,7 +8176,6 @@ function calculateTWRv3(startDate = null) {
         function showAddHoldingForm() {
             editingHoldingId = null; // Reset editing mode
             document.getElementById('add-holding-form').style.display = 'block';
-            document.getElementById('split-holding-btn').style.display = 'none';
             // הצג שדה תאריך רק בהוספה חדשה
             const pdGroup = document.getElementById('purchase-date-group');
             if (pdGroup) pdGroup.style.display = '';
@@ -8190,7 +8188,6 @@ function calculateTWRv3(startDate = null) {
         
         function hideAddHoldingForm() {
             document.getElementById('add-holding-form').style.display = 'none';
-            document.getElementById('split-holding-btn').style.display = 'none';
             editingHoldingId = null;
             
             // Clear form
@@ -8558,7 +8555,6 @@ function calculateTWRv3(startDate = null) {
             
             // Show form
             document.getElementById('add-holding-form').style.display = 'block';
-            document.getElementById('split-holding-btn').style.display = '';
             
             // Scroll to form
             document.getElementById('add-holding-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -10758,6 +10754,11 @@ ${msg}`, 'warning');
         // A split is recorded as an event (portfolio.splits) and never rewrites a
         // purchase. The holding is updated once, here, by FTSplits.planHoldingChange;
         // recalcHoldingFromPurchases reads the same events, so a later recalc agrees.
+        // It is a holding action of its own, not a field of the edit form: the form
+        // holds units, and saving it after a split would put the old ones back.
+
+        let splitHoldingId = null;
+        let splitOpener = null;
 
         function splitEsc(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -10773,10 +10774,12 @@ ${msg}`, 'warning');
             };
         }
 
+        // Same rule as FTSplits.appliesTo: a split that names a holding belongs to
+        // that holding only; one without an id falls back to the symbol.
         function splitsForHolding(holding) {
-            return (portfolio.splits || []).filter(s =>
-                (s.assetId != null && String(s.assetId) === String(holding.id)) ||
-                String(s.symbol || '').toUpperCase() === String(holding.symbol || '').toUpperCase());
+            return (portfolio.splits || []).filter(s => s.assetId != null
+                ? String(s.assetId) === String(holding.id)
+                : String(s.symbol || '').toUpperCase() === String(holding.symbol || '').toUpperCase());
         }
 
         function planSplitChange(holding, changed, adding) {
@@ -10784,6 +10787,10 @@ ${msg}`, 'warning');
             const nextSplits = adding ? [...prevSplits, changed] : prevSplits.filter(s => s !== changed);
             const { purchases, sales } = splitTradesFor(holding);
             return window.FTSplits.planHoldingChange({ holding, purchases, sales, prevSplits, nextSplits, changed });
+        }
+
+        function splitHolding() {
+            return portfolio.holdings.find(h => h.id === splitHoldingId) || null;
         }
 
         function readSplitForm(holding) {
@@ -10814,7 +10821,7 @@ ${msg}`, 'warning');
         }
 
         function renderSplitPreview() {
-            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            const holding = splitHolding();
             const box = document.getElementById('split-preview');
             if (!holding || !box) return;
             const split = readSplitForm(holding);
@@ -10828,15 +10835,19 @@ ${msg}`, 'warning');
                 box.innerHTML = `<div style="color: var(--loss);">${splitEsc(plan.error)}</div>`;
                 return;
             }
+            // A grid, not a <table>: the page's table styles (sticky head, zebra,
+            // hover) belong to the data tables and looked foreign in here.
+            const cell = 'padding: 6px 0; border-top: 1px solid var(--border);';
+            const head = 'font-size: 0.8rem; color: var(--text-secondary); padding-bottom: 4px;';
             const rows = splitPlanLines(holding, plan).map(([label, before, after]) =>
-                `<tr><td style="padding: 4px 0;">${splitEsc(label)}</td>` +
-                `<td style="padding: 4px 8px;"><bdi dir="ltr">${splitEsc(before)}</bdi></td>` +
-                `<td style="padding: 4px 0;"><bdi dir="ltr">${splitEsc(after)}</bdi></td></tr>`).join('');
+                `<div style="${cell}">${splitEsc(label)}</div>` +
+                `<div style="${cell}"><bdi dir="ltr">${splitEsc(before)}</bdi></div>` +
+                `<div style="${cell}"><bdi dir="ltr">${splitEsc(after)}</bdi></div>`).join('');
             box.innerHTML = `
-                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                    <thead><tr style="color: var(--text-secondary);"><th style="text-align: right; font-weight: 500;"></th><th style="text-align: right; font-weight: 500; padding: 0 8px;">עכשיו</th><th style="text-align: right; font-weight: 500;">אחרי</th></tr></thead>
-                    <tbody>${rows}</tbody>
-                </table>
+                <div role="group" aria-label="לפני ואחרי" style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: 10px; font-size: 0.9rem; align-items: start;">
+                    <div style="${head}"></div><div style="${head}">עכשיו</div><div style="${head}">אחרי</div>
+                    ${rows}
+                </div>
                 <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary);">
                     ${plan.method === 'scale'
                         ? 'כל העסקאות של הנייר קודמות לתאריך, ולכן ההחזקה כולה מוכפלת ביחס.'
@@ -10844,10 +10855,25 @@ ${msg}`, 'warning');
                 </div>`;
         }
 
-        function showSplitModal() {
-            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+        function splitKeydown(e) {
+            if (e.key === 'Escape') { e.preventDefault(); closeSplitModal(); return; }
+            if (e.key !== 'Tab') return;
+            const dialog = document.querySelector('#split-modal [role="dialog"]');
+            const focusable = [...dialog.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+                .filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusable.length === 0) return;
+            const first = focusable[0], last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+
+        function showSplitModal(holdingId) {
+            const holding = portfolio.holdings.find(h => h.id === holdingId);
             if (!holding) return;
-            closeSplitModal();
+            const opener = splitOpener || document.activeElement;
+            closeSplitModal({ keepFocus: true });
+            splitHoldingId = holdingId;
+            splitOpener = opener;
 
             const existing = splitsForHolding(holding).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
             const existingHtml = existing.length === 0 ? '' : `
@@ -10856,35 +10882,37 @@ ${msg}`, 'warning');
                     ${existing.map(s => `
                         <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border);">
                             <span><bdi dir="ltr">${splitEsc(s.date)}</bdi> · כל <bdi dir="ltr">${splitEsc(s.from)}</bdi> יחידות הפכו ל־<bdi dir="ltr">${splitEsc(s.to)}</bdi></span>
-                            <button type="button" class="btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteSplit('${splitEsc(s.id)}')">מחק</button>
+                            <button type="button" class="btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteSplit('${splitEsc(s.id)}')" aria-label="מחק את האירוע מ־${splitEsc(s.date)}">מחק</button>
                         </div>`).join('')}
                 </div>`;
 
             const modal = document.createElement('div');
             modal.id = 'split-modal';
             modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+            modal.addEventListener('click', e => { if (e.target === modal) closeSplitModal(); });
             modal.innerHTML = `
-                <div style="background: var(--bg-surface); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
-                    <h3 style="margin: 0 0 10px 0;">⇅ איחוד / פיצול מניות · <bdi dir="ltr">${splitEsc(holding.symbol)}</bdi></h3>
-                    <p style="margin: 0 0 15px 0; font-size: 0.85rem; color: var(--text-secondary);">
+                <div role="dialog" aria-modal="true" aria-labelledby="split-modal-title" aria-describedby="split-modal-desc" style="background: var(--bg-surface); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+                    <h3 id="split-modal-title" style="margin: 0 0 10px 0;">⇅ איחוד / פיצול מניות · <bdi dir="ltr">${splitEsc(holding.symbol)}</bdi></h3>
+                    <p id="split-modal-desc" style="margin: 0 0 15px 0; font-size: 0.85rem; color: var(--text-secondary);">
                         היסטוריית הקניות נשארת כמו בדוחות הברוקר. האירוע ממיר את העסקאות שלפני התאריך ליחידות של היום. הסכומים ששולמו לא משתנים.
                     </p>
                     ${existingHtml}
                     <div class="form-group">
-                        <label>תאריך תחילת המסחר ביחס החדש</label>
+                        <label for="split-date">תאריך תחילת המסחר ביחס החדש</label>
                         <input type="date" id="split-date" style="direction: ltr;">
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">עסקה שהתאריך שלה ברשימת העסקאות מוקדם מזה תומר. עסקה מהתאריך הזה ואילך כבר ביחידות החדשות.</small>
                     </div>
                     <div class="form-group">
-                        <label>היחס</label>
-                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <label id="split-ratio-label">היחס</label>
+                        <div role="group" aria-labelledby="split-ratio-label" style="display: grid; grid-template-columns: auto 64px auto 64px; gap: 8px; align-items: center; justify-content: start;">
                             <span>כל</span>
-                            <input type="number" id="split-from" min="0" step="any" value="3" style="width: 80px; direction: ltr;">
+                            <input type="number" id="split-from" min="0" step="any" value="3" aria-label="יחידות לפני" style="width: 64px; direction: ltr;">
                             <span>יחידות הפכו ל־</span>
-                            <input type="number" id="split-to" min="0" step="any" value="1" style="width: 80px; direction: ltr;">
+                            <input type="number" id="split-to" min="0" step="any" value="1" aria-label="יחידות אחרי" style="width: 64px; direction: ltr;">
                         </div>
                         <small style="color: var(--text-secondary); font-size: 0.8rem;">איחוד 1 ל־3: כל 3 הפכו ל־1. פיצול 2 ל־1: כל 1 הפך ל־2.</small>
                     </div>
-                    <div id="split-preview" style="padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;"></div>
+                    <div id="split-preview" aria-live="polite" style="padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;"></div>
                     <p style="margin: 0 0 15px 0; font-size: 0.8rem; color: var(--text-secondary);">
                         אם הברוקר פדה שארית של יחידה במזומן, רשום אותה בנפרד כמכירה.
                     </p>
@@ -10894,33 +10922,40 @@ ${msg}`, 'warning');
                     </div>
                 </div>`;
             document.body.appendChild(modal);
+            modal.addEventListener('keydown', splitKeydown);
 
-            const now = new Date();
-            document.getElementById('split-date').value =
-                `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            document.getElementById('split-date').value = localToday();
             ['split-date', 'split-from', 'split-to'].forEach(id =>
                 document.getElementById(id).addEventListener('input', renderSplitPreview));
             renderSplitPreview();
+            document.getElementById('split-date').focus();
         }
 
-        function closeSplitModal() {
+        function closeSplitModal(opts) {
             const modal = document.getElementById('split-modal');
-            if (modal) modal.remove();
+            if (!modal) return;
+            modal.remove();
+            splitHoldingId = null;
+            if (opts && opts.keepFocus) return;
+            const opener = splitOpener;
+            splitOpener = null;
+            if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
         }
 
-        // After a split the edit form still holds the old units; saving it would
-        // undo the split. Closing it is the only safe state.
         function finishSplitChange(message) {
+            // The edit form, if it is open on this holding, still shows the old
+            // units; saving it would undo the split.
+            const holdingId = splitHoldingId;
             saveData();
             closeSplitModal();
-            hideAddHoldingForm();
+            if (editingHoldingId !== null && editingHoldingId === holdingId) hideAddHoldingForm();
             renderHoldingsList();
             updateOverview();
             notify(message, 'success');
         }
 
         function applySplit() {
-            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            const holding = splitHolding();
             if (!holding) return;
             const split = readSplitForm(holding);
             const errors = window.FTSplits.validate(split);
@@ -10947,7 +10982,7 @@ ${msg}`, 'warning');
         }
 
         function deleteSplit(id) {
-            const holding = portfolio.holdings.find(h => h.id === editingHoldingId);
+            const holding = splitHolding();
             const split = (portfolio.splits || []).find(s => s.id === id);
             if (!holding || !split) return;
             const plan = planSplitChange(holding, split, false);
@@ -11697,6 +11732,7 @@ ${msg}`, 'warning');
                         <div style="display: flex; gap: 4px; justify-content: center;">
                             <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות" aria-label="הוסף מניות ל-${holding.symbol}">+</button>
                             <button onclick="showSellSharesForm(${holding.id})" class="action-btn" title="מכור" aria-label="מכור מניות של ${holding.symbol}">$</button>
+                            <button onclick="showSplitModal(${holding.id})" class="action-btn" title="איחוד / פיצול מניות" aria-label="איחוד או פיצול מניות של ${holding.symbol}"><i data-lucide="split" style="width:14px;height:14px;"></i></button>
                             <button onclick="editHolding(${holding.id})" class="action-btn" title="ערוך" aria-label="ערוך את ${holding.symbol}"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
                             <button onclick="deleteHolding(${holding.id})" class="action-btn danger" title="מחק" aria-label="מחק את ${holding.symbol}"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
                         </div>

@@ -12,7 +12,10 @@
  * Record shape (portfolio.splits[]):
  *   { id, symbol, assetId, date: 'YYYY-MM-DD', from, to, createdAt }
  *   `date` is the first trading day on the new basis. A trade dated before it is
- *   in the old units; a trade on or after it is already in the new ones.
+ *   in the old units; a trade on or after it is already in the new ones. A trade's
+ *   date is the day the app shows for it — Israel time — not its UTC day: a sale
+ *   recorded "now" at 01:30 is stored as 22:30Z the previous day, and the
+ *   transactions list shows it on the day it happened.
  *   `from` → `to`: every `from` units became `to` units. ETHA: from 3, to 1.
  *
  * What a split changes: units ×to/from, per-unit prices ×from/to.
@@ -31,12 +34,16 @@
 
     const sym = s => String(s == null ? '' : s).trim().toUpperCase();
 
-    /** 'YYYY-MM-DD' for a stored trade date, or null. Same UTC day the app writes. */
+    const IL_DAY = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+
+    /** 'YYYY-MM-DD' of a stored trade date in Israel time, or null. A bare day is taken as is. */
     function dayOf(d) {
         if (!d) return null;
-        if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+        if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
         const t = new Date(d);
-        return isNaN(t) ? null : t.toISOString().slice(0, 10);
+        return isNaN(t) ? null : IL_DAY.format(t);
     }
 
     function isValidDay(s) {
@@ -57,14 +64,17 @@
     }
 
     /**
-     * Does this split belong to the trade? By the holding id the trade carries,
-     * else by symbol — the same two keys recalcHoldingFromPurchases matches on.
+     * Does this split belong to the trade? When both carry a holding id, the id
+     * decides — two holdings can share a symbol (a regular account and an IRA),
+     * and a split recorded on one must not convert the other. Only a trade with
+     * no holding id falls back to the symbol, as recalcHoldingFromPurchases does.
      * A trade's own `id` is the trade's, never the holding's, so it is not read.
      */
     function appliesTo(split, trade) {
         if (!split || !trade) return false;
-        if (split.assetId != null && trade.assetId != null &&
-            String(split.assetId) === String(trade.assetId)) return true;
+        if (split.assetId != null && trade.assetId != null) {
+            return String(split.assetId) === String(trade.assetId);
+        }
         return sym(split.symbol) !== '' && sym(split.symbol) === sym(trade.symbol);
     }
 
@@ -139,9 +149,10 @@
      *    longer matches its purchases.
      *  - 'history': some trades are already on the new basis, so a flat ratio
      *    would convert them twice. The holding is rebuilt from its purchases —
-     *    but only if, before the change, the holding agreed with them. If it did
-     *    not, a rebuild would also overwrite whatever edit made them disagree,
-     *    inside an action that claims to be a split. That case is refused.
+     *    but only if, before the change, the holding agreed with them in both
+     *    units and average cost. If it did not, a rebuild would also overwrite
+     *    whatever edit made them disagree (a hand-entered cost, say), inside an
+     *    action that claims to be a split. That case is refused.
      */
     function planHoldingChange({ holding, purchases, sales, prevSplits, nextSplits, changed }) {
         const from = Number(changed.from), to = Number(changed.to);
@@ -166,12 +177,16 @@
 
         const before = fromHistory(purchases, sales, prevSplits);
         const held = Number(holding.shares || 0);
-        const tolerance = Math.max(1e-6, Math.abs(held) * 1e-9);
-        if (Math.abs(before.shares - held) > tolerance) {
+        const heldCost = Number(holding.costBasis || 0);
+        const unitsOff = Math.abs(before.shares - held) > Math.max(1e-6, Math.abs(held) * 1e-9);
+        const costOff = Math.abs(before.costBasis - heldCost) > Math.max(1e-6, Math.abs(heldCost) * 1e-6);
+        if (unitsOff || costOff) {
+            const gap = unitsOff
+                ? `${held} יחידות בהחזקה מול ${before.shares} מההיסטוריה`
+                : `עלות ממוצעת ${heldCost} בהחזקה מול ${before.costBasis} מההיסטוריה`;
             return {
                 error: 'יש עסקאות אחרי תאריך הפיצול, וההחזקה לא תואמת להיסטוריית הקניות והמכירות שלה ' +
-                    `(${held} בהחזקה מול ${before.shares} מההיסטוריה). ` +
-                    'אי אפשר לחשב את הפיצול בלי לשנות גם את הפער הזה.',
+                    `(${gap}). אי אפשר לחשב את הפיצול בלי לשנות גם את הפער הזה.`,
             };
         }
         const after = fromHistory(purchases, sales, nextSplits);

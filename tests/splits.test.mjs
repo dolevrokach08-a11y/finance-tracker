@@ -80,7 +80,17 @@ check('trade on the split date is already on the new basis', S.adjustTrade(onDay
 check('trade after the split is unchanged', S.adjustTrade(C, [SPLIT]), C);
 check('another symbol is unchanged', S.adjustTrade({ ...A, symbol: 'IBIT', assetId: 99 }, [SPLIT]).shares, 30);
 check('renamed holding still matched by assetId', S.adjustTrade({ ...A, symbol: 'ETHA-OLD' }, [SPLIT]).shares, 10);
+// GPT round 1, finding 1: two holdings with one symbol (a regular account and an IRA).
+check('a different holding id is not matched by symbol', S.adjustTrade({ ...A, assetId: 2 }, [{ ...SPLIT, assetId: 1 }]).shares, 30);
+check('a trade with no holding id falls back to the symbol', S.adjustTrade({ ...A, assetId: null }, [SPLIT]).shares, 10);
 check('symbol match is case-insensitive', S.adjustTrade({ ...A, symbol: 'etha', assetId: undefined }, [SPLIT]).shares, 10);
+// GPT round 1, finding 3: the day is the one the app shows (Israel), not the UTC day.
+// 22:30Z on 5 Oct is 01:30 on 6 Oct in Israel — already the new basis.
+check('22:30Z on the eve is the split day in Israel → not converted',
+  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [SPLIT]).shares, 30);
+check('20:30Z on the eve is 23:30 the day before → converted',
+  S.adjustTrade({ ...A, date: '2026-10-05T20:30:00.000Z' }, [SPLIT]).shares, 10);
+check('a bare YYYY-MM-DD is taken as is', [S.dayOf('2026-10-05'), S.dayOf('2026-10-05T12:00:00.000Z')], ['2026-10-05', '2026-10-05']);
 check('no splits → same array back', S.adjustTrades([A, B], []), [A, B]);
 
 const fwd = { ...SPLIT, id: 'f', from: 1, to: 2 };
@@ -138,6 +148,12 @@ check('history: 15 + 5 = 20 units, avg 58.80', [hist.shares, r4(hist.costBasis)]
 const refused = S.planHoldingChange({ holding: { ...late, shares: 52 }, purchases: [A, B, C], sales: [], prevSplits: [], nextSplits: [SPLIT], changed: SPLIT });
 check('history that disagrees with the holding is refused, not overwritten', typeof refused.error, 'string');
 
+// GPT round 1, finding 2: units agree with history, the average cost was typed by hand.
+const handCost = S.planHoldingChange({ holding: { ...late, costBasis: 30 }, purchases: [A, B, C], sales: [], prevSplits: [], nextSplits: [SPLIT], changed: SPLIT });
+check('history path refuses when the hand-entered cost disagrees, instead of replacing it',
+  [typeof handCost.error, handCost.shares], ['string', undefined]);
+const handCostScale = S.planHoldingChange({ holding: { ...holding, costBasis: 30 }, purchases: [A, B], sales: [], prevSplits: [], nextSplits: [SPLIT], changed: SPLIT });
+check('scale path keeps a hand-entered cost, restated: 30 → 90', [handCostScale.method, r4(handCostScale.costBasis)], ['scale', 90]);
 const undoScale = S.planHoldingChange({ holding: { ...holding, ...scale }, purchases: [A, B], sales: [], prevSplits: [SPLIT], nextSplits: [], changed: SPLIT });
 check('removing the split restores 45 units and the original avg',
   [undoScale.shares, r4(undoScale.costBasis)], [45, r4(871 / 45)]);
@@ -168,8 +184,19 @@ check('recalc does not rewrite stored purchases', p2.purchases.map(p => p.shares
 check('the page loads shared/splits.js before its module script',
   page.indexOf('src="shared/splits.js"') > 0 && page.indexOf('src="shared/splits.js"') < page.indexOf('<script type="module">'), true);
 check('saveData persists splits', /splits: portfolio\.splits \|\| \[\]/.test(page), true);
-check('applying a split closes the edit form (its stale units would undo it)',
-  /function finishSplitChange[\s\S]{0,200}hideAddHoldingForm\(\)/.test(page), true);
+check('applying a split closes the edit form when it is open on that holding',
+  /function finishSplitChange[\s\S]{0,600}editingHoldingId === holdingId\) hideAddHoldingForm\(\)/.test(page), true);
+check('the split is a row action, not a field of the edit form',
+  page.includes('onclick="showSplitModal(${holding.id})"') && !page.includes('split-holding-btn'), true);
+check('the dialog is announced as a modal dialog with a name',
+  /role="dialog" aria-modal="true" aria-labelledby="split-modal-title"/.test(page), true);
+
+const listSrc = extractFunction(page, 'splitsForHolding');
+const listCtx = { portfolio: { splits: [{ ...SPLIT, assetId: 1 }, { ...SPLIT, id: 'legacy', assetId: undefined }] } };
+vm.createContext(listCtx);
+const listFor = id => vm.runInContext(`${listSrc}; splitsForHolding({ id: ${id}, symbol: 'ETHA' }).map(s => s.id)`, listCtx);
+check('the events list of holding 1 shows its own split and the id-less one', listFor(1), ['split_1', 'legacy']);
+check("the events list of holding 2 does not show holding 1's split", listFor(2), ['legacy']);
 
 // ── 3. Tax optimizer lots ──────────────────────────────────────────────────────
 console.log('— tax-optimizer getRemainingLots');
