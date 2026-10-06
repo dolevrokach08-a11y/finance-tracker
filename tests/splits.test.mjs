@@ -288,5 +288,30 @@ check('normalizePortfolio defaults splits to []', FTData.normalizePortfolio({}, 
 const sw = read('sw.js');
 check('service worker precaches shared/splits.js', sw.includes("'shared/splits.js'"), true);
 
+// ── 5. The assistant's context ─────────────────────────────────────────────────
+// Stored rows are the broker's; the holding is in today's units. Without the events the
+// model saw "bought 30, holds 10" and could read it as a sale of 20.
+console.log('— assistant context');
+const aiBox = { console, Math, Date, JSON, Object, Array, String, Number, RegExp };
+aiBox.window = aiBox; aiBox.globalThis = aiBox;
+vm.createContext(aiBox);
+vm.runInContext(read('ai-assistant.js'), aiBox, { filename: 'ai-assistant.js' });
+const raw = data => aiBox.FinancialAIAssistant.prototype._buildPortfolioRaw.call({}, data);
+const aiPortfolio = { holdings: [{ ...holding, shares: 15 }], purchases: [A, B], sales: [] };
+const aiWithout = raw(aiPortfolio);
+check('no splits → no events line, the raw block is otherwise unchanged',
+  [aiWithout.includes('אירועי איחוד'), aiWithout.split('\n').filter(Boolean).map(l => l.split(':')[0])],
+  [false, ['=== נתוני תיק השקעות (גלם) ===', 'אחזקות מניות', 'אגרות חוב', 'מזומן בתיק', 'שערי מט"ח', 'קבוצות הקצאה (groups)',
+    'פקדונות', 'רכישות אחרונות (עד 20)', 'מכירות אחרונות (עד 20)', 'תמונות מצב (snapshots)', 'רשימת מעקב (watchlist)', 'דיבידנדים', '=== סוף נתוני השקעות ===']]);
+const aiWithSplit = raw({ ...aiPortfolio, splits: [{ ...SPLIT, tz: 'America/New_York' }] });
+const evLine = aiWithSplit.split('\n').find(l => l.startsWith('אירועי איחוד/פיצול מניות:'));
+check('the events reach the assistant: symbol, day, ratio, exchange',
+  evLine && JSON.parse(evLine.slice(evLine.indexOf(':') + 1)), [{ symbol: 'ETHA', date: '2026-10-06', from: 3, to: 1, exchangeTz: 'America/New_York' }]);
+check('and it is told the rows are unconverted and a gap is not a sale',
+  /לא הומרו/.test(aiWithSplit) && /אינו מכירה/.test(aiWithSplit), true);
+check('the events sit after purchases and sales, inside the raw block',
+  aiWithSplit.indexOf('מכירות אחרונות') < aiWithSplit.indexOf('אירועי איחוד') &&
+  aiWithSplit.indexOf('אירועי איחוד') < aiWithSplit.indexOf('=== סוף נתוני השקעות ==='), true);
+
 console.log(failed ? `\n${failed} failed` : '\nall passed');
 process.exit(failed ? 1 : 0);

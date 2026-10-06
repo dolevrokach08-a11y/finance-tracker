@@ -1180,6 +1180,32 @@ ${shown.join('\n')}
         return history;
     }
 
+    // The portfolio's raw rows. Purchases and sales are as the broker wrote them;
+    // a split (shared/splits.js) restates the older ones only when the app reads
+    // them, so the stored rows of a reverse-split holding show three times the
+    // units the holding has. Without the events the model saw "bought 30, holds
+    // 10" and could conclude 20 were sold, or average the wrong prices.
+    _buildPortfolioRaw(portfolioData) {
+        const splits = Array.isArray(portfolioData.splits) ? portfolioData.splits : [];
+        const splitsSection = splits.length === 0 ? '' : `
+אירועי איחוד/פיצול מניות: ${JSON.stringify(splits.map(s => ({ symbol: s.symbol, date: s.date, from: s.from, to: s.to, exchangeTz: s.tz })))}
+(הרכישות והמכירות כאן הן כפי שנרשמו אצל הברוקר ולא הומרו. עסקה של אותו נייר מיום שקודם לתאריך האירוע היא ביחידות הישנות: כל from יחידות הפכו ל־to, והמחיר ליחידה השתנה ביחס ההפוך. הסכומים ששולמו לא השתנו. האחזקות כבר ביחידות של היום, ולכן פער בין הרכישות לאחזקה בנייר כזה אינו מכירה.)`;
+        return `
+=== נתוני תיק השקעות (גלם) ===
+אחזקות מניות: ${JSON.stringify(portfolioData.holdings || [])}
+אגרות חוב: ${JSON.stringify(portfolioData.bonds || [])}
+מזומן בתיק: ${JSON.stringify(portfolioData.cash || {})}
+שערי מט"ח: ${JSON.stringify(portfolioData.rates || {})}
+קבוצות הקצאה (groups): ${JSON.stringify(portfolioData.groups || [])}
+פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
+רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
+מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}${splitsSection}
+תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12))}
+רשימת מעקב (watchlist): ${JSON.stringify(portfolioData.watchlist || [])}
+דיבידנדים: ${JSON.stringify((portfolioData.dividends || []).slice(-20))}
+=== סוף נתוני השקעות ===`;
+    }
+
     // ---- Claude API Integration ----
     async _callClaudeAPI(userMessage, token) {
         const financeData = this.getFinanceData();
@@ -1203,20 +1229,7 @@ ${shown.join('\n')}
             // allocation vs target). Cheap to compute here, saves the
             // model from doing arithmetic on dozens of rows.
             dataSection += this._buildPortfolioAnalytics(portfolioData);
-            dataSection += `
-=== נתוני תיק השקעות (גלם) ===
-אחזקות מניות: ${JSON.stringify(portfolioData.holdings || [])}
-אגרות חוב: ${JSON.stringify(portfolioData.bonds || [])}
-מזומן בתיק: ${JSON.stringify(portfolioData.cash || {})}
-שערי מט"ח: ${JSON.stringify(portfolioData.rates || {})}
-קבוצות הקצאה (groups): ${JSON.stringify(portfolioData.groups || [])}
-פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
-רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
-מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}
-תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12))}
-רשימת מעקב (watchlist): ${JSON.stringify(portfolioData.watchlist || [])}
-דיבידנדים: ${JSON.stringify((portfolioData.dividends || []).slice(-20))}
-=== סוף נתוני השקעות ===`;
+            dataSection += this._buildPortfolioRaw(portfolioData);
         }
 
         const noData = !hasFinance && !hasPortfolio ? `
