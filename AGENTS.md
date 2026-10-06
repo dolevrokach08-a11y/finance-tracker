@@ -164,6 +164,7 @@ git config core.hooksPath tools/hooks
 |---|---|
 | `shared/finance-summary.js` | סיכום חודשי בבסיס מזומן (כולל ניכוי כפילויות ומעשר) |
 | `shared/portfolio-twr.js` | TWR |
+| `shared/splits.js` | איחוד ופיצול מניות — ממיר עסקאות ישנות ליחידות של היום בלי לשכתב אותן |
 | `shared/accrual-rules.js` | לאיזה חודש שייכת שורה בצבירה — דגלים, תבניות וכללים זכורים לפי בית עסק |
 | `shared/backup.js` | גיבוי ושחזור של כל החשבון |
 | `shared/data.js` | נורמליזציה של מערכי נתונים |
@@ -312,6 +313,7 @@ node tests/mortgage-schedule.test.mjs
 node tests/mortgage-penalty.test.mjs
 node tests/boi-rates.test.mjs
 node tests/accrual-rules.test.mjs
+node tests/splits.test.mjs
 node tests/ai-finance-context.test.mjs
 node tests/ai-proposals.test.mjs
 node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישראל

@@ -77,6 +77,7 @@ a { color: var(--accent); }
 <link rel="modulepreload" href="./firebase-config.js">
 <script src="shared/user-storage.js" defer></script>
 <script src="shared/data.js" defer></script>
+<script src="shared/splits.js" defer></script>
 <script src="shared/payslip-sync.js"></script>
 <script src="sync-widget.js" defer></script>
 <link rel="stylesheet" href="shared/product-pages.css">
@@ -459,11 +460,13 @@ a { color: var(--accent); }
             window.__portfolioHoldings = Array.isArray(portfolioData.holdings) ? portfolioData.holdings : [];
             window.__portfolioPurchases = Array.isArray(portfolioData.purchases) ? portfolioData.purchases : [];
             window.__portfolioSales = Array.isArray(portfolioData.sales) ? portfolioData.sales : [];
+            window.__portfolioSplits = Array.isArray(portfolioData.splits) ? portfolioData.splits : [];
             window.__portfolioRates = portfolioData.rates || {};
           } else {
             window.__portfolioHoldings = [];
             window.__portfolioPurchases = [];
             window.__portfolioSales = [];
+            window.__portfolioSplits = [];
             window.__portfolioRates = {};
           }
           window.__portfolioLoadError = false;

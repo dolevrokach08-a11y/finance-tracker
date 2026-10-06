@@ -39,6 +39,7 @@
     <link rel="modulepreload" href="./firebase-config.js">
     <script src="shared/user-storage.js" defer></script>
     <script src="shared/data.js" defer></script>
+    <script src="shared/splits.js" defer></script>
     <script src="shared/portfolio-twr.js" defer></script>
     <script src="shared/load-script.js"></script>
     <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
@@ -7875,6 +7876,7 @@ function calculateTWRv3(startDate = null) {
                 withdrawals: portfolio.withdrawals || [],
                 purchases: portfolio.purchases || [],
                 sales: portfolio.sales || [],
+                splits: portfolio.splits || [],
                 snapshots: portfolio.snapshots || [],
                 cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
                 transactions: portfolio.transactions || [],
@@ -10684,21 +10686,26 @@ ${msg}`, 'warning');
             }
 
             // מצא את כל הקניות עבור החזקה זו
-            const purchases = portfolio.purchases.filter(p =>
+            const rawPurchases = portfolio.purchases.filter(p =>
                 (p.assetId && p.assetId === holding.id) ||
                 (!p.assetId && p.symbol === holding.symbol && p.assetType !== 'bonds')
             );
 
-            if (purchases.length === 0) {
+            if (rawPurchases.length === 0) {
                 console.log(`⚠️ No purchases found for ${symbol}`);
                 return;
             }
 
             // מצא את כל המכירות עבור החזקה זו
-            const sales = (portfolio.sales || []).filter(s =>
+            const rawSales = (portfolio.sales || []).filter(s =>
                 (s.assetId && s.assetId === holding.id) ||
                 (!s.assetId && s.symbol === holding.symbol && s.assetType !== 'bonds')
             );
+
+            // Trades stay as the broker wrote them; a split restates the older ones
+            // in today's units here (shared/splits.js). Amounts are untouched.
+            const purchases = window.FTSplits.adjustTrades(rawPurchases, portfolio.splits || []);
+            const sales = window.FTSplits.adjustTrades(rawSales, portfolio.splits || []);
 
             // סך כל המניות שנקנו + ממוצע משוקלל
             let totalSharesBought = 0;
@@ -10739,6 +10746,292 @@ ${msg}`, 'warning');
             if (currentShares <= 0) {
                 console.log(`🗑️ Holding ${symbol} has 0 shares after recalc`);
             }
+        }
+
+        // ===========================================
+        // SPLITS / REVERSE SPLITS
+        // ===========================================
+        // A split is recorded as an event (portfolio.splits) and never rewrites a
+        // purchase. The holding is updated once, here, by FTSplits.planHoldingChange;
+        // recalcHoldingFromPurchases reads the same events, so a later recalc agrees.
+        // It is a holding action of its own, not a field of the edit form: the form
+        // holds units, and saving it after a split would put the old ones back.
+
+        let splitHoldingId = null;
+        let splitOpener = null;
+
+        function splitEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        // The same trade filters recalcHoldingFromPurchases uses, unadjusted.
+        function splitTradesFor(holding) {
+            const mine = t => (t.assetId && t.assetId === holding.id) ||
+                (!t.assetId && t.symbol === holding.symbol && t.assetType !== 'bonds');
+            return {
+                purchases: (portfolio.purchases || []).filter(mine),
+                sales: (portfolio.sales || []).filter(mine),
+            };
+        }
+
+        // Same rule as FTSplits.appliesTo: a split that names a holding belongs to
+        // that holding only; one without an id falls back to the symbol.
+        function splitsForHolding(holding) {
+            return (portfolio.splits || []).filter(s => s.assetId != null
+                ? String(s.assetId) === String(holding.id)
+                : String(s.symbol || '').toUpperCase() === String(holding.symbol || '').toUpperCase());
+        }
+
+        function planSplitChange(holding, changed, adding) {
+            const prevSplits = portfolio.splits || [];
+            const nextSplits = adding ? [...prevSplits, changed] : prevSplits.filter(s => s !== changed);
+            const { purchases, sales } = splitTradesFor(holding);
+            return window.FTSplits.planHoldingChange({ holding, purchases, sales, prevSplits, nextSplits, changed });
+        }
+
+        function splitHolding() {
+            return portfolio.holdings.find(h => h.id === splitHoldingId) || null;
+        }
+
+        // The exchange shortlist, or — under "אחר" — any IANA zone typed by hand.
+        // An unknown zone fails FTSplits.validate and the preview says so.
+        function readSplitTimeZone() {
+            const sel = document.getElementById('split-tz');
+            if (sel.value !== '__other') return sel.value;
+            return document.getElementById('split-tz-other').value.trim();
+        }
+
+        function syncSplitTzOther() {
+            const other = document.getElementById('split-tz-other-group');
+            const isOther = document.getElementById('split-tz').value === '__other';
+            other.style.display = isOther ? '' : 'none';
+            if (isOther) document.getElementById('split-tz-other').focus();
+        }
+
+        function readSplitForm(holding) {
+            return {
+                id: 'split_' + Date.now(),
+                symbol: holding.symbol,
+                assetId: holding.id,
+                date: document.getElementById('split-date').value,
+                tz: readSplitTimeZone(),
+                from: parseFloat(document.getElementById('split-from').value),
+                to: parseFloat(document.getElementById('split-to').value),
+            };
+        }
+
+        function splitPlanLines(holding, plan) {
+            const cs = getCurrencySymbol(holding.currency);
+            const price = Number(holding.currentPrice || 0);
+            const fmtUnits = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 6 });
+            const fmtMoney = n => cs + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const lines = [
+                ['יחידות', fmtUnits(holding.shares), fmtUnits(plan.shares)],
+                ['עלות ממוצעת', fmtMoney(holding.costBasis), fmtMoney(plan.costBasis)],
+            ];
+            if (price > 0) {
+                lines.push(['שווי במחיר הנוכחי (' + fmtMoney(price) + ')',
+                    fmtMoney(holding.shares * price), fmtMoney(plan.shares * price)]);
+            }
+            return lines;
+        }
+
+        function renderSplitPreview() {
+            const holding = splitHolding();
+            const box = document.getElementById('split-preview');
+            if (!holding || !box) return;
+            const split = readSplitForm(holding);
+            const errors = window.FTSplits.validate(split);
+            if (errors.length) {
+                box.innerHTML = `<div style="color: var(--text-secondary);">${splitEsc(errors.join(' · '))}</div>`;
+                return;
+            }
+            const plan = planSplitChange(holding, split, true);
+            if (plan.error) {
+                box.innerHTML = `<div style="color: var(--loss);">${splitEsc(plan.error)}</div>`;
+                return;
+            }
+            // A grid, not a <table>: the page's table styles (sticky head, zebra,
+            // hover) belong to the data tables and looked foreign in here.
+            const cell = 'padding: 6px 0; border-top: 1px solid var(--border);';
+            const head = 'font-size: 0.8rem; color: var(--text-secondary); padding-bottom: 4px;';
+            const rows = splitPlanLines(holding, plan).map(([label, before, after]) =>
+                `<div style="${cell}">${splitEsc(label)}</div>` +
+                `<div style="${cell}"><bdi dir="ltr">${splitEsc(before)}</bdi></div>` +
+                `<div style="${cell}"><bdi dir="ltr">${splitEsc(after)}</bdi></div>`).join('');
+            box.innerHTML = `
+                <div role="group" aria-label="לפני ואחרי" style="display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); column-gap: 10px; font-size: 0.9rem; align-items: start;">
+                    <div style="${head}"></div><div style="${head}">עכשיו</div><div style="${head}">אחרי</div>
+                    ${rows}
+                </div>
+                <div style="margin-top: 6px; font-size: 0.8rem; color: var(--text-secondary);">
+                    ${plan.method === 'scale'
+                        ? 'כל העסקאות של הנייר קודמות לתאריך, ולכן ההחזקה כולה מוכפלת ביחס.'
+                        : 'יש עסקאות אחרי התאריך, ולכן ההחזקה מחושבת מחדש מהיסטוריית הקניות והמכירות.'}
+                </div>`;
+        }
+
+        function splitKeydown(e) {
+            if (e.key === 'Escape') { e.preventDefault(); closeSplitModal(); return; }
+            if (e.key !== 'Tab') return;
+            const dialog = document.querySelector('#split-modal [role="dialog"]');
+            const focusable = [...dialog.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+                .filter(el => !el.disabled && el.offsetParent !== null);
+            if (focusable.length === 0) return;
+            const first = focusable[0], last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+
+        function showSplitModal(holdingId) {
+            const holding = portfolio.holdings.find(h => h.id === holdingId);
+            if (!holding) return;
+            const opener = splitOpener || document.activeElement;
+            closeSplitModal({ keepFocus: true });
+            splitHoldingId = holdingId;
+            splitOpener = opener;
+
+            const existing = splitsForHolding(holding).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+            const guessTz = window.FTSplits.exchangeTimeZone(holding.symbol);
+            const exchanges = window.FTSplits.EXCHANGES.some(x => x.tz === guessTz)
+                ? window.FTSplits.EXCHANGES
+                : [{ tz: guessTz, label: guessTz }, ...window.FTSplits.EXCHANGES];
+            const tzOptions = exchanges.map(x =>
+                `<option value="${splitEsc(x.tz)}"${x.tz === guessTz ? ' selected' : ''}>${splitEsc(x.label)}</option>`).join('');
+            let zones = [];
+            try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) { /* older engines: free text still works */ }
+            const allZones = zones.map(z => `<option value="${splitEsc(z)}"></option>`).join('');
+            const tzLabel = tz => (window.FTSplits.EXCHANGES.find(x => x.tz === tz) || { label: tz }).label;
+            const existingHtml = existing.length === 0 ? '' : `
+                <div style="margin-bottom: 15px;">
+                    <div style="font-weight: 600; margin-bottom: 6px;">אירועים רשומים</div>
+                    ${existing.map(s => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border);">
+                            <span><bdi dir="ltr">${splitEsc(s.date)}</bdi> · כל <bdi dir="ltr">${splitEsc(s.from)}</bdi> יחידות הפכו ל־<bdi dir="ltr">${splitEsc(s.to)}</bdi> · ${splitEsc(tzLabel(window.FTSplits.splitTimeZone(s)))}</span>
+                            <button type="button" class="btn" style="padding: 4px 10px; font-size: 0.8rem;" onclick="deleteSplit('${splitEsc(s.id)}')" aria-label="מחק את האירוע מ־${splitEsc(s.date)}">מחק</button>
+                        </div>`).join('')}
+                </div>`;
+
+            const modal = document.createElement('div');
+            modal.id = 'split-modal';
+            modal.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 10000;';
+            modal.addEventListener('click', e => { if (e.target === modal) closeSplitModal(); });
+            modal.innerHTML = `
+                <div role="dialog" aria-modal="true" aria-labelledby="split-modal-title" aria-describedby="split-modal-desc" style="background: var(--bg-surface); padding: 25px; border-radius: 12px; max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+                    <h3 id="split-modal-title" style="margin: 0 0 10px 0;">⇅ איחוד / פיצול מניות · <bdi dir="ltr">${splitEsc(holding.symbol)}</bdi></h3>
+                    <p id="split-modal-desc" style="margin: 0 0 15px 0; font-size: 0.85rem; color: var(--text-secondary);">
+                        היסטוריית הקניות נשארת כמו בדוחות הברוקר. האירוע ממיר את העסקאות שלפני התאריך ליחידות של היום. הסכומים ששולמו לא משתנים.
+                    </p>
+                    ${existingHtml}
+                    <div class="form-group">
+                        <label for="split-date">תאריך תחילת המסחר ביחס החדש</label>
+                        <input type="date" id="split-date" style="direction: ltr;">
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">לפי לוח השנה בבורסה שנבחרה למטה. עסקה מיום מוקדם יותר תומר; עסקה מהיום הזה ואילך כבר ביחידות החדשות.</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="split-tz">הבורסה שבה הנייר נסחר</label>
+                        <select id="split-tz">${tzOptions}<option value="__other">אחר — אזור זמן לפי שם…</option></select>
+                        <div id="split-tz-other-group" style="display: none; margin-top: 8px;">
+                            <input type="text" id="split-tz-other" list="split-tz-list" placeholder="Pacific/Auckland" aria-label="אזור זמן של הבורסה" autocomplete="off" spellcheck="false" style="width: 100%; box-sizing: border-box; direction: ltr;">
+                            <datalist id="split-tz-list">${allZones}</datalist>
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">נבחרה לפי הסימול, וזה רק ניחוש. בדוק מול הברוקר: אותו נייר יכול להיסחר בכמה בורסות.</small>
+                    </div>
+                    <div class="form-group">
+                        <label id="split-ratio-label">היחס</label>
+                        <div role="group" aria-labelledby="split-ratio-label" style="display: grid; grid-template-columns: auto 64px auto 64px; gap: 8px; align-items: center; justify-content: start;">
+                            <span>כל</span>
+                            <input type="number" id="split-from" min="0" step="any" value="3" aria-label="יחידות לפני" style="width: 64px; direction: ltr;">
+                            <span>יחידות הפכו ל־</span>
+                            <input type="number" id="split-to" min="0" step="any" value="1" aria-label="יחידות אחרי" style="width: 64px; direction: ltr;">
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">איחוד 1 ל־3: כל 3 הפכו ל־1. פיצול 2 ל־1: כל 1 הפך ל־2.</small>
+                    </div>
+                    <div id="split-preview" aria-live="polite" style="padding: 12px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 15px;"></div>
+                    <p style="margin: 0 0 15px 0; font-size: 0.8rem; color: var(--text-secondary);">
+                        אם הברוקר פדה שארית של יחידה במזומן, רשום אותה בנפרד כמכירה.
+                    </p>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-success" style="flex: 1;" onclick="applySplit()">✅ רשום</button>
+                        <button type="button" class="btn" style="flex: 1; background: var(--text-muted); color: white;" onclick="closeSplitModal()">ביטול</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(modal);
+            modal.addEventListener('keydown', splitKeydown);
+
+            document.getElementById('split-date').value = localToday();
+            ['split-date', 'split-from', 'split-to', 'split-tz-other'].forEach(id =>
+                document.getElementById(id).addEventListener('input', renderSplitPreview));
+            document.getElementById('split-tz').addEventListener('change', () => { syncSplitTzOther(); renderSplitPreview(); });
+            renderSplitPreview();
+            document.getElementById('split-date').focus();
+        }
+
+        function closeSplitModal(opts) {
+            const modal = document.getElementById('split-modal');
+            if (!modal) return;
+            modal.remove();
+            splitHoldingId = null;
+            if (opts && opts.keepFocus) return;
+            const opener = splitOpener;
+            splitOpener = null;
+            if (opener && opener.isConnected && typeof opener.focus === 'function') opener.focus();
+        }
+
+        function finishSplitChange(message) {
+            // The edit form, if it is open on this holding, still shows the old
+            // units; saving it would undo the split.
+            const holdingId = splitHoldingId;
+            saveData();
+            closeSplitModal();
+            if (editingHoldingId !== null && editingHoldingId === holdingId) hideAddHoldingForm();
+            renderHoldingsList();
+            updateOverview();
+            notify(message, 'success');
+        }
+
+        function applySplit() {
+            const holding = splitHolding();
+            if (!holding) return;
+            const split = readSplitForm(holding);
+            const errors = window.FTSplits.validate(split);
+            if (errors.length) { notify('❌ ' + errors.join(' · '), 'error'); return; }
+            if (splitsForHolding(holding).some(s => s.date === split.date)) {
+                notify('❌ כבר רשום אירוע לנייר הזה באותו תאריך', 'error');
+                return;
+            }
+            const plan = planSplitChange(holding, split, true);
+            if (plan.error) { notify('❌ ' + plan.error, 'error'); return; }
+
+            const summary = splitPlanLines(holding, plan).map(([l, b, a]) => `${l}: ${b} ← ${a}`).join('\n');
+            if (!confirm(`לרשום ${split.date}: כל ${split.from} יחידות של ${holding.symbol} הפכו ל־${split.to}?\n\n${summary}`)) return;
+
+            if (!Array.isArray(portfolio.splits)) portfolio.splits = [];
+            split.createdAt = new Date().toISOString();
+            portfolio.splits.push(split);
+            portfolio.splits.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+            holding.shares = plan.shares;
+            holding.costBasis = plan.costBasis;
+            holding.lastUpdate = new Date().toISOString();
+            console.log(`⇅ Split ${holding.symbol} ${split.from}→${split.to} @ ${split.date} (${plan.method})`, plan);
+            finishSplitChange('✅ האירוע נרשם וההחזקה עודכנה');
+        }
+
+        function deleteSplit(id) {
+            const holding = splitHolding();
+            const split = (portfolio.splits || []).find(s => s.id === id);
+            if (!holding || !split) return;
+            const plan = planSplitChange(holding, split, false);
+            if (plan.error) { notify('❌ ' + plan.error, 'error'); return; }
+
+            const summary = splitPlanLines(holding, plan).map(([l, b, a]) => `${l}: ${b} ← ${a}`).join('\n');
+            if (!confirm(`למחוק את האירוע מ־${split.date} ולהחזיר את ההחזקה ליחידות הקודמות?\n\n${summary}`)) return;
+
+            portfolio.splits = portfolio.splits.filter(s => s !== split);
+            holding.shares = plan.shares;
+            holding.costBasis = plan.costBasis;
+            holding.lastUpdate = new Date().toISOString();
+            finishSplitChange('✅ האירוע נמחק וההחזקה הוחזרה');
         }
 
         // ===========================================
@@ -11475,6 +11768,7 @@ ${msg}`, 'warning');
                         <div style="display: flex; gap: 4px; justify-content: center;">
                             <button onclick="showAddSharesForm(${holding.id})" class="action-btn" title="הוסף מניות" aria-label="הוסף מניות ל-${holding.symbol}">+</button>
                             <button onclick="showSellSharesForm(${holding.id})" class="action-btn" title="מכור" aria-label="מכור מניות של ${holding.symbol}">$</button>
+                            <button onclick="showSplitModal(${holding.id})" class="action-btn" title="איחוד / פיצול מניות" aria-label="איחוד או פיצול מניות של ${holding.symbol}"><i data-lucide="split" style="width:14px;height:14px;"></i></button>
                             <button onclick="editHolding(${holding.id})" class="action-btn" title="ערוך" aria-label="ערוך את ${holding.symbol}"><i data-lucide="pencil" style="width:14px;height:14px;"></i></button>
                             <button onclick="deleteHolding(${holding.id})" class="action-btn danger" title="מחק" aria-label="מחק את ${holding.symbol}"><i data-lucide="trash-2" style="width:14px;height:14px;"></i></button>
                         </div>
@@ -12409,6 +12703,7 @@ ${msg}`, 'warning');
                 withdrawals: [],
                 purchases: [],
                 sales: [],
+                splits: [],
                 snapshots: [],
                 watchlist: []
             };
@@ -15940,6 +16235,10 @@ ${msg}`, 'warning');
         window.hideEditPurchaseModal = hideEditPurchaseModal;
         window.submitEditPurchase = submitEditPurchase;
         window.recalcHoldingFromPurchases = recalcHoldingFromPurchases;
+        window.showSplitModal = showSplitModal;
+        window.closeSplitModal = closeSplitModal;
+        window.applySplit = applySplit;
+        window.deleteSplit = deleteSplit;
         window.deleteDeposit = deleteDeposit;
         window.deleteWithdrawal = deleteWithdrawal;
         window.showCalculateCapitalFromHoldings = showCalculateCapitalFromHoldings;

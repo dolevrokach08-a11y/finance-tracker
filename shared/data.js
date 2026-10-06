@@ -92,6 +92,9 @@
             withdrawals: Array.isArray(loaded.withdrawals) ? loaded.withdrawals : [],
             purchases: Array.isArray(loaded.purchases) ? loaded.purchases : [],
             sales: Array.isArray(loaded.sales) ? loaded.sales : [],
+            // Splits restate old trades in today's units (shared/splits.js). Without
+            // this line the rebuild drops them and the holding falls back to old units.
+            splits: Array.isArray(loaded.splits) ? loaded.splits : [],
             snapshots: Array.isArray(loaded.snapshots) ? loaded.snapshots : [],
             cash: loaded.cash && typeof loaded.cash === 'object' ? loaded.cash : { ILS: 0, USD: 0, EUR: 0 },
             transactions: Array.isArray(loaded.transactions) ? loaded.transactions : [],
