@@ -260,6 +260,62 @@ async function call(body, opts, env = ENV) {
     assert.equal(await systemFor({ type: 'text', text: 'x' }), undefined);
 }
 
+// ── 8b''. The proposal tool: the Worker's own, opt-in, and checked ─────────
+{
+    const token = await mintToken();
+    const previous = upstreamReply;
+    const reply = (content, stop_reason = 'tool_use') => () => new Response(JSON.stringify({ content, stop_reason }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    // Without the flag there is no tool — the category classifier must stay a plain call.
+    await call(VALID_BODY, { token });
+    assert.equal(JSON.parse(upstreamCalls[0].init.body).tools, undefined);
+
+    // With it, exactly the Worker's tool — whatever the caller tries to add.
+    await call({ ...VALID_BODY, allowProposals: true, tools: [{ name: 'exfiltrate' }] }, { token });
+    const tools = JSON.parse(upstreamCalls[0].init.body).tools;
+    assert.equal(tools.length, 1);
+    assert.equal(tools[0].name, 'propose_changes');
+    assert.equal(tools[0].strict, true);
+    assert.equal(JSON.parse(upstreamCalls[0].init.body).tool_choice, undefined, 'forced tool use is a 400 on 5.5');
+
+    // A call comes back as proposals, cleaned.
+    upstreamReply = reply([
+        { type: 'thinking', thinking: '' },
+        { type: 'text', text: 'מצאתי שתיים.' },
+        { type: 'tool_use', id: 't1', name: 'propose_changes', input: { proposals: [
+            { kind: 'recategorize', type: 'expense', tx_id: '101', from_category: 'קניות', to_category: 'בילויים', keyword: '', reason: 'קולנוע' },
+            { kind: 'delete_transaction', type: 'expense', tx_id: '101', from_category: '', to_category: '', keyword: '', reason: '' },
+            { kind: 'add_rule', type: 'transfer', tx_id: '', from_category: '', to_category: 'x', keyword: 'y', reason: '' },
+            { kind: 'add_category', type: 'expense', tx_id: '', from_category: '', to_category: 'מנויים', keyword: '', reason: 'x'.repeat(500), extra: 'dropped' },
+        ] } },
+    ]);
+    let r = await call({ ...VALID_BODY, allowProposals: true }, { token });
+    assert.equal(r.status, 200);
+    assert.equal(r.json.text, 'מצאתי שתיים.');
+    assert.equal(r.json.proposals.length, 2, 'unknown kinds and types never leave the Worker');
+    assert.equal(r.json.proposals[0].to_category, 'בילויים');
+    assert.equal(r.json.proposals[1].reason.length, 200, 'fields are capped');
+    assert.equal(r.json.proposals[1].extra, undefined, 'only known fields are passed on');
+
+    // A list cut off by max_tokens is not passed on as if it were complete.
+    upstreamReply = reply([
+        { type: 'text', text: 'הנה.' },
+        { type: 'tool_use', id: 't2', name: 'propose_changes', input: { proposals: [
+            { kind: 'add_category', type: 'expense', tx_id: '', from_category: '', to_category: 'א', keyword: '', reason: '' },
+        ] } },
+    ], 'max_tokens');
+    r = await call({ ...VALID_BODY, allowProposals: true }, { token });
+    assert.deepEqual(r.json.proposals, []);
+    assert.equal(r.json.proposalsCut, true);
+
+    // Without the flag, a stray tool_use is ignored and no proposals key appears.
+    r = await call(VALID_BODY, { token });
+    assert.equal(r.json.proposals, undefined);
+
+    upstreamReply = previous;
+}
+
 // ── 8c. A classifier decline is named, not passed on as an empty answer ─────
 {
     const token = await mintToken();

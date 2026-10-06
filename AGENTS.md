@@ -168,6 +168,7 @@ git config core.hooksPath tools/hooks
 | `shared/backup.js` | גיבוי ושחזור של כל החשבון |
 | `shared/data.js` | נורמליזציה של מערכי נתונים |
 | `shared/user-storage.js` | בידוד `localStorage` לפי משתמש |
+| `shared/ai-proposals.js` | החלה וביטול של הצעות העוזר — הכתיבה היחידה שהעוזר גורם לה |
 
 <details>
 <summary>למה — שלוש דוגמאות אמיתיות</summary>
@@ -311,6 +312,8 @@ node tests/mortgage-schedule.test.mjs
 node tests/mortgage-penalty.test.mjs
 node tests/boi-rates.test.mjs
 node tests/accrual-rules.test.mjs
+node tests/ai-finance-context.test.mjs
+node tests/ai-proposals.test.mjs
 node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישראל
 node tools/fetch-boi-rates.mjs --check
 node tools/agent-relay.mjs --status # מי חייב תגובה למי

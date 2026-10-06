@@ -880,6 +880,7 @@
     <script src="shared/data.js" defer></script>
     <script src="shared/finance-summary.js" defer></script>
     <script src="shared/accrual-rules.js" defer></script>
+    <script src="shared/ai-proposals.js" defer></script>
     <script>
         // Global loading timeout - show retry button if page doesn't load in 20s
         window.__loadingTimeout = setTimeout(function() {
@@ -10963,6 +10964,32 @@
         window.closeEarnerModal = closeEarnerModal;
         window.renderDebtComparison = renderDebtComparison;
 
+        // The assistant is wired from a classic script, so it cannot see this
+        // module's `data` — and `data` is replaced outright on a backup import
+        // or a reset. These read it at call time. Proposals are applied to the
+        // live object and saved through the same path as an edit by hand, then
+        // everything a category change can touch is redrawn.
+        function afterAssistantEdit() {
+            saveToLocalStorage();
+            [renderCategorySelects, renderCategories, renderCategoryRules,
+             loadMonthTransactions, updateOverview, updateTithe].forEach(fn => {
+                try { fn(); } catch (e) { console.warn('[ai] redraw after proposals', e); }
+            });
+        }
+        window.__ftAssistant = {
+            data: () => data,
+            applyProposals(proposals) {
+                const outcome = window.FTProposals.apply(data, proposals);
+                if (outcome.undo.length) afterAssistantEdit();
+                return outcome;
+            },
+            undoProposals(steps) {
+                const outcome = window.FTProposals.undo(data, steps);
+                if (outcome.reverted) afterAssistantEdit();
+                return outcome;
+            }
+        };
+
         // ============== DARK MODE FUNCTIONALITY ==============
         function toggleTheme() {
             const html = document.documentElement;
@@ -12816,9 +12843,14 @@
             const getFinanceData = () => window.__financeData || {};
 
             // 1. AI Chat Assistant
+            // finance.html's module publishes window.__ftAssistant; it is looked
+            // up on every call, never captured.
+            const ft = () => window.__ftAssistant;
             const aiAssistant = new FinancialAIAssistant({
-                getFinanceData: getFinanceData,
-                getPortfolioData: () => ({})
+                getFinanceData: () => (ft() ? ft().data() : getFinanceData()),
+                getPortfolioData: () => ({}),
+                applyProposals: (proposals) => ft().applyProposals(proposals),
+                undoProposals: (steps) => ft().undoProposals(steps)
             });
 
             // 2. Smart Insights Widget (exposed to window for updateOverview integration)
