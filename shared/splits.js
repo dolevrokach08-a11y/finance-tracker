@@ -17,9 +17,13 @@
  *   ETHA's split took effect at the open on 6 Oct on Nasdaq, so a sale at 22:30Z
  *   on 5 Oct — 01:30 on the 6th in Israel, 18:30 on the 5th in New York — was
  *   still on the old basis. Neither the UTC day nor the Israeli day says that for
- *   every exchange; the exchange's own day does. Trades entered through the forms
- *   are stored at noon UTC, which is the same calendar day in every zone this
- *   maps to, so only full timestamps (a sale recorded "now", imports) can differ.
+ *   every exchange; the exchange's own day does.
+ *   But only a real moment has an exchange day. A day picked in a form is stored
+ *   as noon — `T12:00:00.000Z`, or local noon (`T09:00`/`T10:00Z` from Israel) —
+ *   and noon UTC is already the next day in Auckland. So a timestamp with zero
+ *   seconds and milliseconds is read as the day that was picked (its UTC day),
+ *   and only a real timestamp ("now", which carries seconds and ms) is placed in
+ *   the exchange's zone. Imports store a bare 'YYYY-MM-DD', taken as is.
  *   A record without `tz` takes the zone from its symbol (exchangeTimeZone).
  *   `from` → `to`: every `from` units became `to` units. ETHA: from 3, to 1.
  *
@@ -100,12 +104,19 @@
         return (split && split.tz) || exchangeTimeZone(split && split.symbol);
     }
 
-    /** 'YYYY-MM-DD' of a stored trade date at the given zone, or null. A bare day is taken as is. */
+    /**
+     * 'YYYY-MM-DD' of a stored trade date, or null.
+     *  - a bare day is taken as is;
+     *  - a picked day (a timestamp with no seconds or ms — the forms' noon) is its UTC day;
+     *  - a real moment is its calendar day in `tz`, the exchange's zone.
+     */
     function dayOf(d, tz) {
         if (!d) return null;
         if (typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
         const t = new Date(d);
-        return isNaN(t) ? null : dayFormat(tz || 'UTC').format(t);
+        if (isNaN(t)) return null;
+        if (t.getUTCSeconds() === 0 && t.getUTCMilliseconds() === 0) return t.toISOString().slice(0, 10);
+        return dayFormat(tz || 'UTC').format(t);
     }
 
     function isValidDay(s) {

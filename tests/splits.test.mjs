@@ -92,38 +92,52 @@ check('symbol match is case-insensitive', S.adjustTrade({ ...A, symbol: 'etha', 
 check('exchange zone from the symbol', ['ETHA', 'CSPX.L', '1159235', 'TEVA.TA', 'X.XX', ''].map(S.exchangeTimeZone),
   ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'Asia/Jerusalem', 'UTC', 'UTC']);
 check('22:30Z on 5 Oct, ETHA (18:30 New York) → old basis, converted',
-  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [SPLIT]).shares, 10);
+  S.adjustTrade({ ...A, date: '2026-10-05T22:30:07.412Z' }, [SPLIT]).shares, 10);
 check('00:30Z on 6 Oct, ETHA (20:30 New York on the 5th) → still converted',
-  S.adjustTrade({ ...A, date: '2026-10-06T00:30:00.000Z' }, [SPLIT]).shares, 10);
+  S.adjustTrade({ ...A, date: '2026-10-06T00:30:07.412Z' }, [SPLIT]).shares, 10);
 check('13:30Z on 6 Oct, ETHA (09:30 New York, the open) → new basis',
-  S.adjustTrade({ ...A, date: '2026-10-06T13:30:00.000Z' }, [SPLIT]).shares, 30);
+  S.adjustTrade({ ...A, date: '2026-10-06T13:30:07.412Z' }, [SPLIT]).shares, 30);
 const TASE = { ...SPLIT, id: 'ta', symbol: '1159235', assetId: 7 };
 const taTrade = { ...A, symbol: '1159235', assetId: 7 };
 check('22:30Z on 5 Oct, Tel Aviv security (01:30 on the 6th) → new basis',
-  S.adjustTrade({ ...taTrade, date: '2026-10-05T22:30:00.000Z' }, [TASE]).shares, 30);
+  S.adjustTrade({ ...taTrade, date: '2026-10-05T22:30:07.412Z' }, [TASE]).shares, 30);
 check("a split's own tz wins over its symbol",
-  S.adjustTrade({ ...A, date: '2026-10-05T22:30:00.000Z' }, [{ ...SPLIT, tz: 'Asia/Jerusalem' }]).shares, 30);
+  S.adjustTrade({ ...A, date: '2026-10-05T22:30:07.412Z' }, [{ ...SPLIT, tz: 'Asia/Jerusalem' }]).shares, 30);
 check('an unknown tz makes the split invalid', S.validate({ ...SPLIT, tz: 'Mars/Olympus' }).length, 1);
-for (const tz of ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'America/Toronto', 'UTC']) {
-  check(`form dates (noon UTC) keep their calendar day in ${tz}`, S.dayOf('2026-10-05T12:00:00.000Z', tz), '2026-10-05');
+// GPT round 5: noon UTC is 01:00 the next day in Auckland (NZDT, UTC+13), so "the same
+// day in every zone" was false. A picked day (no seconds, no ms) is its UTC day, whatever
+// the exchange — both encodings the forms write: noon UTC and Israel-local noon.
+for (const tz of ['America/New_York', 'Europe/London', 'Asia/Jerusalem', 'America/Toronto', 'UTC',
+                  'Pacific/Auckland', 'Asia/Tokyo', 'Australia/Sydney', 'America/Chicago']) {
+  check(`a picked day keeps its calendar day in ${tz} (noon UTC, and Israel-local noon)`,
+    [S.dayOf('2026-10-05T12:00:00.000Z', tz), S.dayOf('2026-10-05T09:00:00.000Z', tz)], ['2026-10-05', '2026-10-05']);
 }
+const nzFormBuy = { ...A, symbol: 'AIR.NZ', assetId: 10, date: '2026-10-05T12:00:00.000Z' };
+check('AIR.NZ bought on 5 Oct through the form → old basis, 10 @ 60',
+  (x => [x.shares, x.price])(S.adjustTrade(nzFormBuy, [{ ...SPLIT, id: 'air', symbol: 'AIR.NZ', assetId: 10 }])), [10, 60]);
+const AIR_SPLIT = { ...SPLIT, id: 'air', symbol: 'AIR.NZ', assetId: 10 };
+const nzPlan = S.planHoldingChange({ holding: { id: 10, symbol: 'AIR.NZ', shares: 30, costBasis: 20 + 1 / 30 },
+  purchases: [nzFormBuy], sales: [], prevSplits: [], nextSplits: [AIR_SPLIT], changed: AIR_SPLIT });
+check('… and recording the split scales the holding to 10', [nzPlan.method, nzPlan.shares], ['scale', 10]);
+check('a real moment is still placed in the exchange zone (seconds present)',
+  S.dayOf('2026-10-05T12:00:07.412Z', 'Pacific/Auckland'), '2026-10-06');
 check('a bare YYYY-MM-DD is taken as is', S.dayOf('2026-10-05', 'Asia/Jerusalem'), '2026-10-05');
 
 // GPT round 3: a guess the user cannot correct is not a safeguard. BHP.AX at 10:30 Sydney
 // on 6 Oct (23:30Z on the 5th) is the new basis; under UTC it read as the 5th → 10.
 const BHP = { ...SPLIT, id: 'bhp', symbol: 'BHP.AX', assetId: 8 };
-const bhpTrade = { ...A, symbol: 'BHP.AX', assetId: 8, date: '2026-10-05T23:30:00.000Z' };
+const bhpTrade = { ...A, symbol: 'BHP.AX', assetId: 8, date: '2026-10-05T23:30:07.412Z' };
 check('.AX maps to Sydney', S.exchangeTimeZone('BHP.AX'), 'Australia/Sydney');
 check('BHP.AX at 10:30 Sydney on the split day → new basis, 30', S.adjustTrade(bhpTrade, [BHP]).shares, 30);
 check('the same trade under a UTC guess would have been 10', S.adjustTrade(bhpTrade, [{ ...BHP, tz: 'UTC' }]).shares, 10);
 // CSPX from the demo data: no suffix, guessed New York, actually London.
-const cspxTrade = { ...A, symbol: 'CSPX', assetId: 9, date: '2026-10-06T02:00:00.000Z' };
+const cspxTrade = { ...A, symbol: 'CSPX', assetId: 9, date: '2026-10-06T02:00:07.412Z' };
 const CSPX = { ...SPLIT, id: 'cspx', symbol: 'CSPX', assetId: 9 };
 check('CSPX recorded as London keeps a 02:00Z trade on the 6th (30)', S.adjustTrade(cspxTrade, [{ ...CSPX, tz: 'Europe/London' }]).shares, 30);
 // GPT round 4: a closed list still strands an exchange that is not on it. AIR.NZ at
 // 10:30 Auckland on 6 Oct (21:30Z on the 5th) is the new basis; under UTC it read as the 5th.
 const AIR = { ...SPLIT, id: 'air', symbol: 'AIR.NZ', assetId: 10 };
-const airTrade = { ...A, symbol: 'AIR.NZ', assetId: 10, date: '2026-10-05T21:30:00.000Z' };
+const airTrade = { ...A, symbol: 'AIR.NZ', assetId: 10, date: '2026-10-05T21:30:07.412Z' };
 check('.NZ maps to Auckland', S.exchangeTimeZone('AIR.NZ'), 'Pacific/Auckland');
 check('AIR.NZ at 10:30 Auckland on the split day → new basis, 30', S.adjustTrade(airTrade, [AIR]).shares, 30);
 check('a zone typed by hand (not on the shortlist) is accepted and used',
