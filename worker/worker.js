@@ -208,6 +208,117 @@ async function handleTransactionsApi(request, env, url, CORS) {
   return json({ error: 'not found' }, 404);
 }
 
+// ── On-demand scraper run (/api/scrape/*) ──────────────────────────────────
+// The Max import is a GitHub Action in the private finance-scraper repo that
+// runs every night. These routes let the finance page start that same workflow
+// now instead of waiting for 03:00, and watch it finish:
+//
+//   POST /api/scrape/run     ← start a run (Firebase token + SCRAPE_ALLOWED_UIDS)
+//   GET  /api/scrape/status  ← the latest run of the workflow, whoever started it
+//
+// GITHUB_DISPATCH_TOKEN is a fine-grained PAT scoped to that one repo, with
+// Actions: read & write and nothing else. It stays here; the page never sees
+// it. A run logs into the card company with Dolev's credentials, so — as with
+// the AI route — a valid sign-in is not permission: SCRAPE_ALLOWED_UIDS is the
+// gate, and unset means shut.
+//
+// The cooldown is read from GitHub's own run list, not kept in memory. What it
+// protects — how often the card company sees a login — is durable, and an
+// isolate is not. A run that is already queued or running is answered with 409
+// and its details, so the page follows it instead of starting a second one.
+// The in-memory stamp only covers the few seconds before a fresh dispatch shows
+// up in that list.
+const SCRAPER_REPO = 'dolevrokach08-a11y/finance-scraper';
+const SCRAPER_WORKFLOW = 'scraper.yml';
+const SCRAPER_REF = 'main';
+const SCRAPE_COOLDOWN_MS = 10 * 60 * 1000;
+let _lastScrapeDispatch = 0;
+
+function githubFetch(env, path, init = {}) {
+  return fetch(`https://api.github.com${path}`, {
+    ...init,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      // GitHub rejects API calls without a User-Agent.
+      'User-Agent': 'finance-proxy-worker',
+      ...(init.body ? { 'Content-Type': 'application/json' } : {})
+    }
+  });
+}
+
+// Only what the page needs. html_url points into a private repo, so it opens
+// for Dolev and nobody else.
+function scrapeRunView(r) {
+  return {
+    id: r.id,
+    status: r.status,
+    conclusion: r.conclusion ?? null,
+    event: r.event,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    url: r.html_url
+  };
+}
+
+async function recentScrapeRuns(env) {
+  const res = await githubFetch(env,
+    `/repos/${SCRAPER_REPO}/actions/workflows/${SCRAPER_WORKFLOW}/runs?per_page=5`);
+  if (!res.ok) return { ok: false, status: res.status };
+  const data = await res.json().catch(() => null);
+  const runs = Array.isArray(data && data.workflow_runs) ? data.workflow_runs.map(scrapeRunView) : [];
+  return { ok: true, runs };
+}
+
+async function handleScrapeApi(request, env, url, origin, CORS) {
+  const json = (obj, status = 200) =>
+    new Response(JSON.stringify(obj), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+  const path = url.pathname;
+  const route = path === '/api/scrape/run' ? 'run' : path === '/api/scrape/status' ? 'status' : null;
+  if (!route) return json({ error: 'not found' }, 404);
+  if (request.method !== (route === 'run' ? 'POST' : 'GET')) return json({ error: 'method not allowed' }, 405);
+
+  // Only ever reached from the finance page; see the same check on the AI route.
+  if (!isAllowedOrigin(origin)) return json({ error: 'origin required' }, 403);
+  if (!env.GITHUB_DISPATCH_TOKEN) return json({ error: 'scrape_not_configured' }, 503);
+
+  const uid = await uidFromRequest(request, env);
+  if (!uid) return json({ error: 'unauthorized' }, 401);
+  const allowed = String(env.SCRAPE_ALLOWED_UIDS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!allowed.includes(uid)) return json({ error: 'scrape_not_enabled_for_user' }, 403);
+
+  const recent = await recentScrapeRuns(env);
+  // 502 outwards for the same reason as the AI route: a bare 401 from GitHub
+  // would read as the user's own sign-in having expired.
+  if (!recent.ok) return json({ error: 'github_error', upstreamStatus: recent.status }, 502);
+  const latest = recent.runs[0] || null;
+  const active = recent.runs.find(r => r.status !== 'completed') || null;
+
+  if (route === 'status') return json({ ok: true, run: active || latest });
+
+  if (active) return json({ error: 'already_running', run: active }, 409);
+  const now = Date.now();
+  const lastStart = Math.max(_lastScrapeDispatch, latest ? Date.parse(latest.createdAt) || 0 : 0);
+  if (now - lastStart < SCRAPE_COOLDOWN_MS) {
+    return json({
+      error: 'cooldown',
+      run: latest,
+      retryAfterSec: Math.ceil((SCRAPE_COOLDOWN_MS - (now - lastStart)) / 1000)
+    }, 429);
+  }
+
+  const res = await githubFetch(env,
+    `/repos/${SCRAPER_REPO}/actions/workflows/${SCRAPER_WORKFLOW}/dispatches`,
+    { method: 'POST', body: JSON.stringify({ ref: SCRAPER_REF }) });
+  if (!res.ok) return json({ error: 'github_error', upstreamStatus: res.status }, 502);
+  _lastScrapeDispatch = now;
+  // The dispatch API answers before the run exists, so there is no run id to
+  // return. The page finds its run by this timestamp on /status.
+  return json({ ok: true, dispatchedAt: new Date(now).toISOString() }, 202);
+}
+
 // ── AI assistant proxy ─────────────────────────────────────────────────────
 // The assistant used to call api.anthropic.com straight from the page, reading
 // the Anthropic key out of localStorage and sending it as `x-api-key`. That put
@@ -463,6 +574,11 @@ export default {
     // ── Max transaction ingestion API (D1-backed) ───────────────────────────
     if (requestUrl.pathname.startsWith('/api/transactions/')) {
       return handleTransactionsApi(request, env, requestUrl, CORS_HEADERS);
+    }
+
+    // ── Start the Max scraper now, instead of at 03:00 ──────────────────────
+    if (requestUrl.pathname.startsWith('/api/scrape/')) {
+      return handleScrapeApi(request, env, requestUrl, origin, CORS_HEADERS);
     }
 
     // ── AI assistant (the Anthropic key lives in the Worker, not the page) ──
