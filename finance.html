@@ -1187,11 +1187,17 @@
                     </div>
 
                     <div class="mt-3">
-                        <button id="pending-import-btn" onclick="loadPendingFromWorker()" class="btn bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm cursor-pointer" style="position:relative;">
-                            ⬇️ משוך עסקאות חדשות (מקס + לאומי)
-                            <span id="pending-import-badge" style="display:none; position:absolute; top:-8px; left:-8px; background:#ef4444; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px;"></span>
-                        </button>
-                        <p class="text-xs text-gray-500 mt-1">נמשך אוטומטית כל לילה (3:00). לחיצה שולפת מיד את הממתינות לאישור.</p>
+                        <div class="flex gap-2 flex-wrap items-center">
+                            <button id="pending-import-btn" onclick="loadPendingFromWorker()" class="btn bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg text-sm cursor-pointer" style="position:relative;">
+                                ⬇️ משוך עסקאות חדשות (מקס + לאומי)
+                                <span id="pending-import-badge" style="display:none; position:absolute; top:-8px; left:-8px; background:#ef4444; color:#fff; border-radius:999px; font-size:11px; padding:1px 7px;"></span>
+                            </button>
+                            <button id="scrape-now-btn" onclick="runScrapeNow()" class="btn bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-lg text-sm cursor-pointer">
+                                🔄 סרוק את מקס עכשיו
+                            </button>
+                        </div>
+                        <p id="scrape-now-status" class="text-xs text-gray-500 mt-1" hidden aria-live="polite"></p>
+                        <p class="text-xs text-gray-500 mt-1">נמשך אוטומטית כל לילה (3:00). "משוך" שולף מיד את הממתינות לאישור; "סרוק עכשיו" מריץ את סריקת מקס בענן בלי לחכות ללילה (כמה דקות). לאומי נסרק מהמחשב פעם בשבוע.</p>
                     </div>
 
                     <div class="mt-4 pt-4" style="border-top: 1px solid hsla(0,0%,100%,0.08);">
@@ -6144,6 +6150,144 @@
 
         setTimeout(refreshPendingBadge, 1200);
 
+        // ========== Start the cloud Max scrape now, instead of at 03:00 ==========
+        // The nightly GitHub Action is what fills the pending queue. This asks the
+        // Worker to start that same workflow, follows the run until it ends, and
+        // refreshes the badge. It imports nothing itself: the new rows wait in the
+        // queue for the pull button and the review modal, like the nightly ones.
+        const SCRAPE_API = window.FTData.scrapeApi();
+        const SCRAPE_POLL_MS = 10000;
+        const SCRAPE_GIVE_UP_MS = 15 * 60 * 1000;
+        let _scrapeFollowing = false;
+
+        function setScrapeStatus(text, linkUrl) {
+            const el = document.getElementById('scrape-now-status');
+            if (!el) return;
+            el.replaceChildren();
+            if (text) el.append(text);
+            if (text && linkUrl) {
+                const a = document.createElement('a');
+                a.href = linkUrl;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.textContent = 'פרטים ב-GitHub';
+                a.className = 'underline';
+                el.append(' · ', a);
+            }
+            el.hidden = !text;
+        }
+
+        // How many rows wait in the queue right now, or null when it can't be read.
+        async function pendingQueueCount() {
+            const headers = await pendingAuthHeaders();
+            if (!headers) return null;
+            try {
+                const res = await fetch(`${PENDING_API}/pending`, { headers });
+                if (!res.ok) return null;
+                const body = await res.json();
+                return Number(body.count) || 0;
+            } catch (e) { return null; }
+        }
+
+        // Poll /status until the run that `matches` reaches "completed".
+        // Returns that run, or null if it is still going when we give up.
+        async function followScrapeRun(matches) {
+            const startedAt = Date.now();
+            let wait = 4000; // a fresh dispatch takes a few seconds to show up
+            while (Date.now() - startedAt < SCRAPE_GIVE_UP_MS) {
+                await new Promise(r => setTimeout(r, wait));
+                wait = SCRAPE_POLL_MS;
+                const headers = await pendingAuthHeaders();
+                if (!headers) continue;
+                let run = null;
+                try {
+                    const res = await fetch(`${SCRAPE_API}/status`, { headers });
+                    if (!res.ok) continue; // a passing GitHub/Worker hiccup; try again
+                    run = (await res.json()).run;
+                } catch (e) { continue; }
+                if (!run || !matches(run)) continue;
+                if (run.status === 'completed') return run;
+                const min = Math.max(1, Math.round((Date.now() - Date.parse(run.createdAt)) / 60000));
+                setScrapeStatus(run.status === 'in_progress'
+                    ? `סורק את מקס... (דקה ${min})`
+                    : 'הסריקה ממתינה בתור של GitHub...', run.url);
+            }
+            return null;
+        }
+
+        async function runScrapeNow() {
+            if (_scrapeFollowing) return;
+            if (_isDemoMode) { notify('מצב הדגמה - סריקה אינה זמינה'); return; }
+            const headers = await pendingAuthHeaders();
+            if (!headers) { notify('לא מחובר - לא ניתן להפעיל סריקה'); return; }
+
+            const btn = document.getElementById('scrape-now-btn');
+            _scrapeFollowing = true;
+            if (btn) btn.disabled = true;
+            try {
+                setScrapeStatus('מפעיל סריקה...');
+                const before = await pendingQueueCount();
+                const res = await fetch(`${SCRAPE_API}/run`, { method: 'POST', headers });
+                const body = await res.json().catch(() => ({}));
+
+                let matches;
+                if (res.status === 202) {
+                    // Our run is the first manual one created after the dispatch.
+                    // The 30 s slack covers clock drift between Cloudflare and GitHub;
+                    // the Worker's 10-minute cooldown means no other run fits in it.
+                    const since = Date.parse(body.dispatchedAt) - 30000;
+                    matches = r => r.event === 'workflow_dispatch' && Date.parse(r.createdAt) >= since;
+                } else if (res.status === 409 && body.run) {
+                    const id = body.run.id;
+                    matches = r => r.id === id;
+                    notify('סריקה כבר רצה - עוקב אחריה');
+                } else if (res.status === 429) {
+                    const min = Math.max(1, Math.ceil((Number(body.retryAfterSec) || 60) / 60));
+                    setScrapeStatus(`סריקה התחילה לפני פחות מ-10 דקות - אפשר להפעיל שוב בעוד ${min} דק'`,
+                        body.run && body.run.url);
+                    return;
+                } else if (res.status === 403 || res.status === 503) {
+                    setScrapeStatus('הפעלת סריקה מהאתר לא מוגדרת לחשבון הזה');
+                    return;
+                } else {
+                    throw new Error('HTTP ' + res.status + (body.error ? ' ' + body.error : ''));
+                }
+
+                const run = await followScrapeRun(matches);
+                if (!run) {
+                    setScrapeStatus('הסריקה עדיין רצה - הפסקתי לעקוב. העסקאות יופיעו בתור כשתסתיים.');
+                    return;
+                }
+                if (run.conclusion !== 'success') {
+                    setScrapeStatus(run.conclusion === 'cancelled' ? 'הסריקה בוטלה' : '❌ הסריקה נכשלה', run.url);
+                    notify('❌ סריקת מקס לא הצליחה');
+                    return;
+                }
+
+                const after = await pendingQueueCount();
+                refreshPendingBadge();
+                // after − before is the rows this run added. A decision made on
+                // another device meanwhile can push it below zero; then the honest
+                // number is the queue size, not a difference.
+                const added = (before != null && after != null && after >= before) ? after - before : null;
+                const msg = added === 0
+                    ? '✅ הסריקה הסתיימה - אין עסקאות חדשות'
+                    : added != null
+                        ? `✅ הסריקה הסתיימה - ${added} עסקאות חדשות ממתינות לאישור`
+                        : after != null
+                            ? `✅ הסריקה הסתיימה - ${after} עסקאות ממתינות לאישור`
+                            : '✅ הסריקה הסתיימה';
+                setScrapeStatus(msg);
+                notify(msg);
+            } catch (err) {
+                console.error('runScrapeNow failed', err);
+                setScrapeStatus('❌ שגיאה בהפעלת הסריקה');
+            } finally {
+                _scrapeFollowing = false;
+                if (btn) btn.disabled = false;
+            }
+        }
+
         async function handleSmartImport(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -10900,6 +11044,7 @@
         window.addIncome = addIncome;
         window.addExpense = addExpense;
         window.loadPendingFromWorker = loadPendingFromWorker;
+        window.runScrapeNow = runScrapeNow;
         window.addManualTithe = addManualTithe;
         window.addDonation = addDonation;
         window.exportData = exportData;

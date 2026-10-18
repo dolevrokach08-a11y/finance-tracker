@@ -35,3 +35,12 @@ database_id = "7fb7ed1c-d602-4558-9687-8194914fa99a"
 #
 # Set a monthly spend limit in the Anthropic console too. It is the only cap
 # that holds if everything else here is wrong.
+
+# ── On-demand Max scrape (/api/scrape/run, /api/scrape/status) ───────────
+# Starts the scraper.yml workflow in the private finance-scraper repo.
+# GITHUB_DISPATCH_TOKEN: a fine-grained PAT, repository access = only
+# finance-scraper, permissions = Actions: Read and write (nothing else).
+#   npx wrangler secret put GITHUB_DISPATCH_TOKEN
+# SCRAPE_ALLOWED_UIDS: who may start a run (comma-separated Firebase uids).
+# Unset = nobody. A run logs into the card company, so keep this to the owner.
+#   npx wrangler secret put SCRAPE_ALLOWED_UIDS

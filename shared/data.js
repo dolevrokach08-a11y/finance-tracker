@@ -33,6 +33,11 @@
         return WORKER_BASE + '/api/ai/chat';
     }
 
+    // Starts the cloud Max scrape now; the GitHub token lives in the Worker.
+    function scrapeApi() {
+        return WORKER_BASE + '/api/scrape';
+    }
+
     // ── Portfolio document schema ───────────────────────────────────────
     const DEFAULT_GROUPS = [
         { id: 1, name: 'מדדים עולמיים', target: 60, color: '#3b82f6' },
@@ -156,6 +161,7 @@
         proxyUrl,
         pendingApi,
         aiApi,
+        scrapeApi,
         DEFAULT_GROUPS,
         normalizePortfolio,
         canLoadLocal,
