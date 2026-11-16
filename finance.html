@@ -1541,9 +1541,15 @@
                     <div class="finance-module-badges" aria-label="יכולות המסך"><span>TRENDS</span><span>FLOW</span><span>FORECAST</span></div>
                     <i aria-hidden="true">AN</i>
                 </section>
-                <div class="glass p-3 mb-4" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                <div class="glass p-3 mb-4 report-basis" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                    <div role="radiogroup" aria-label="בסיס החודשים בדוחות" class="report-basis__switch" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:6px;">
+                        <label style="cursor:pointer;"><input type="radio" name="report-basis-reports" value="cash" data-report-basis onchange="setReportBasis(this.value)"> <strong>📅 מחזור 10–10</strong></label>
+                        <label style="cursor:pointer;"><input type="radio" name="report-basis-reports" value="accrual" data-report-basis onchange="setReportBasis(this.value)"> <strong>📐 צבירה</strong></label>
+                    </div>
                     <div class="text-sm" style="color: var(--text-muted);">
-                        <strong style="color: hsl(210, 80%, 55%);">📐 בסיס צבירה</strong> — הדוחות מציגים הוצאות והכנסות בחודש שאליו הן <em>שייכות</em>. נתונים מ-2025-09 ואחורה הם מצרפיים בלבד.
+                        <span data-report-basis-note="cash">כל הכנסה והוצאה בחודש המחזור שבו נרשמה — מחזור נובמבר הוא 11 באוקטובר עד 10 בנובמבר. לא תלוי בתיוגים, וזהה לסקירה החודשית.</span>
+                        <span data-report-basis-note="accrual" hidden>כל הכנסה והוצאה בחודש שאליו היא <em>שייכת</em>, לפי התיוגים והכללים — משכורת אוקטובר שנכנסה בנובמבר מופיעה תחת אוקטובר.</span>
+                        נתונים מ-2025-09 ואחורה הם מצרפיים בלבד.
                     </div>
                 </div>
 
@@ -1831,7 +1837,7 @@
             <div id="tab-analysis" class="tab-content hidden">
                 <section class="finance-module-hero finance-module-hero--analysis">
                     <div class="finance-module-copy">
-                        <span>DECISION ENGINE / ACCRUAL</span>
+                        <span>DECISION ENGINE / MONTHLY</span>
                         <h2>לבדוק אם החודש באמת עובד.</h2>
                         <p>כלל 50/30/20, תקציבים ורטרוספקטיבה חודשית נפגשים למסך החלטה אחד.</p>
                     </div>
@@ -1839,9 +1845,14 @@
                     <i aria-hidden="true">DX</i>
                 </section>
 
-                <div class="glass p-3 mb-4" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                <div class="glass p-3 mb-4 report-basis" style="border-right: 3px solid hsl(210, 80%, 55%); background: hsla(210, 80%, 55%, 0.06);">
+                    <div role="radiogroup" aria-label="בסיס החודשים בניתוח" class="report-basis__switch" style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:6px;">
+                        <label style="cursor:pointer;"><input type="radio" name="report-basis-analysis" value="cash" data-report-basis onchange="setReportBasis(this.value)"> <strong>📅 מחזור 10–10</strong></label>
+                        <label style="cursor:pointer;"><input type="radio" name="report-basis-analysis" value="accrual" data-report-basis onchange="setReportBasis(this.value)"> <strong>📐 צבירה</strong></label>
+                    </div>
                     <div class="text-sm" style="color: var(--text-muted);">
-                        <strong style="color: hsl(210, 80%, 55%);">📐 בסיס צבירה</strong> — הניתוח כאן מציג כל הכנסה/הוצאה בחודש שאליו היא <em>שייכת</em> (לא בחודש המזומן). למשל: משכורת אפריל שנכנסה ב-10/5 מופיעה תחת אפריל.
+                        <span data-report-basis-note="cash">הניתוח כאן מציג כל הכנסה והוצאה בחודש המחזור שבו נרשמה — מחזור נובמבר הוא 11 באוקטובר עד 10 בנובמבר. לא תלוי בתיוגים.</span>
+                        <span data-report-basis-note="accrual" hidden>הניתוח כאן מציג כל הכנסה והוצאה בחודש שאליו היא <em>שייכת</em>, לפי התיוגים והכללים. למשל: משכורת אפריל שנכנסה ב-10/5 מופיעה תחת אפריל.</span>
                         <span style="display:inline-block;margin-right:8px;">⚠️ נתונים מ-2025-09 ואחורה הם מצרפיים בלבד (לפני שהמערכת תמכה בעסקאות בודדות).</span>
                     </div>
                 </div>
@@ -2077,7 +2088,7 @@
                     <h3 class="text-xl font-semibold mb-2">שיוך לחודש — כללים זכורים</h3>
                     <p class="text-sm text-gray-600 mb-4">
                         במקום לסמן כל חודש מחדש "בדיעבד" או "שייך לחודש הקבלה": כלל אחד לבית עסק, וכל עסקה שהתיאור שלה מכיל את מילת החיפוש מסומנת לבד — גם עסקאות עבר.
-                        עסקה שסימנת אחרת בעצמך נשארת כמו שסימנת. משפיע רק על תצוגת הצבירה (דוחות, ניתוח, חודש בצבירה), לא על הסקירה החודשית.
+                        עסקה שסימנת אחרת בעצמך נשארת כמו שסימנת. משפיע רק על תצוגת הצבירה (חודש בצבירה, ודוחות וניתוח כשהם במצב צבירה), לא על הסקירה החודשית.
                     </p>
 
                     <div id="accrual-settings-suggestions" class="mb-4" style="display: none;"></div>
@@ -3653,6 +3664,53 @@
             return (transactions || []).filter(t => computeAssignedMonth(t) === targetMonth);
         }
 
+        // ========== Report basis (reports + analysis tabs) ==========
+        // Which month the reports and analysis tabs put a row under:
+        //   'cash'    — the 10→10 cycle month the row was recorded in (t.month). Needs no
+        //               tagging, and is what the overview and the home screen use.
+        //   'accrual' — computeAssignedMonth(): the month the row belongs to, which depends
+        //               on the per-row flags and the remembered merchant rules.
+        // One choice for both tabs, so two charts never put the same month on different
+        // bases. A viewing preference only: nothing stored on any row changes.
+        const REPORT_BASIS_KEY = 'finance-report-basis';
+        const REPORT_BASIS_LABEL = { cash: 'מחזור 10–10', accrual: 'צבירה' };
+        let reportBasis = (() => {
+            try { return localStorage.getItem(REPORT_BASIS_KEY) === 'accrual' ? 'accrual' : 'cash'; }
+            catch (e) { return 'cash'; }
+        })();
+        let activeReportSubTab = 'overview';
+
+        function reportMonthOf(t) {
+            return reportBasis === 'accrual' ? computeAssignedMonth(t) : (t ? t.month : null);
+        }
+
+        function otherReportBasis() {
+            return reportBasis === 'accrual' ? 'cash' : 'accrual';
+        }
+
+        function renderReportBasisControls() {
+            document.querySelectorAll('input[data-report-basis]').forEach(el => {
+                el.checked = el.value === reportBasis;
+            });
+            document.querySelectorAll('[data-report-basis-note]').forEach(el => {
+                el.hidden = el.dataset.reportBasisNote !== reportBasis;
+            });
+        }
+
+        function setReportBasis(basis) {
+            if (basis !== 'cash' && basis !== 'accrual') return;
+            reportBasis = basis;
+            try { localStorage.setItem(REPORT_BASIS_KEY, basis); } catch (e) { /* preference only */ }
+            renderReportBasisControls();
+            const reports = document.getElementById('tab-reports');
+            if (reports && !reports.classList.contains('hidden')) {
+                renderCharts();
+                showReportSubTab(activeReportSubTab);
+            }
+            const analysis = document.getElementById('tab-analysis');
+            if (analysis && !analysis.classList.contains('hidden')) updateAnalysis();
+        }
+
         // Helper: returns true if a YYYY-MM string is in the legacy aggregate period.
         function isLegacyMonth(monthStr) {
             return monthStr && monthStr <= LEGACY_BOUNDARY;
@@ -3699,12 +3757,13 @@
             else { console.error('Tab not found:', tab, 'tab-'+tab); }
             if(tab==='overview') updateOverview();
             if(tab==='add') loadMonthTransactions();
-            if(tab==='reports') { 
-                createChartContainers(); 
+            if(tab==='reports') {
+                renderReportBasisControls();
+                createChartContainers();
                 renderCharts();
                 showReportSubTab('overview');
             }
-            if(tab==='analysis') { updateAnalysis(); }
+            if(tab==='analysis') { renderReportBasisControls(); updateAnalysis(); }
             if(tab==='tithe') { updateTithe(); renderDonations(); }
             if(tab==='settings') { renderCategories(); renderFixedItems(); renderCategoryRules(); renderAccrualRules(); updateRuleCategoryOptions(); updateRuleEarnerVisibility(); renderBudgets(); updateBudgetCategorySelect(); }
             if(tab==='networth') { renderNetWorth(); }
@@ -4460,6 +4519,7 @@
 
         // טאבים פנימיים בדוחות
         function showReportSubTab(subTab) {
+            activeReportSubTab = subTab;
             document.querySelectorAll('.report-sub-btn').forEach(btn => {
                 btn.classList.remove('bg-blue-100', 'text-blue-700');
                 btn.classList.add('text-gray-600');
@@ -8420,8 +8480,8 @@
             const container = document.getElementById('rule-503020');
             if (!container) return;
             
-            const sum = getMonthSummary(month, 'accrual');
-            const categoryBreakdown = getCategoryBreakdown(month, 'accrual');
+            const sum = getMonthSummary(month, reportBasis);
+            const categoryBreakdown = getCategoryBreakdown(month, reportBasis);
             
             const needs = ['מזון', 'דיור', 'חשבונות', 'תחבורה', 'בריאות', 'חינוך'];
             const wants = ['בילויים', 'קניות'];
@@ -8548,8 +8608,8 @@
             const prevDate = new Date(year, monthNum - 2);
             const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
             
-            const current = getMonthSummary(month, 'accrual');
-            const prev = getMonthSummary(prevMonth, 'accrual');
+            const current = getMonthSummary(month, reportBasis);
+            const prev = getMonthSummary(prevMonth, reportBasis);
             
             const insights = [];
             
@@ -8582,8 +8642,8 @@
                 });
             }
             
-            const currentCat = getCategoryBreakdown(month, 'accrual');
-            const prevCat = getCategoryBreakdown(prevMonth, 'accrual');
+            const currentCat = getCategoryBreakdown(month, reportBasis);
+            const prevCat = getCategoryBreakdown(prevMonth, reportBasis);
             
             Object.entries(currentCat).forEach(([cat, amt]) => {
                 const prevAmt = prevCat[cat] || 0;
@@ -8620,7 +8680,7 @@
             const container = document.getElementById('category-budgets');
             if (!container) return;
             
-            const breakdown = getCategoryBreakdown(month, 'accrual');
+            const breakdown = getCategoryBreakdown(month, reportBasis);
             const budgets = Object.entries(data.budgets);
             
             if (budgets.length === 0) {
@@ -8673,7 +8733,7 @@
             const months = [];
             for (let i = 0; i < 12; i++) {
                 const month = `${currentYear}-${String(i + 1).padStart(2, '0')}`;
-                months.push({ month, data: getMonthSummary(month, 'accrual') });
+                months.push({ month, data: getMonthSummary(month, reportBasis) });
             }
             
             const totalIncome = months.reduce((sum, m) => sum + m.data.inc, 0);
@@ -8944,7 +9004,7 @@
             const labels = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 const rate = sum.inc > 0 ? ((sum.inc - sum.exp) / sum.inc) * 100 : 0;
                 rates.push(Math.round(rate * 10) / 10);
                 labels.push(m.name);
@@ -9056,11 +9116,11 @@
             const monthLabels = months.map(m => m.name);
 
             // Build category -> month -> amount matrix from transactions + fixedExpenses
-            // ACCRUAL: bucket by assignedMonth, not cash month
+            // Bucketed by the report basis (cycle month or accrual month)
             const catMap = {};
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(reportMonthOf(t))).forEach(t => {
                 const cat = t.cat || 'אחר';
-                const m = computeAssignedMonth(t);
+                const m = reportMonthOf(t);
                 if (!catMap[cat]) catMap[cat] = {};
                 catMap[cat][m] = (catMap[cat][m] || 0) + t.amt;
             });
@@ -9312,9 +9372,9 @@
                 fixedTotal += (f.amount || 0) * activeMonths.length;
             });
 
-            // All expenses in period (ACCRUAL)
+            // All expenses in period, by the report basis
             let allExpenseTotal = 0;
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(reportMonthOf(t))).forEach(t => {
                 allExpenseTotal += t.amt || 0;
             });
             // Add fixed expenses to total (they may not be in transactions)
@@ -9398,11 +9458,11 @@
             const monthKeys = months.map(m => m.key);
             const monthLabels = months.map(m => m.name);
 
-            // Aggregate expenses by category × month (ACCRUAL)
+            // Aggregate expenses by category × month, by the report basis
             const catMap = {};
-            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(computeAssignedMonth(t))).forEach(t => {
+            data.transactions.filter(t => t.type === 'expense' && monthKeys.includes(reportMonthOf(t))).forEach(t => {
                 const cat = t.cat || 'אחר';
-                const m = computeAssignedMonth(t);
+                const m = reportMonthOf(t);
                 if (!catMap[cat]) catMap[cat] = {};
                 catMap[cat][m] = (catMap[cat][m] || 0) + (t.amt || 0);
             });
@@ -9506,8 +9566,11 @@
 
             if (data.transactions && data.transactions.length > 0) {
                 data.transactions.forEach(t => {
-                    if (t.type !== 'expense' || !t.month) return;
-                    const parts = t.month.split('-');
+                    // Follows the report basis like every other chart on this tab; it
+                    // used to read the cycle month while the banner said accrual.
+                    const bucket = reportMonthOf(t);
+                    if (t.type !== 'expense' || !bucket) return;
+                    const parts = bucket.split('-');
                     const year = parseInt(parts[0]);
                     const month = parseInt(parts[1]) - 1; // 0-indexed
                     if (year === thisYear && month >= 0 && month < 12) {
@@ -9678,7 +9741,7 @@
             const expData = [], incData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 expData.push(sum.exp);
                 incData.push(sum.inc);
             });
@@ -9895,14 +9958,14 @@
             const prevCatSpending = {};
 
             recentMonths.forEach(m => {
-                data.transactions.filter(t => computeAssignedMonth(t) === m.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => reportMonthOf(t) === m.key && t.type === 'expense').forEach(t => {
                     catSpending[t.cat] = (catSpending[t.cat] || 0) + t.amt;
                 });
             });
 
             const olderMonths = months.slice(-6, -3);
             olderMonths.forEach(m => {
-                data.transactions.filter(t => computeAssignedMonth(t) === m.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => reportMonthOf(t) === m.key && t.type === 'expense').forEach(t => {
                     prevCatSpending[t.cat] = (prevCatSpending[t.cat] || 0) + t.amt;
                 });
             });
@@ -9938,7 +10001,7 @@
             const currentMonth = months[months.length - 1];
             if (currentMonth) {
                 const currentCats = {};
-                data.transactions.filter(t => computeAssignedMonth(t) === currentMonth.key && t.type === 'expense').forEach(t => {
+                data.transactions.filter(t => reportMonthOf(t) === currentMonth.key && t.type === 'expense').forEach(t => {
                     currentCats[t.cat] = (currentCats[t.cat] || 0) + t.amt;
                 });
                 Object.entries(data.budgets || {}).forEach(([cat, budget]) => {
@@ -10117,12 +10180,18 @@
 
             const months = getReportMonths();
             const incData = [], expData = [], availableData = [];
+            // The same line on the other basis, drawn for comparison only: where the two
+            // lines sit together the tagging changes nothing; where they part, those are
+            // the months a tag actually moves. Nothing else on this tab reads it.
+            const otherBasis = otherReportBasis();
+            const otherAvailableData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 incData.push(sum.inc);
                 expData.push(sum.exp);
                 availableData.push(sum.available);
+                otherAvailableData.push(getMonthSummary(m.key, otherBasis).available);
             });
 
             const avgExp = expData.length ? expData.reduce((s,v) => s+v, 0) / expData.length : 0;
@@ -10158,7 +10227,7 @@
                         barPercentage: 0.78,
                         order: 3
                     },{
-                        label: 'יתרה פנויה',
+                        label: `יתרה פנויה · ${REPORT_BASIS_LABEL[reportBasis]}`,
                         data: availableData,
                         type: 'line',
                         borderColor: '#c9ff47',
@@ -10172,6 +10241,20 @@
                         tension: 0.32,
                         borderWidth: 3,
                         order: 1
+                    },{
+                        label: `יתרה פנויה · ${REPORT_BASIS_LABEL[otherBasis]} (להשוואה)`,
+                        data: otherAvailableData,
+                        type: 'line',
+                        borderColor: 'rgba(201,255,71,0.5)',
+                        backgroundColor: 'transparent',
+                        borderDash: [6, 4],
+                        pointRadius: 2,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: 'rgba(201,255,71,0.5)',
+                        fill: false,
+                        tension: 0.32,
+                        borderWidth: 2,
+                        order: 2
                     },{
                         label: 'חריגה',
                         data: anomalyPoints,
@@ -10205,7 +10288,11 @@
                                     if (index === undefined) return [];
                                     const income = incData[index] || 0;
                                     const marginPct = income > 0 ? (availableData[index] / income) * 100 : 0;
-                                    return [`מרווח חודשי: ${marginPct.toFixed(1)}%`];
+                                    const gap = Math.round((availableData[index] || 0) - (otherAvailableData[index] || 0));
+                                    return [
+                                        `מרווח חודשי: ${marginPct.toFixed(1)}%`,
+                                        `פער מול ${REPORT_BASIS_LABEL[otherBasis]}: ${gap > 0 ? '+' : gap < 0 ? '-' : ''}₪${Math.abs(gap).toLocaleString('he-IL')}`,
+                                    ];
                                 }
                             }
                         }
@@ -10232,7 +10319,7 @@
             const balData = [];
 
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 balData.push(sum.available);
             });
 
@@ -10329,7 +10416,7 @@
             const catTotals = {};
             
             months.forEach(m => {
-                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='expense').forEach(t=>{
+                data.transactions.filter(t=>reportMonthOf(t)===m.key&&t.type==='expense').forEach(t=>{
                     catTotals[t.cat] = (catTotals[t.cat]||0) + t.amt;
                 });
 
@@ -10439,7 +10526,7 @@
             const catTotals = {};
             
             months.forEach(m => {
-                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='income').forEach(t=>{
+                data.transactions.filter(t=>reportMonthOf(t)===m.key&&t.type==='income').forEach(t=>{
                     catTotals[t.cat] = (catTotals[t.cat]||0) + t.amt;
                 });
 
@@ -10569,7 +10656,7 @@
 
             filteredMonths.forEach(m => {
                 const txItems = data.transactions
-                    .filter(t => computeAssignedMonth(t) === m.key && t.type === type && (t.cat === category || (!t.cat && category === 'אחר')))
+                    .filter(t => reportMonthOf(t) === m.key && t.type === type && (t.cat === category || (!t.cat && category === 'אחר')))
                     .map(t => ({ desc: t.desc || '-', amt: t.amt, date: t.transactionDate || t.date || m.key, fixed: false }));
 
                 // Fixed items
@@ -10640,12 +10727,12 @@
             let totalIncome = 0;
 
             months.forEach(m => {
-                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='income').forEach(t=>{
+                data.transactions.filter(t=>reportMonthOf(t)===m.key&&t.type==='income').forEach(t=>{
                     incomeByCategory[t.cat] = (incomeByCategory[t.cat]||0) + t.amt;
                     totalIncome += t.amt;
                 });
 
-                data.transactions.filter(t=>computeAssignedMonth(t)===m.key&&t.type==='expense').forEach(t=>{
+                data.transactions.filter(t=>reportMonthOf(t)===m.key&&t.type==='expense').forEach(t=>{
                     expenseByCategory[t.cat] = (expenseByCategory[t.cat]||0) + t.amt;
                 });
 
@@ -10876,7 +10963,7 @@
             let totalIncome = 0, totalExpense = 0;
             
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 totalIncome += sum.inc;
                 totalExpense += sum.exp;
             });
@@ -10968,7 +11055,7 @@
             let total = 0;
             
             months.forEach(m => {
-                const sum = getMonthSummary(m.key, 'accrual');
+                const sum = getMonthSummary(m.key, reportBasis);
                 total += sum.available;
                 cumulativeSavings.push(total);
             });
@@ -11099,6 +11186,7 @@
         window.loadMonthTransactions = loadMonthTransactions;
         window.renderCharts = renderCharts;
         window.updateAnalysis = updateAnalysis;
+        window.setReportBasis = setReportBasis;
         window.updateOverview = updateOverview;
         window.updateRuleCategoryOptions = updateRuleCategoryOptions;
         window.updateRuleEarnerVisibility = updateRuleEarnerVisibility;
