@@ -41,6 +41,7 @@
     <script src="shared/data.js" defer></script>
     <script src="shared/splits.js" defer></script>
     <script src="shared/portfolio-twr.js" defer></script>
+    <script src="shared/group-returns.js" defer></script>
     <script src="shared/load-script.js"></script>
     <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
          file input in the holdings-import wizard. hiFileChange() fetches it. -->
@@ -2475,6 +2476,20 @@
                                 💰 <strong>MWR</strong> — מה הכסף שלך באמת הניב. סימולציה: לו היית קונה את האינדקס באותם תאריכים וסכומים שהפקדת בפועל.
                             </div>
                         </div>
+
+                        <!-- MWR by allocation group — numbers from shared/group-returns.js.
+                             Functional layout only; the visual design is a GPT pass (track ג). -->
+                        <div class="chart-container benchmark-chart-card group-mwr-card" style="grid-column: 1 / -1; height: auto;">
+                            <div class="chart-title">
+                                <span><i data-lucide="layers"></i> MWR לפי קבוצה</span>
+                            </div>
+                            <div id="group-mwr-body" style="overflow-x: auto;">
+                                <div style="color: var(--text-muted); padding: 12px 0;">מחשב…</div>
+                            </div>
+                            <div id="group-mwr-note" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
+                                תשואה שנתית על הכסף שנכנס לכל קבוצה ויצא ממנה — קניות, מכירות לפני מס ודיבידנדים ברוטו — מול שווי הקבוצה היום. נייר נספר בקבוצה שבה הוא נמצא היום, לכל ההיסטוריה שלו. לא כולל פנסיה, אג"ח ומזומן.
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -4721,7 +4736,18 @@ function confirmSnapshotData() {
     
     // Calculate final value
     const totalValue = recalculateSnapshotValue();
-    
+
+    // The prices typed or filled in above, kept per holding — read before the
+    // modal is removed, from the same inputs recalculateSnapshotValue summed.
+    const modalPrice = kind => (x, i) => {
+        const el = document.getElementById(`snapshot-price-${kind}-${i}`);
+        return el ? (parseFloat(el.value) || 0) : 0;
+    };
+    const positions = snapshotPositionsOrNull({
+        holdings: data.activeHoldings, bonds: data.activeBonds, rates,
+        holdingPrice: modalPrice('holding'), bondPrice: modalPrice('bond'),
+    });
+
     // Create snapshot
     const snapshot = {
         id: Date.now(),
@@ -4731,7 +4757,8 @@ function confirmSnapshotData() {
         exchange_rates: { ...rates },
         totalValue: totalValue + data.cashFlowILS,
         triggerType: data.triggerType,
-        triggerNote: data.note
+        triggerNote: data.note,
+        ...(positions ? { positions } : {})
     };
     
     // Add to portfolio
@@ -4854,6 +4881,9 @@ async function handleAutomaticSnapshot(triggerType, cashFlowILS, date, note, onC
         console.log(`📊 Portfolio value: ₪${Math.round(totalValue).toLocaleString()}`);
         
         // 5. Create snapshot
+        const positions = snapshotPositionsOrNull({
+            holdings: portfolio.holdings, bonds: portfolio.bonds, rates,
+        });
         const snapshot = {
             id: Date.now(),
             date: date,
@@ -4863,7 +4893,8 @@ async function handleAutomaticSnapshot(triggerType, cashFlowILS, date, note, onC
             totalValue: Math.round(totalValue) + cashFlowILS,
             triggerType: triggerType,
             triggerNote: note,
-            automatic: true // Mark as automatic
+            automatic: true, // Mark as automatic
+            ...(positions ? { positions } : {})
         };
         
         if (!Array.isArray(portfolio.snapshots)) {
@@ -5918,10 +5949,32 @@ function calculateTWRv3(startDate = null) {
             return stocksValue + bondsValue + cash;
         }
         
+        /**
+         * Per-holding units and prices for a snapshot (shared/group-returns.js), so a
+         * group's value on that date can be read back later. Null when the module
+         * failed to load — the snapshot is still written, just without the detail.
+         * Cash is read from portfolio.cash at call time, so call this before the
+         * flow being snapshotted touches it.
+         */
+        function snapshotPositionsOrNull({ holdings, bonds, rates, holdingPrice, bondPrice }) {
+            try {
+                if (!window.FTGroupReturns) return null;
+                return window.FTGroupReturns.snapshotPositions({
+                    holdings, bonds, cash: portfolio.cash || {},
+                    rates: rates || portfolio.rates || {}, holdingPrice, bondPrice,
+                });
+            } catch (e) {
+                console.warn('⚠️ snapshot positions skipped:', e?.message || e);
+                return null;
+            }
+        }
+
         // יצירת Snapshot (לפני הפקדה/משיכה!)
         function createSnapshot(triggerType, triggerNote = '', cashFlow = 0, customDate = null) {
             // Exclude pensions from snapshot values — they're tracked for net worth only
+            const positions = snapshotPositionsOrNull({ holdings: portfolio.holdings, bonds: portfolio.bonds });
             const snapshot = {
+                ...(positions ? { positions } : {}),
                 id: Date.now(),
                 date: customDate || new Date().toISOString(),
                 value_before_flow: getTotalPortfolioValueEnhanced(), // שווי התיק לפני זרימת המזומן (ללא פנסיה)
@@ -8358,7 +8411,9 @@ function calculateTWRv3(startDate = null) {
                 
                 // שמירת שווי התיק לפי מחיר קנייה (costBasis) לפני הוספת המניה החדשה
                 const valueBeforeNewHolding = getTotalPortfolioValueAtCost();
-                
+                // Market prices, before the new holding and the deposit exist.
+                const positionsBeforeNewHolding = snapshotPositionsOrNull({ holdings: portfolio.holdings, bonds: portfolio.bonds });
+
                 const newHolding = {
                     id: Date.now(),
                     symbol,
@@ -8457,7 +8512,8 @@ function calculateTWRv3(startDate = null) {
                         totalValue: getTotalPortfolioValueEnhanced(),
                         exchange_rates: { ...portfolio.rates },
                         triggerType: 'deposit',
-                        triggerNote: `הפקדה לקנייה: ${symbol}`
+                        triggerNote: `הפקדה לקנייה: ${symbol}`,
+                        ...(positionsBeforeNewHolding ? { positions: positionsBeforeNewHolding } : {})
                     };
                     portfolio.snapshots.push(snapshot);
                     console.log('📸 Snapshot created with value_before_flow:', valueBeforeNewHolding);
@@ -9080,7 +9136,9 @@ ${msg}`, 'warning');
             const totalUnits = bond.units + unitsNum;
             const newAvgCost = (oldCost + newCost) / totalUnits;
             const valueBeforeUpdate = getTotalPortfolioValueAtCost();
-            
+            // Market prices, before this bond's units and the deposit change.
+            const positionsBeforeUpdate = snapshotPositionsOrNull({ holdings: portfolio.holdings, bonds: portfolio.bonds });
+
             bond.units = totalUnits;
             bond.costBasis = newAvgCost;
             bond.lastUpdate = new Date().toISOString();
@@ -9130,7 +9188,8 @@ ${msg}`, 'warning');
                     totalValue: getTotalPortfolioValueEnhanced(),
                     exchange_rates: { ...portfolio.rates },
                     triggerType: 'deposit',
-                    triggerNote: `הפקדה לקנייה: ${bond.symbol}`
+                    triggerNote: `הפקדה לקנייה: ${bond.symbol}`,
+                    ...(positionsBeforeUpdate ? { positions: positionsBeforeUpdate } : {})
                 });
             }
             
@@ -14758,7 +14817,150 @@ ${msg}`, 'warning');
         // 📊 פונקציות ליצירת הגרפים המתקדמים
         
         let advancedCharts = {};
-        
+
+        // ==================== MWR BY GROUP ====================
+        // Numbers: shared/group-returns.js. This only gathers inputs, fetches the
+        // historical rates old-format trades and dividends need, and lays out a table.
+
+        // ILS per unit, by currency and day, from the ECB series (the same source
+        // the snapshot dialog's "fetch rates" button uses). In memory only.
+        const groupFxSeries = {};
+        async function loadGroupFx(needs) {
+            const byCur = {};
+            for (const n of needs) (byCur[n.currency] = byCur[n.currency] || []).push(n.day);
+            await Promise.all(Object.entries(byCur).map(async ([cur, days]) => {
+                days.sort();
+                // A week of slack before the first day, for a weekend or holiday.
+                const start = new Date(Date.parse(days[0]) - 7 * 864e5).toISOString().slice(0, 10);
+                const end = days[days.length - 1];
+                const series = groupFxSeries[cur];
+                if (series && series.start <= start && series.end >= end) return;
+                // api.frankfurter.app now 301s here, and the redirect carries no CORS
+                // header — a browser fetch of the old host fails outright.
+                const res = await fetch(`https://api.frankfurter.dev/v1/${start}..${end}?from=${encodeURIComponent(cur)}&to=ILS`);
+                if (!res.ok) throw new Error(`rates ${cur}: HTTP ${res.status}`);
+                const json = await res.json();
+                const rates = {};
+                for (const [d, r] of Object.entries(json.rates || {})) if (r && r.ILS > 0) rates[d] = r.ILS;
+                groupFxSeries[cur] = { start, end, rates };
+            }));
+        }
+        // The rate published on the day, or the last one before it (up to a week back).
+        function groupFxRate(cur, day) {
+            const s = groupFxSeries[cur];
+            if (!s || !day) return null;
+            let t = Date.parse(day);
+            for (let i = 0; i < 8; i++, t -= 864e5) {
+                const r = s.rates[new Date(t).toISOString().slice(0, 10)];
+                if (r) return r;
+            }
+            return null;
+        }
+
+        async function computeGroupReturns() {
+            const input = {
+                groups: portfolio.groups || [],
+                holdings: portfolio.holdings || [],
+                purchases: portfolio.purchases || [],
+                sales: portfolio.sales || [],
+                dividends: portfolio.dividends || [],
+                splits: portfolio.splits || [],
+                // Same valuation as the allocation tab's group values, without pensions.
+                valueOf: h => convertToILS(h.shares * (h.currentPrice || h.costBasis), h.currency),
+                rateFor: groupFxRate,
+            };
+            let res = window.FTGroupReturns.build(input);
+            if (res.needsRates.length) {
+                try {
+                    await loadGroupFx(res.needsRates);
+                    res = window.FTGroupReturns.build(input);
+                } catch (e) {
+                    console.warn('⚠️ group MWR: historical rates unavailable —', e?.message || e);
+                }
+            }
+            return res;
+        }
+        window.computeGroupReturns = computeGroupReturns;
+
+        async function renderGroupReturns() {
+            const body = document.getElementById('group-mwr-body');
+            if (!body) return;
+            if (!window.FTGroupReturns) {
+                body.innerHTML = '<div style="color: var(--text-muted); padding: 12px 0;">המודול לא נטען</div>';
+                return;
+            }
+            let res;
+            try {
+                res = await computeGroupReturns();
+            } catch (e) {
+                console.error('❌ group MWR:', e);
+                body.innerHTML = '<div style="color: var(--loss); padding: 12px 0;">שגיאה בחישוב</div>';
+                return;
+            }
+
+            const esc = splitEsc;
+            const ltr = s => `<bdi dir="ltr">${s}</bdi>`;
+            const money = n => ltr('₪' + Math.round(n).toLocaleString('he-IL'));
+            const signed = n => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toFixed(1) + '%';
+            const tone = n => (n > 0 ? 'var(--profit)' : n < 0 ? 'var(--loss)' : 'var(--text-primary)');
+            const why = g => {
+                const lines = g.issues.slice(0, 3).map(i => {
+                    if (i.reason === 'coverage') return `${ltr(esc(i.symbol))}: ${ltr(i.shares)} יחידות בתיק, ${ltr(+i.historyShares.toFixed(6))} לפי הקניות`;
+                    if (i.reason === 'fx') return `חסר שער ${ltr(esc(i.currency || ''))} ל-${ltr(esc(i.day || ''))} (${ltr(esc(i.symbol))})`;
+                    return `רשומה לא ברורה: ${ltr(esc(i.symbol))}`;
+                });
+                if (g.issues.length > 3) lines.push(`ועוד ${g.issues.length - 3}`);
+                return lines.join('<br>');
+            };
+            const statusText = {
+                empty: 'אין החזקות',
+                'too-short': 'פחות מיום של היסטוריה',
+                'no-solution': 'אין פתרון לתשואה',
+            };
+
+            const th = 'padding: 10px 12px; color: var(--text-muted); font-size: 0.78rem; font-weight: 500;';
+            const td = 'padding: 10px 12px; border-top: 1px solid var(--border);';
+            const rows = res.groups.map(g => {
+                const hasRate = g.status === 'ok';
+                const rate = hasRate
+                    // divs, not spans: `.chart-container span` forces --text-primary !important.
+                    ? `<div style="font-weight: 700; color: ${tone(g.mwrPct)};">${ltr(signed(g.mwrPct))}</div>`
+                      + `<div style="font-size: 0.72rem; color: var(--text-muted);">שנתי · ${ltr(g.years.toFixed(1))} שנים${g.years < 1 ? ' · פחות משנה, מוגדל' : ''}</div>`
+                    : `<div style="color: var(--text-muted);">—</div>`
+                      + `<div style="font-size: 0.72rem; color: var(--text-muted);">${g.status === 'incomplete' ? why(g) : (statusText[g.status] || '')}</div>`;
+                // An incomplete group's flow totals are missing whatever could not be
+                // read, so they are not shown — only today's value, which is whole.
+                const flowsKnown = g.status !== 'empty' && g.status !== 'incomplete';
+                return `<tr>
+                    <td style="${td}"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${esc(g.color || 'var(--text-muted)')}; margin-left: 8px;"></span>${esc(g.name)}</td>
+                    <td style="${td} text-align: center;">${rate}</td>
+                    <td style="${td} text-align: center;">${flowsKnown ? money(g.investedILS) : '—'}</td>
+                    <td style="${td} text-align: center;">${flowsKnown ? money(g.returnedILS) : '—'}</td>
+                    <td style="${td} text-align: center;">${g.status !== 'empty' ? money(g.valueILS) : '—'}</td>
+                    <td style="${td} text-align: center; color: ${flowsKnown ? tone(g.gainILS) : 'var(--text-muted)'};">${flowsKnown ? money(g.gainILS) : '—'}</td>
+                </tr>`;
+            }).join('');
+
+            const unassignedTrades = res.unassigned.filter(u => u.kind !== 'holding').length;
+            const unassignedHoldings = res.unassigned.filter(u => u.kind === 'holding').map(u => esc(u.symbol));
+            const extra = [
+                unassignedTrades ? `${ltr(unassignedTrades)} עסקאות של ניירות שכבר אינם בתיק לא משויכות לאף קבוצה.` : '',
+                unassignedHoldings.length ? `ללא קבוצה: ${unassignedHoldings.map(ltr).join(', ')}.` : '',
+            ].filter(Boolean).join(' ');
+
+            body.innerHTML = `<table style="width: 100%; border-collapse: collapse; min-width: 560px;">
+                <thead><tr>
+                    <th style="${th} text-align: right;">קבוצה</th>
+                    <th style="${th}">MWR</th>
+                    <th style="${th}">נכנס</th>
+                    <th style="${th}">יצא</th>
+                    <th style="${th}">שווי היום</th>
+                    <th style="${th}">רווח</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>${extra ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">${extra}</div>` : ''}`;
+        }
+
         async function createAdvancedCharts() {
             console.log('📊 Creating advanced charts...');
             
@@ -14775,6 +14977,7 @@ ${msg}`, 'warning');
             createValueOverTimeChart(textColor, gridColor);
             createGainLossChart(textColor, gridColor);
             createCurrencyDistributionChart(textColor, gridColor);
+            renderGroupReturns();  // not awaited: its rate fetch must not hold up the benchmarks
             await createPerformanceComparisonChart(textColor, gridColor);  // ✅ await
             
             console.log('✅ Advanced charts created successfully!');
