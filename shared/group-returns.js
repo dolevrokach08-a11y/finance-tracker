@@ -589,17 +589,21 @@
      * is restated for distributions and would misstate a past value — and
      * converts agorot to shekels, the unit the app stores Israeli prices in.
      * The security number is taken from the text above the table, else from
-     * the file name; without one the caller must say which holding it is.
-     * @returns { security|null, closes: {day: ILS}, rows, first, last } or { error }
+     * the file name. TASE's own download has neither, only the fund's name
+     * (`title`), so the caller has to match it to a holding another way.
+     * @returns { security|null, title, closes: {day: ILS}, rows, first, last } or { error }
      */
     function parseTaseCsv(text, filename) {
         const lines = String(text || '').replace(/^﻿/, '').split(/\r?\n/);
-        const hi = lines.findIndex(l => /תאריך/.test(l));
+        // The header is the row with a cell that is exactly "תאריך". Matching the
+        // word anywhere catches TASE's range line above it ("מתאריך … עד תאריך …").
+        const delimOf = l => ['\t', ';', ','].map(d => [d, l.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+        const hi = lines.findIndex(l => /שער/.test(l) && cellsOf(l, delimOf(l)).includes('תאריך'));
         if (hi < 0) return { error: 'no-header' };
         const headLine = lines[hi];
-        const delim = ['\t', ';', ','].map(d => [d, headLine.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+        const delim = delimOf(headLine);
         const head = cellsOf(headLine, delim);
-        const dateCol = head.findIndex(h => /תאריך/.test(h));
+        const dateCol = head.indexOf('תאריך');
         const closeCols = head.map((h, i) => [h, i]).filter(([h]) => /שער\s*נעילה/.test(h) && !/מתואם/.test(h));
         if (!closeCols.length) return { error: 'no-close-column' };
         const [closeHead, closeCol] = closeCols.find(([h]) => /אגורות/.test(h)) || closeCols[0];
@@ -621,7 +625,10 @@
         const above = lines.slice(0, hi).join(' ');
         const m = above.match(/(?:^|\D)(0?\d{6,8})(?:\D|$)/) || String(filename || '').match(/(?:^|\D)(0?\d{6,8})(?:\D|$)/);
         const days = Object.keys(closes).sort();
-        return { security: m ? securityKey(m[1]) : null, closes, rows, first: days[0], last: days[days.length - 1] };
+        // TASE's own download names the fund but carries no number.
+        const firstLine = lines.find(l => l.trim()) || '';
+        const title = cellsOf(firstLine, delimOf(firstLine))[0].replace(/^נתונים היסטוריים\s*-\s*סוף יום\s*/, '').trim() || null;
+        return { security: m ? securityKey(m[1]) : null, title, closes, rows, first: days[0], last: days[days.length - 1] };
     }
 
     const api = {

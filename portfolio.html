@@ -15054,8 +15054,9 @@ ${msg}`, 'warning');
             const taseRows = israeli.map(h => {
                 const f = groupBackfill.tase[key(h.symbol)];
                 return `<li>${ltr(esc(h.symbol))} ${esc(h.name || '')} — ${f
-                    ? `<span style="color: var(--profit);">נטען, ${ltr(f.rows)} ימים ${ltr(esc(f.first))} עד ${ltr(esc(f.last))}</span>`
-                    : `<a href="https://market.tase.co.il/he/market_data/security/${encodeURIComponent(h.symbol)}/historical_data/eod?pType=7&oId=${encodeURIComponent('0' + h.symbol)}" target="_blank" rel="noopener" style="color: var(--accent);">לדף ההיסטוריה בבורסה</a>`}</li>`;
+                    ? `<span style="color: var(--profit);">נטען${f.title ? ` (${esc(f.title)})` : ''}, ${ltr(f.rows)} ימים ${ltr(esc(f.first))} עד ${ltr(esc(f.last))}</span>`
+                    : `<a href="https://market.tase.co.il/he/market_data/security/${encodeURIComponent(h.symbol)}/historical_data/eod?pType=7&oId=${encodeURIComponent('0' + h.symbol)}" target="_blank" rel="noopener" style="color: var(--accent);">לדף ההיסטוריה בבורסה</a>
+                       · <label style="color: var(--accent); cursor: pointer;">טען קובץ לנייר הזה<input type="file" accept=".csv,.tsv,.txt" data-backfill-symbol="${esc(h.symbol)}" hidden></label>`}</li>`;
             }).join('');
             const plan = groupBackfill.plan;
             const planHtml = plan ? (() => {
@@ -15082,19 +15083,51 @@ ${msg}`, 'warning');
                 <button id="group-backfill-check" class="btn" style="margin-top: 8px;">בדוק</button>
                 ${planHtml}`;
 
-            const input = document.getElementById('group-backfill-files');
-            if (input) input.onchange = async () => {
+            // TASE's download names the fund but has no security number, so a file
+            // is matched by its latest close against the holding's current price.
+            // Prices are written into snapshots for good, so a file that matches
+            // no holding, or more than one, is reported rather than guessed.
+            const priceFits = (r, h) => {
+                const close = r.closes[r.last];
+                const fresh = Date.now() - Date.parse(r.last) < 10 * 864e5;
+                return fresh && h.currentPrice > 0 && Math.abs(close / h.currentPrice - 1) < 0.03;
+            };
+            const takeFiles = async (files, forSymbol) => {
                 groupBackfill.notes = [];
-                for (const f of input.files) {
+                for (const f of files) {
                     const r = await readTaseFile(f);
-                    if (r.error) groupBackfill.notes.push(`${f.name}: לא נקרא (${r.error})`);
-                    else if (!r.security) groupBackfill.notes.push(`${f.name}: לא נמצא מספר נייר — שנה את שם הקובץ למספר הנייר`);
-                    else if (!israeli.some(h => key(h.symbol) === r.security)) groupBackfill.notes.push(`${f.name}: נייר ${r.security} לא נדרש`);
-                    else groupBackfill.tase[r.security] = r;
+                    const label = r.title ? `${f.name} (${r.title})` : f.name;
+                    if (r.error) { groupBackfill.notes.push(`${label}: לא נקרא (${r.error})`); continue; }
+                    let h = null;
+                    if (forSymbol) {
+                        h = israeli.find(x => x.symbol === forSymbol);
+                        const fresh = Date.now() - Date.parse(r.last) < 10 * 864e5;
+                        if (r.security && r.security !== key(h.symbol)) { groupBackfill.notes.push(`${label}: הקובץ של נייר ${r.security}, לא ${h.symbol}`); continue; }
+                        if (fresh && h.currentPrice > 0 && !priceFits(r, h)) {
+                            groupBackfill.notes.push(`${label}: שער אחרון ${r.closes[r.last]} לא תואם למחיר הנוכחי של ${h.symbol} (${h.currentPrice})`);
+                            continue;
+                        }
+                    } else if (r.security) {
+                        h = israeli.find(x => key(x.symbol) === r.security);
+                        if (!h) { groupBackfill.notes.push(`${label}: נייר ${r.security} לא נדרש`); continue; }
+                    } else {
+                        const hits = israeli.filter(x => priceFits(r, x));
+                        if (hits.length !== 1) {
+                            groupBackfill.notes.push(`${label}: לא זוהה לפי מחיר — טען אותו בשורה של הנייר`);
+                            continue;
+                        }
+                        h = hits[0];
+                    }
+                    groupBackfill.tase[key(h.symbol)] = r;
                 }
                 groupBackfill.plan = null;
                 renderGroupBackfill();
             };
+            const input = document.getElementById('group-backfill-files');
+            if (input) input.onchange = () => takeFiles(input.files, null);
+            box.querySelectorAll('input[data-backfill-symbol]').forEach(el => {
+                el.onchange = () => takeFiles(el.files, el.dataset.backfillSymbol);
+            });
             document.getElementById('group-backfill-check').onclick = async (ev) => {
                 ev.target.disabled = true;
                 ev.target.textContent = 'בודק…';

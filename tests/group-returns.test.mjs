@@ -427,6 +427,20 @@ function hasUndefined(o) {
   check('tase tsv: adjusted column ignored even when after; security from file name', [t.security, t.closes], ['1159169', { '2025-01-05': 155.8 }]);
   check('tase csv: close column with no unit is refused', G.parseTaseCsv('תאריך,שער נעילה\n01/01/2025,100\n').error, 'unknown-unit');
   check('tase csv: not a TASE file', G.parseTaseCsv('a,b\n1,2\n').error, 'no-header');
+  // The layout of TASE's real download (securityHistoryEOD.csv, Nov 2026): a
+  // title line, a range line that also contains "תאריך", no security number,
+  // and data rows shorter than the header.
+  const real = [
+    'נתונים היסטוריים - סוף יום אינבסקו חוץMSCI.WORLD,,,,,,',
+    'מתאריך 19/11/2021  עד תאריך 18/11/2026',
+    'תאריך,סטטוס מצב ני\'\'ע ליום מסחר,שער נעילה מתואם,סוג שער מתואם,שער נעילה (באגורות),שינוי (%),שער פתיחה,שער בסיס,ממ"מ,מועד עדכון ממ\'\'מ אחרון',
+    '18/11/2026,,49370.0000,שער נעילה,49370.0000,0.08,49520.0000,49330.0000',
+    '12/03/2024,,38000.0000,שער נעילה,38100.0000,0.10,38000.0000,38060.0000',
+  ].join('\r\n');
+  const rr = G.parseTaseCsv('﻿' + real + '\r\n', 'securityHistoryEOD (1).csv');
+  check('tase real: header is the row with a "תאריך" cell, not the range line', rr.error, undefined);
+  check('tase real: raw close in agorot, not the adjusted one', rr.closes, { '2026-11-18': 493.7, '2024-03-12': 381 });
+  check('tase real: no security number, the fund name instead', [rr.security, rr.title], [null, 'אינבסקו חוץMSCI.WORLD']);
   check('security key ignores leading zeros', G.securityKey('01185164') === G.securityKey('1185164'), true);
 }
 
