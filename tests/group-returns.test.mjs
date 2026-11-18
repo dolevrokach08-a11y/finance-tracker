@@ -286,6 +286,150 @@ function hasUndefined(o) {
   check('demo: every group has a rate', res.groups.every(g => g.status === 'ok' && Number.isFinite(g.mwrPct)), true);
 }
 
+// ================================================ TWR by group (history)
+//
+// Hand-computed before the first run:
+//   A  buy 10 @100 on 2025-01-01, snapshot 2025-07-01 at 120, today 110
+//      → (1200−1000)/1000 = +20%, then 1100/1200 − 1 → total exactly +10%
+//   B  buy 10 @100 on 2025-01-01; price 150 on 2025-07-01, buy 10 more @150;
+//      today 120 → TWR = 150/100 × 120/150 − 1 = +20% (MWR differs: timing)
+//   C  B without the July snapshot: one Modified Dietz period —
+//      w(Jul 1) = 184/365, r = (2400 − 2500) / (1000 + 1500 × 184/365)
+
+{
+  const snap = (id, date, prices) => ({
+    id, date, value_before_flow: 0, cash_flow: 0,
+    positions: { holdings: Object.entries(prices).map(([symbol, price]) => ({ id: 11, symbol, shares: 999, price, currency: 'ILS' })), bonds: [], cash: {}, rates: {} },
+  });
+  const one = (extra) => G.build({
+    groups, now: NOW,
+    holdings: [ils(11, 'AAA', 1, extra.shares)],
+    purchases: extra.purchases,
+    valueOf: valueTable({ AAA: extra.value }),
+    snapshots: extra.snapshots,
+  });
+
+  const a = one({
+    shares: 10, value: 1100,
+    purchases: [buy(11, 'AAA', '2025-01-01T12:00:00.000Z', 10, 100)],
+    snapshots: [snap(1, '2025-01-01', { AAA: 100 }), snap(2, '2025-07-01', { AAA: 120 })],
+  });
+  near('TWR A: buy-and-hold equals price change', byId(a, 1).twr.totalPct, 10, 1e-9);
+  check('TWR A: window and periods', [byId(a, 1).twr.fromDay, byId(a, 1).twr.periods, byId(a, 1).twr.annualPct], ['2025-01-01', 2, null]);
+
+  const bPurchases = [buy(11, 'AAA', '2025-01-01T12:00:00.000Z', 10, 100), buy(11, 'AAA', '2025-07-01T12:00:00.000Z', 10, 150)];
+  const b = one({
+    shares: 20, value: 2400, purchases: bPurchases,
+    snapshots: [snap(1, '2025-01-01', { AAA: 100 }), snap(2, '2025-07-01', { AAA: 150 })],
+  });
+  near('TWR B: second purchase timing does not move TWR', byId(b, 1).twr.totalPct, 20, 1e-9);
+  check('TWR B: MWR is a different number', Math.abs(byId(b, 1).mwrPct - 20) > 1, true);
+  check('TWR B: units from history, not from positions.shares (999 ignored)', Math.round(byId(b, 1).twr.totalPct * 1e6) / 1e6, 20);
+
+  const c = one({
+    shares: 20, value: 2400, purchases: bPurchases,
+    snapshots: [snap(1, '2025-01-01', { AAA: 100 }), snap(2, '2025-07-01', {})],   // July: no price for AAA
+  });
+  near('TWR C: unpriced snapshot skipped, one Dietz period', byId(c, 1).twr.totalPct,
+    (2400 - 2500) / (1000 + 1500 * 184 / 365) * 100, 1e-9);
+  check('TWR C: one period used', byId(c, 1).twr.periods, 1);
+
+  // D  snapshot 2025-01-01 with the group still empty; buy 10 @100 on 2025-04-01;
+  //    today 1100 → a lone buy-and-hold must come out as its price change, +10%,
+  //    measured from the purchase, not from the empty snapshot.
+  const d = one({
+    shares: 10, value: 1100,
+    purchases: [buy(11, 'AAA', '2025-04-01T12:00:00.000Z', 10, 100)],
+    snapshots: [snap(1, '2025-01-01', {})],
+  });
+  near('TWR D: group empty at the snapshot → measured from the first purchase', byId(d, 1).twr.totalPct, 10, 1e-9);
+  check('TWR D: window starts at the purchase', byId(d, 1).twr.fromDay, '2025-04-01');
+
+  const none = one({ shares: 10, value: 1100, purchases: [buy(11, 'AAA', '2025-01-01T12:00:00.000Z', 10, 100)], snapshots: [{ id: 1, date: '2025-01-01' }] });
+  check('TWR: no positions anywhere → reason, no number', [byId(none, 1).twr.reason, byId(none, 1).twr.totalPct], ['no-snapshots', undefined]);
+
+  const late = one({
+    shares: 20, value: 2400, purchases: bPurchases,
+    snapshots: [snap(2, '2025-07-01', { AAA: 150 })],
+  });
+  check('TWR: purchase before first usable snapshot → starts late', [late.groups[0].twr.fromDay, late.groups[0].twr.startsLate], ['2025-07-01', true]);
+  near('TWR: late window = 120/150 − 1', late.groups[0].twr.totalPct, -20, 1e-9);
+
+  const inc = one({ shares: 15, value: 1650, purchases: [buy(11, 'AAA', '2025-01-01T12:00:00.000Z', 10, 100)], snapshots: [snap(1, '2025-01-01', { AAA: 100 })] });
+  check('TWR: incomplete group gets none', byId(inc, 1).twr, null);
+}
+
+// ----------------------------------------------------------- backfill
+
+{
+  const holdings = [
+    { id: 31, symbol: 'ETHA', groupId: 1, shares: 15, currency: 'USD' },
+    { id: 32, symbol: '1185164', groupId: 2, shares: 5, currency: 'ILS' },
+    { id: 33, symbol: 'VUAG.L', groupId: 2, shares: 2, currency: 'USD' },
+  ];
+  const purchases = [
+    { date: '2025-01-01T12:00:00.000Z', symbol: 'ETHA', assetId: 31, shares: 45, price: 20, currency: 'USD', original_amount: 900, amount: 3300, assetType: 'stocks' },
+    { date: '2025-01-01T12:00:00.000Z', symbol: '1185164', assetId: 32, shares: 5, price: 400, currency: 'ILS', amount: 2000, assetType: 'stocks' },
+    { date: '2025-01-01T12:00:00.000Z', symbol: 'VUAG.L', assetId: 33, shares: 2, price: 80, currency: 'USD', original_amount: 160, amount: 590, assetType: 'stocks' },
+    { date: '2025-03-08T12:00:00.000Z', symbol: '1185164', assetId: 32, shares: 99, price: 1, currency: 'ILS', amount: 99, assetType: 'stocks' },
+  ];
+  const splits = [{ id: 's', symbol: 'ETHA', assetId: 31, date: '2025-06-02', tz: 'America/New_York', from: 3, to: 1 }];
+  const series = {
+    ETHA: { closes: { '2025-03-07': 60 }, basis: 'today', currency: 'USD', source: 'yahoo' },
+    '1185164': { closes: { '2025-03-06': 412.5, '2025-03-07': 415 }, basis: 'day', currency: 'ILS', source: 'tase' },
+    'VUAG.L': { closes: { '2025-03-07': 70 }, basis: 'today', currency: 'GBp', source: 'yahoo' },
+  };
+  const snapshots = [
+    { id: 1, date: '2025-03-08', exchange_rates: { USD: 3.6 } },          // Saturday
+    { id: 2, date: '2025-03-10', positions: { holdings: [] } },           // already has positions
+    { id: 3, date: '2025-04-01' },                                        // no locked rates, no prices
+  ];
+  const plan = G.backfillPlan({
+    snapshots, holdings, purchases: purchases.slice(0, 3), sales: [], splits,
+    seriesFor: h => series[h.symbol] || null,
+    rateFor: () => null,
+  });
+  check('backfill: only snapshots without positions', plan.map(p => p.snapshotId), [1, 3]);
+  const p1 = plan[0];
+  check('backfill: Saturday takes Friday close; Yahoo price back to the day\'s basis (60 × 1/3)',
+    p1.positions.holdings.map(h => [h.symbol, h.shares, h.price, h.priceDay]),
+    [['ETHA', 45, 20, '2025-03-07'], ['1185164', 5, 415, '2025-03-07']]);
+  check('backfill: currency mismatch is refused, not converted', p1.missing, [{ symbol: 'VUAG.L', reason: 'currency' }]);
+  check('backfill: locked snapshot rate kept', p1.positions.rates, { USD: 3.6 });
+  check('backfill: marked as current holdings only', p1.positions.backfill.scope, 'current-holdings');
+  check('backfill: no rate and no price → listed, not guessed',
+    plan[1].missing.map(m => [m.symbol, m.reason]), [['ETHA', 'fx'], ['1185164', 'no-price'], ['VUAG.L', 'fx']]);
+
+  // A trade on the snapshot day itself is a flow after the snapshot.
+  const sameDay = G.backfillPlan({ snapshots: [snapshots[0]], holdings: [holdings[1]], purchases, sales: [], splits, seriesFor: h => series[h.symbol] });
+  check('backfill: trade dated on the snapshot day not in its units', sameDay[0].positions.holdings[0].shares, 5);
+}
+
+// ------------------------------------------------------- TASE csv parse
+
+{
+  const csv = [
+    'אינבסקו חוץMSCI.WORLD',
+    'מספר נייר: 01185164',
+    '',
+    'תאריך,שער נעילה מתואם,שער נעילה (באגורות),שינוי (%),שער פתיחה',
+    '18/11/2026,"49,370","49,370",0.08%,"49,330"',
+    '17/11/2026,"49,330","49,330",-1.04%,"49,850"',
+    '',
+  ].join('\r\n');
+  const r = G.parseTaseCsv('﻿' + csv, 'Data.csv');
+  check('tase csv: security from the text above the table', r.security, '1185164');
+  check('tase csv: raw close, agorot → ILS', r.closes, { '2026-11-18': 493.7, '2026-11-17': 493.3 });
+  check('tase csv: range', [r.rows, r.first, r.last], [2, '2026-11-17', '2026-11-18']);
+
+  const tsv = 'תאריך\tשער נעילה (באגורות)\tשער נעילה מתואם\n05/01/2025\t15,580\t15,000\n';
+  const t = G.parseTaseCsv(tsv, 'history_01159169.tsv');
+  check('tase tsv: adjusted column ignored even when after; security from file name', [t.security, t.closes], ['1159169', { '2025-01-05': 155.8 }]);
+  check('tase csv: close column with no unit is refused', G.parseTaseCsv('תאריך,שער נעילה\n01/01/2025,100\n').error, 'unknown-unit');
+  check('tase csv: not a TASE file', G.parseTaseCsv('a,b\n1,2\n').error, 'no-header');
+  check('security key ignores leading zeros', G.securityKey('01185164') === G.securityKey('1185164'), true);
+}
+
 // ------------------------------------------------- the page loads it
 
 {

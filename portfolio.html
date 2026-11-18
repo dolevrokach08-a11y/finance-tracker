@@ -2486,8 +2486,13 @@
                             <div id="group-mwr-body" style="overflow-x: auto;">
                                 <div style="color: var(--text-muted); padding: 12px 0;">מחשב…</div>
                             </div>
+                            <!-- One-time rebuild of past snapshots' prices, for TWR by group. -->
+                            <details id="group-backfill" style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px;">
+                                <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.85rem;">השלמת מחירי עבר ל-TWR</summary>
+                                <div id="group-backfill-body" style="padding-top: 10px; font-size: 0.85rem;"></div>
+                            </details>
                             <div id="group-mwr-note" style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center;">
-                                תשואה שנתית על הכסף שנכנס לכל קבוצה ויצא ממנה — קניות, מכירות לפני מס ודיבידנדים ברוטו — מול שווי הקבוצה היום. נייר נספר בקבוצה שבה הוא נמצא היום, לכל ההיסטוריה שלו. לא כולל פנסיה, אג"ח ומזומן.
+                                MWR — תשואה שנתית על הכסף שנכנס לכל קבוצה ויצא ממנה (קניות, מכירות לפני מס, דיבידנדים ברוטו) מול שווי הקבוצה היום. TWR — תשואת הקבוצה עצמה בלי השפעת עיתוי הקניות, משרשור שווי הקבוצה בין תמונות המצב. נייר נספר בקבוצה שבה הוא נמצא היום, לכל ההיסטוריה שלו. לא כולל פנסיה, אג"ח ומזומן.
                             </div>
                         </div>
                     </div>
@@ -14868,6 +14873,7 @@ ${msg}`, 'warning');
                 // Same valuation as the allocation tab's group values, without pensions.
                 valueOf: h => convertToILS(h.shares * (h.currentPrice || h.costBasis), h.currency),
                 rateFor: groupFxRate,
+                snapshots: portfolio.snapshots || [],
             };
             let res = window.FTGroupReturns.build(input);
             if (res.needsRates.length) {
@@ -14931,9 +14937,19 @@ ${msg}`, 'warning');
                 // An incomplete group's flow totals are missing whatever could not be
                 // read, so they are not shown — only today's value, which is whole.
                 const flowsKnown = g.status !== 'empty' && g.status !== 'incomplete';
+                const t = g.twr;
+                const twrCell = !t
+                    ? `<div style="color: var(--text-muted);">—</div>`
+                    : t.reason
+                        ? `<div style="color: var(--text-muted);">—</div><div style="font-size: 0.72rem; color: var(--text-muted);">${t.reason === 'unstable' ? `לא יציב סביב ${ltr(esc(t.day))}` : 'אין מחירי עבר'}</div>`
+                        : `<div style="font-weight: 700; color: ${tone(t.totalPct)};">${ltr(signed(t.totalPct))}</div>`
+                          + `<div style="font-size: 0.72rem; color: var(--text-muted);">מצטבר מ-${ltr(esc(t.fromDay))}`
+                          + `${t.annualPct !== null ? ` · ${ltr(signed(t.annualPct))} שנתי` : ''}`
+                          + ` · ${ltr(t.periods)} תקופות${t.startsLate ? ' · קניות מוקדמות יותר מחוץ לחלון' : ''}</div>`;
                 return `<tr>
                     <td style="${td}"><span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${esc(g.color || 'var(--text-muted)')}; margin-left: 8px;"></span>${esc(g.name)}</td>
                     <td style="${td} text-align: center;">${rate}</td>
+                    <td style="${td} text-align: center;">${twrCell}</td>
                     <td style="${td} text-align: center;">${flowsKnown ? money(g.investedILS) : '—'}</td>
                     <td style="${td} text-align: center;">${flowsKnown ? money(g.returnedILS) : '—'}</td>
                     <td style="${td} text-align: center;">${g.status !== 'empty' ? money(g.valueILS) : '—'}</td>
@@ -14948,10 +14964,11 @@ ${msg}`, 'warning');
                 unassignedHoldings.length ? `ללא קבוצה: ${unassignedHoldings.map(ltr).join(', ')}.` : '',
             ].filter(Boolean).join(' ');
 
-            body.innerHTML = `<table style="width: 100%; border-collapse: collapse; min-width: 560px;">
+            body.innerHTML = `<table style="width: 100%; border-collapse: collapse; min-width: 660px;">
                 <thead><tr>
                     <th style="${th} text-align: right;">קבוצה</th>
                     <th style="${th}">MWR</th>
+                    <th style="${th}">TWR</th>
                     <th style="${th}">נכנס</th>
                     <th style="${th}">יצא</th>
                     <th style="${th}">שווי היום</th>
@@ -14959,7 +14976,180 @@ ${msg}`, 'warning');
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>${extra ? `<div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">${extra}</div>` : ''}`;
+            const det = document.getElementById('group-backfill');
+            if (det && det.open) renderGroupBackfill();
         }
+
+        // ---------- one-time backfill of past snapshot prices ----------
+        // Snapshots written before shared/group-returns.js existed hold only a
+        // total. This rebuilds per-holding prices for them, once: Yahoo history
+        // for listed tickers (fetched), TASE end-of-day files for Israeli
+        // security numbers (uploaded — TASE serves them to signed-in users only).
+        // Nothing is written until the preview is approved, and a snapshot is
+        // written only when every holding it needs has a price, so an incomplete
+        // one can be filled again later with more files.
+        const groupBackfill = { tase: {}, yahoo: {}, plan: null, notes: [] };
+
+        function groupBackfillTargets() {
+            const H = window.FTGroupReturns._history;
+            const snaps = (portfolio.snapshots || []).filter(s => !s.positions && s.date);
+            const days = snaps.map(s => new Date(s.date).toISOString().slice(0, 10));
+            const needed = (portfolio.holdings || []).filter(h => days.some(d =>
+                H.unitsBefore(h, d, portfolio.purchases, portfolio.sales, portfolio.splits) > 1e-6));
+            return { snaps, days, needed };
+        }
+
+        async function fetchYahooCloses(ticker, fromDay, toDay) {
+            const p1 = Math.floor(Date.parse(fromDay) / 1000);
+            const p2 = Math.floor(Date.parse(toDay) / 1000) + 864e2;
+            const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?period1=${p1}&period2=${p2}&interval=1d`;
+            // Own Worker only: these prices are written into snapshots for good, and
+            // the public fallback proxies are neither ours nor reliable.
+            for (const proxy of [CF_WORKER_URL].filter(Boolean)) {
+                try {
+                    const data = await safeFetchJSON(proxy + encodeURIComponent(url), {}, 20000);
+                    const r = data?.chart?.result?.[0];
+                    if (!r || !Array.isArray(r.timestamp)) continue;
+                    const off = r.meta?.gmtoffset || 0;   // the exchange's day, not UTC's
+                    const q = r.indicators?.quote?.[0]?.close || [];
+                    const closes = {};
+                    r.timestamp.forEach((t, i) => { if (q[i] > 0) closes[new Date((t + off) * 1000).toISOString().slice(0, 10)] = q[i]; });
+                    // `close` on the chart endpoint is split-adjusted to today.
+                    return { closes, currency: r.meta?.currency || null, basis: 'today', source: 'yahoo:' + ticker };
+                } catch (e) { /* next proxy */ }
+            }
+            return null;
+        }
+
+        async function readTaseFile(file) {
+            const buf = await file.arrayBuffer();
+            let text = new TextDecoder('utf-8').decode(buf);
+            if (!/תאריך/.test(text)) text = new TextDecoder('windows-1255').decode(buf);
+            return window.FTGroupReturns.parseTaseCsv(text, file.name);
+        }
+
+        function renderGroupBackfill() {
+            const box = document.getElementById('group-backfill-body');
+            if (!box || !window.FTGroupReturns) return;
+            const esc = splitEsc;
+            const ltr = s => `<bdi dir="ltr">${s}</bdi>`;
+            const { snaps, needed } = groupBackfillTargets();
+            if (!snaps.length) {
+                box.innerHTML = '<div style="color: var(--text-muted);">לכל תמונות המצב כבר יש מחירים.</div>';
+                return;
+            }
+            const key = window.FTGroupReturns.securityKey;
+            const israeli = needed.filter(h => isIsraeliSecurity(h.symbol));
+            const listed = needed.filter(h => !isIsraeliSecurity(h.symbol));
+            const taseRows = israeli.map(h => {
+                const f = groupBackfill.tase[key(h.symbol)];
+                return `<li>${ltr(esc(h.symbol))} ${esc(h.name || '')} — ${f
+                    ? `<span style="color: var(--profit);">נטען, ${ltr(f.rows)} ימים ${ltr(esc(f.first))} עד ${ltr(esc(f.last))}</span>`
+                    : `<a href="https://market.tase.co.il/he/market_data/security/${encodeURIComponent(h.symbol)}/historical_data/eod?pType=7&oId=${encodeURIComponent('0' + h.symbol)}" target="_blank" rel="noopener" style="color: var(--accent);">לדף ההיסטוריה בבורסה</a>`}</li>`;
+            }).join('');
+            const plan = groupBackfill.plan;
+            const planHtml = plan ? (() => {
+                const ready = plan.filter(p => !p.missing.length);
+                const rows = plan.map(p => `<tr>
+                    <td style="padding: 4px 8px;">${ltr(esc(p.day))}</td>
+                    <td style="padding: 4px 8px;">${ltr(p.positions.holdings.length)}</td>
+                    <td style="padding: 4px 8px; color: ${p.missing.length ? 'var(--loss)' : 'var(--profit)'};">${p.missing.length
+                        ? p.missing.map(m => `${ltr(esc(m.symbol))} (${{ fx: 'שער', 'no-series': 'אין היסטוריה', 'no-price': 'אין מחיר', currency: 'מטבע שונה' }[m.reason] || esc(m.reason)})`).join(', ')
+                        : 'מלא'}</td></tr>`).join('');
+                return `<div style="overflow-x: auto; margin-top: 8px;"><table style="border-collapse: collapse; min-width: 360px;">
+                        <thead><tr><th style="padding: 4px 8px; text-align: right;">תאריך</th><th style="padding: 4px 8px;">ניירות</th><th style="padding: 4px 8px; text-align: right;">חסר</th></tr></thead>
+                        <tbody>${rows}</tbody></table></div>
+                    <button id="group-backfill-apply" class="btn btn-success" style="margin-top: 8px;" ${ready.length ? '' : 'disabled'}>שמור מחירים ב-${ltr(ready.length)} תמונות מצב מלאות</button>
+                    <div style="color: var(--text-muted); margin-top: 4px;">תמונות מצב עם חסר לא נשמרות, וייבדקו שוב כשתטען עוד קבצים.</div>`;
+            })() : '';
+
+            box.innerHTML = `
+                <div>${ltr(snaps.length)} תמונות מצב בלי מחירים לפי נייר. ${ltr(listed.length)} ניירות יימשכו מ-Yahoo${israeli.length ? `, ו-${ltr(israeli.length)} ניירות ישראליים צריכים קובץ מהבורסה:` : '.'}</div>
+                ${israeli.length ? `<ul style="margin: 6px 0; padding-inline-start: 18px;">${taseRows}</ul>
+                <div style="color: var(--text-muted);">בדף ההיסטוריה: "5 שנים" ← "הורדת נתונים" ← CSV (דורש כניסה לאזור האישי באתר הבורסה, ללא תשלום).</div>
+                <input type="file" id="group-backfill-files" accept=".csv,.tsv,.txt" multiple style="margin-top: 6px;">` : ''}
+                ${groupBackfill.notes.length ? `<div style="color: var(--loss); margin-top: 6px;">${groupBackfill.notes.map(esc).join('<br>')}</div>` : ''}
+                <button id="group-backfill-check" class="btn" style="margin-top: 8px;">בדוק</button>
+                ${planHtml}`;
+
+            const input = document.getElementById('group-backfill-files');
+            if (input) input.onchange = async () => {
+                groupBackfill.notes = [];
+                for (const f of input.files) {
+                    const r = await readTaseFile(f);
+                    if (r.error) groupBackfill.notes.push(`${f.name}: לא נקרא (${r.error})`);
+                    else if (!r.security) groupBackfill.notes.push(`${f.name}: לא נמצא מספר נייר — שנה את שם הקובץ למספר הנייר`);
+                    else if (!israeli.some(h => key(h.symbol) === r.security)) groupBackfill.notes.push(`${f.name}: נייר ${r.security} לא נדרש`);
+                    else groupBackfill.tase[r.security] = r;
+                }
+                groupBackfill.plan = null;
+                renderGroupBackfill();
+            };
+            document.getElementById('group-backfill-check').onclick = async (ev) => {
+                ev.target.disabled = true;
+                ev.target.textContent = 'בודק…';
+                await buildGroupBackfillPlan();
+                renderGroupBackfill();
+            };
+            const apply = document.getElementById('group-backfill-apply');
+            if (apply) apply.onclick = applyGroupBackfill;
+        }
+
+        async function buildGroupBackfillPlan() {
+            const { snaps, days, needed } = groupBackfillTargets();
+            const from = new Date(Date.parse(days.slice().sort()[0]) - 10 * 864e5).toISOString().slice(0, 10);
+            const to = days.slice().sort().pop();
+            for (const h of needed.filter(x => !isIsraeliSecurity(x.symbol))) {
+                const ticker = h.altTicker || h.symbol;
+                if (!groupBackfill.yahoo[ticker]) groupBackfill.yahoo[ticker] = await fetchYahooCloses(ticker, from, to);
+            }
+            // ECB rates only for snapshots that did not lock their own.
+            const fxNeeds = [];
+            for (const s of snaps) {
+                const d = new Date(s.date).toISOString().slice(0, 10);
+                for (const cur of new Set(needed.map(h => h.currency || 'ILS'))) {
+                    if (cur !== 'ILS' && !(s.exchange_rates?.[cur] > 0)) fxNeeds.push({ currency: cur, day: d });
+                }
+            }
+            if (fxNeeds.length) {
+                try { await loadGroupFx(fxNeeds); } catch (e) { console.warn('⚠️ backfill rates:', e?.message || e); }
+            }
+            const key = window.FTGroupReturns.securityKey;
+            groupBackfill.plan = window.FTGroupReturns.backfillPlan({
+                snapshots: snaps,
+                holdings: portfolio.holdings, purchases: portfolio.purchases, sales: portfolio.sales, splits: portfolio.splits,
+                seriesFor: h => {
+                    if (isIsraeliSecurity(h.symbol)) {
+                        const f = groupBackfill.tase[key(h.symbol)];
+                        return f ? { closes: f.closes, basis: 'day', currency: 'ILS', source: 'tase-file' } : null;
+                    }
+                    return groupBackfill.yahoo[h.altTicker || h.symbol] || null;
+                },
+                rateFor: groupFxRate,
+            });
+        }
+
+        function applyGroupBackfill() {
+            const ready = (groupBackfill.plan || []).filter(p => !p.missing.length);
+            if (!ready.length) return;
+            if (!confirm(`לשמור מחירים לפי נייר ב-${ready.length} תמונות מצב?\n\nהשווי הכולל של תמונות המצב לא משתנה — נוסף רק פירוט לחישוב TWR לפי קבוצה.`)) return;
+            const stamp = new Date().toISOString();
+            let written = 0;
+            for (const p of ready) {
+                const s = p.snapshot;
+                if (!s || s.positions || !(portfolio.snapshots || []).includes(s)) continue;
+                s.positions = { ...p.positions, backfill: { ...p.positions.backfill, at: stamp } };
+                written++;
+            }
+            groupBackfill.plan = null;
+            saveData();
+            notify(`✅ נשמרו מחירים ב-${written} תמונות מצב`, 'success');
+            renderGroupReturns();
+        }
+
+        document.addEventListener('toggle', e => {
+            if (e.target && e.target.id === 'group-backfill' && e.target.open) renderGroupBackfill();
+        }, true);
 
         async function createAdvancedCharts() {
             console.log('📊 Creating advanced charts...');
