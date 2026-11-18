@@ -8089,6 +8089,9 @@ function calculateTWRv3(startDate = null) {
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState !== 'visible') return;
             if (_isDemoMode || !currentUser || !db || !navigator.onLine) return;
+            // Don't reload out from under the price backfill: its TASE files are
+            // read in memory, and the user leaves the tab to download each one.
+            if (groupBackfillHasWork()) return;
             if (Date.now() - lastVisibilityCheck < 30000) return; // don't spam on tab flicking
             lastVisibilityCheck = Date.now();
             try {
@@ -14989,6 +14992,13 @@ ${msg}`, 'warning');
         // written only when every holding it needs has a price, so an incomplete
         // one can be filled again later with more files.
         const groupBackfill = { tase: {}, yahoo: {}, plan: null, notes: [] };
+
+        /** True while the backfill panel is open or holds files or a preview. */
+        function groupBackfillHasWork() {
+            return !!document.getElementById('group-backfill')?.open
+                || Object.keys(groupBackfill.tase).length > 0
+                || !!groupBackfill.plan;
+        }
 
         function groupBackfillTargets() {
             const H = window.FTGroupReturns._history;
