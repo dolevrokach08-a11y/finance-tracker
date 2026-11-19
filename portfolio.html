@@ -11959,9 +11959,21 @@ ${msg}`, 'warning');
         // OVERVIEW
         // ===========================================
         
+        // The group table's "today" reads live prices and rates, but it is drawn
+        // only when the analysis tab opens. Every price refresh, trade or synced
+        // change passes through updateOverview, so redraw it from here — only
+        // while it is on screen, and once per burst of updates.
+        let groupReturnsRedrawTimer = null;
+        function scheduleGroupReturnsRedraw() {
+            if (!document.getElementById('tab-charts')?.classList.contains('active')) return;
+            clearTimeout(groupReturnsRedrawTimer);
+            groupReturnsRedrawTimer = setTimeout(() => { renderGroupReturns(); }, 400);
+        }
+
         function updateOverview() {
             console.log('🔄 Starting updateOverview...');
-            
+            scheduleGroupReturnsRedraw();
+
             // =============================================
             // CALCULATE EVERYTHING FIRST
             // =============================================
