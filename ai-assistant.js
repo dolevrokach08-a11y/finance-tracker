@@ -1200,7 +1200,7 @@ ${shown.join('\n')}
 פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
 רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
 מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}${splitsSection}
-תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12))}
+תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12).map(({ positions, ...s }) => s))}
 רשימת מעקב (watchlist): ${JSON.stringify(portfolioData.watchlist || [])}
 דיבידנדים: ${JSON.stringify((portfolioData.dividends || []).slice(-20))}
 === סוף נתוני השקעות ===`;
