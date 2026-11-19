@@ -130,20 +130,28 @@ const byId = (res, id) => res.groups.find(g => g.id === id);
   const R = G._read;
   check('ILS sale: pre-tax = gross − commission',
     R.saleILS({ currency: 'ILS', shares: 10, original_price: 120, gross_amount: 1200, commission: 10, tax: 50, amount: 1140, original_amount: 1140 }).ils, 1190);
-  near('USD sale, tax in ILS: implied rate 3.7',
-    R.saleILS({ currency: 'USD', shares: 4, original_price: 100, gross_amount: 400, commission: 0, tax: 100, taxCurrency: 'ILS', original_amount: 400, amount: 1480 }).ils, 1480, 1e-9);
+  near('USD sale: pre-tax native at the sale day rate',
+    R.saleILS({ currency: 'USD', date: '2025-03-15T12:00:00.000Z', shares: 4, original_price: 100, gross_amount: 400, commission: 0, tax: 100, taxCurrency: 'ILS', original_amount: 400, amount: 1300 }, () => 3.7).ils, 1480, 1e-9);
   near('USD sale, tax in USD: tax added back at the implied rate',
-    R.saleILS({ currency: 'USD', shares: 4, original_price: 100, gross_amount: 400, commission: 2, tax: 20, taxCurrency: 'USD', original_amount: 378, amount: 1398.6 }).ils, 1472.6, 1e-9);
+    R.saleILS({ currency: 'USD', date: '2025-03-15T12:00:00.000Z', shares: 4, original_price: 100, gross_amount: 400, commission: 2, tax: 20, taxCurrency: 'USD', original_amount: 378, amount: 1398.6 }, () => 3.7).ils, 1472.6, 1e-9);
 
-  check('recorded USD purchase: amount is already ILS',
-    R.purchaseILS({ currency: 'USD', original_currency: 'USD', shares: 10, original_price: 50, fee: 1, original_amount: 500, originalAmount: 501, amount: 1853.7 }, null).ils, 1853.7);
+  // The stored shekel amount carries the rate of the day it was typed in. These
+  // are the user's real records: entered on 2025-12-07 at 3.2316 for 2024 dates.
+  const usscJan = { currency: 'USD', original_currency: 'USD', shares: 84, original_price: 60.97, fee: 5, original_amount: 5121.48, originalAmount: 5126.48, amount: 16566.732768, date: '2024-01-09T12:00:00.000Z' };
+  const day2024 = (c, d) => (c === 'USD' && d === '2024-01-09' ? 3.7278 : null);
+  near('recorded USD purchase: native total at the trade day rate, not the stored amount',
+    R.purchaseILS(usscJan, day2024).ils, 5126.48 * 3.7278, 1e-6);
+  check('recorded USD purchase, no rate for its day: fx issue, not the stored amount',
+    R.purchaseILS(usscJan, () => null), { issue: 'fx', currency: 'USD', day: '2024-01-09' });
+  near('recorded USD sale entered late: the sale day rate',
+    R.saleILS({ currency: 'USD', original_currency: 'USD', shares: 17, original_price: 7, fee: 5, original_amount: 114, amount: 368.4, date: '2024-12-27T12:00:00.000Z' }, (c, d) => (d === '2024-12-27' ? 3.6765 : null)).ils, (17 * 7 - 5) * 3.6765, 1e-6);
   check('old USD purchase, native amount, no rate: fx issue',
     R.purchaseILS({ currency: 'USD', shares: 30, price: 98.5, amount: 2955, date: '2025-03-15T12:00:00.000Z' }, null),
     { issue: 'fx', currency: 'USD', day: '2025-03-15' });
   check('old USD purchase, native amount, with rate',
     R.purchaseILS({ currency: 'USD', shares: 30, price: 98.5, amount: 2955, date: '2025-03-15T12:00:00.000Z' }, () => 3.6).ils, 2955 * 3.6);
-  check('old USD purchase, amount 3.6× native: read as ILS',
-    R.purchaseILS({ currency: 'USD', shares: 10, price: 100, amount: 3600 }, () => 9).ils, 3600);
+  check('old USD purchase, amount in shekels: still native × the day rate',
+    R.purchaseILS({ currency: 'USD', shares: 10, price: 100, amount: 3600, date: '2025-03-15T12:00:00.000Z' }, () => 3.7).ils, 3700);
   check('old USD purchase, amount 1.5× native: ambiguous',
     R.purchaseILS({ currency: 'USD', shares: 10, price: 100, amount: 1500 }, () => 3.6), { issue: 'ambiguous' });
   check('USD dividend at the pay-date rate',

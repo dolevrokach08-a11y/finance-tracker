@@ -127,8 +127,24 @@
             if (Number.isFinite(nativeTotal) && nativeTotal > 0) return { ils: nativeTotal };
             return { issue: 'ambiguous' };
         }
-        if (isRecorded(p) && has(amount) && amount > 0) return { ils: amount };
+        if (isRecorded(p)) {
+            const native = has(p.originalAmount) ? num(p.originalAmount) : num(p.original_amount) + fee;
+            return native > 0 ? atTradeRate(native, cur, dayOf(p.date), rateFor) : { issue: 'ambiguous' };
+        }
         return foreignOldFormat(amount, nativeTotal, cur, dayOf(p.date), rateFor);
+    }
+
+    /**
+     * A foreign trade in shekels at the rate of its own day. The `amount` the app
+     * stored is converted at the rate of the day it was *typed in*, so a trade
+     * entered after the fact carries a later rate — 45 trades entered on one day
+     * in Dec 2025 all read 3.2316 for dates going back to Jan 2024. Snapshot
+     * values use each day's rate, and the flows must match them or TWR counts
+     * the rate gap as return.
+     */
+    function atTradeRate(native, cur, day, rateFor) {
+        const rate = rateFor ? num(rateFor(cur, day)) : NaN;
+        return rate > 0 ? { ils: native * rate, rateUsed: rate } : { issue: 'fx', currency: cur, day };
     }
 
     /** ILS received for a sale, before capital-gains tax. */
@@ -147,14 +163,10 @@
             if (has(amount) && amount > 0) return { ils: amount };
             return { issue: 'ambiguous' };
         }
-        if (isRecorded(s) && has(amount) && amount > 0) {
-            // amount and original_amount are the same net figure in two currencies,
-            // so their ratio is the rate the app used when the sale was entered.
-            const netNative = has(s.original_amount) ? num(s.original_amount) : num(s.originalAmount);
-            if (netNative > 0 && Number.isFinite(nativePreTax) && nativePreTax > 0) {
-                return { ils: nativePreTax * (amount / netNative) };
-            }
-            return { ils: amount };
+        if (isRecorded(s)) {
+            return Number.isFinite(nativePreTax) && nativePreTax > 0
+                ? atTradeRate(nativePreTax, cur, dayOf(s.date), rateFor)
+                : { issue: 'ambiguous' };
         }
         return foreignOldFormat(amount, nativePreTax, cur, dayOf(s.date), rateFor);
     }
@@ -162,12 +174,11 @@
     function foreignOldFormat(amount, nativeTotal, cur, day, rateFor) {
         if (!has(amount) || !(nativeTotal > 0)) return { issue: 'ambiguous' };
         const ratio = amount / nativeTotal;
-        if (Math.abs(ratio - 1) < 0.005) {
-            const rate = rateFor ? num(rateFor(cur, day)) : NaN;
-            return rate > 0 ? { ils: amount * rate, rateUsed: rate } : { issue: 'fx', currency: cur, day };
-        }
-        if (ratio >= PLAUSIBLE_FX[0] && ratio <= PLAUSIBLE_FX[1]) return { ils: amount };
-        return { issue: 'ambiguous' };
+        // The ratio only says whether `amount` is native or shekels, so that the
+        // record is internally consistent. Either way the value is the native
+        // total at the trade day's rate, for the reason given at atTradeRate.
+        const consistent = Math.abs(ratio - 1) < 0.005 || (ratio >= PLAUSIBLE_FX[0] && ratio <= PLAUSIBLE_FX[1]);
+        return consistent ? atTradeRate(nativeTotal, cur, day, rateFor) : { issue: 'ambiguous' };
     }
 
     /** Gross dividend in ILS. Dividends store only a native amount. */
