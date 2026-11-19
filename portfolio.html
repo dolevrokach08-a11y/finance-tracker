@@ -7870,6 +7870,38 @@ function calculateTWRv3(startDate = null) {
             if (currency === 'EUR') return amount * portfolio.rates.EUR;
             return amount;
         }
+
+        // The rate a trade's shekel amount is fixed at: its own day's, not today's.
+        // convertToILS uses today's rates, so a trade typed in after the fact took
+        // a later rate — 45 trades entered on 7–8 Dec 2025 read 3.2316 for dates
+        // back to Jan 2024, when it was 3.73. A past day uses the ECB rate
+        // (Frankfurter), which is what the snapshots' locked rates match.
+        const tradeRateCache = new Map();
+        async function tradeRateOn(currency, isoDate) {
+            if (!currency || currency === 'ILS') return { rate: 1, source: 'ils' };
+            const day = String(isoDate || '').slice(0, 10);
+            const current = { rate: portfolio.rates[currency], source: 'current' };
+            if (!day || day >= localToday()) return current;
+            const key = currency + '|' + day;
+            if (!tradeRateCache.has(key)) {
+                tradeRateCache.set(key, (async () => {
+                    // Frankfurter answers a weekend or holiday with the last business day.
+                    const res = await fetch(`https://api.frankfurter.dev/v1/${day}?from=${encodeURIComponent(currency)}&to=ILS`);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const rate = (await res.json())?.rates?.ILS;
+                    if (!(rate > 0)) throw new Error('no rate in response');
+                    return rate;
+                })());
+            }
+            try {
+                return { rate: await tradeRateCache.get(key), source: 'ecb' };
+            } catch (e) {
+                tradeRateCache.delete(key);
+                console.warn(`⚠️ no ${currency} rate for ${day}:`, e?.message || e);
+                notify(`⚠️ לא נמצא שער ${currency} ל-${day} — הסכום בשקלים נשמר לפי השער של היום`, 'warning');
+                return { ...current, failed: true };
+            }
+        }
         
         function getTotalValueILS() {
             return portfolio.holdings.reduce((sum, h) => {
@@ -8276,7 +8308,7 @@ function calculateTWRv3(startDate = null) {
             ).join('');
         }
         
-        function addHolding() {
+        async function addHolding() {
             console.log('🔍 Starting addHolding function...');
             console.log('📍 Step 1: Getting form elements');
             
@@ -8395,7 +8427,8 @@ function calculateTWRv3(startDate = null) {
                 
                 // חישוב סכום הקנייה (כולל עמלה!)
                 const purchaseAmountInCurrency = shares * cost + commission;  // במטבע המקורי
-                const purchaseAmount = convertToILS(purchaseAmountInCurrency, currency);  // בשקלים
+                const fx = await tradeRateOn(currency, purchaseDate);  // שער יום הקנייה, לא של היום
+                const purchaseAmount = purchaseAmountInCurrency * fx.rate;  // בשקלים
                 const availableCash = getImplicitCash('stocks');
                 
                 // שאלה: מאיפה הכסף?
@@ -8448,14 +8481,8 @@ function calculateTWRv3(startDate = null) {
                     const depositAmount = availableCash < 0 ? purchaseAmount : (purchaseAmount - availableCash);
                     
                     // המר את ההפקדה למטבע המתאים
-                    let depositInCurrency;
-                    if (currency === 'ILS') {
-                        depositInCurrency = depositAmount;
-                    } else if (currency === 'USD') {
-                        depositInCurrency = depositAmount / (portfolio.rates.USD || 3.7);
-                    } else if (currency === 'EUR') {
-                        depositInCurrency = depositAmount / (portfolio.rates.EUR || 4.0);
-                    }
+                    // Back at the same rate the shekel amount was made with.
+                    const depositInCurrency = depositAmount / fx.rate;
                     
                     // הוסף את ההפקדה למזומן
                     portfolio.cash[currency] = (portfolio.cash[currency] || 0) + depositInCurrency;
@@ -8496,6 +8523,8 @@ function calculateTWRv3(startDate = null) {
                     
                     // שווי בשקלים (לתאימות אחורה ותצוגה)
                     amount: purchaseAmount,
+                    ils_rate: fx.rate,  // שער יום הקנייה שבו חושב amount
+                    ils_rate_source: fx.source,
                     originalAmount: purchaseAmountInCurrency,  // הסכום במטבע המקורי
                     currency: currency,  // המטבע המקורי
                     assetType: 'stocks',
@@ -9691,7 +9720,7 @@ ${msg}`, 'warning');
             addingToHoldingId = null;
         }
         
-        function submitAddShares() {
+        async function submitAddShares() {
             const holding = portfolio.holdings.find(h => h.id === addingToHoldingId);
             if (!holding) {
                 notify('❌ החזקה לא נמצאה', 'error');
@@ -9734,7 +9763,8 @@ ${msg}`, 'warning');
             
             // ✅ חישוב סכום הקנייה (כולל עמלה!)
             const purchaseAmountInCurrency = sharesToAdd * purchasePrice + commission;
-            const purchaseAmount = convertToILS(purchaseAmountInCurrency, holding.currency);
+            const fx = await tradeRateOn(holding.currency, purchaseDate);  // שער יום הקנייה, לא של היום
+            const purchaseAmount = purchaseAmountInCurrency * fx.rate;
             const availableCash = getImplicitCash('stocks');
             
             // ✅ שאלה: מאיפה הכסף?
@@ -9783,8 +9813,10 @@ ${msg}`, 'warning');
                 fee: commission,
                 fee_currency: holding.currency,
                 
-                // שווי בשקלים
+                // שווי בשקלים — בשער יום הקנייה
                 amount: purchaseAmount,
+                ils_rate: fx.rate,
+                ils_rate_source: fx.source,
                 originalAmount: purchaseAmountInCurrency || purchaseAmount,  // הסכום במטבע המקורי
                 currency: holding.currency || 'ILS',  // המטבע המקורי
                 assetType: 'stocks',
@@ -9869,7 +9901,7 @@ ${msg}`, 'warning');
             sellingFromHoldingId = null;
         }
         
-        function submitSellShares() {
+        async function submitSellShares() {
             const holding = portfolio.holdings.find(h => h.id === sellingFromHoldingId);
             if (!holding) {
                 notify('❌ החזקה לא נמצאה', 'error');
@@ -9923,10 +9955,11 @@ ${msg}`, 'warning');
             const taxDeductedFromForeign = (taxCurrency === holding.currency) ? tax : 0;
             const saleAmountForeign = grossAmount - commission - taxDeductedFromForeign;
             const netPricePerShare = saleAmountForeign / sharesToSell;
-            const saleAmountILS = convertToILS(saleAmountForeign, holding.currency);
+            const fx = await tradeRateOn(holding.currency, saleDate);  // the sale day's rate, not today's
+            const saleAmountILS = saleAmountForeign * fx.rate;
             // Profit always reflects the *real* net after commission + tax (regardless of tax currency)
             const profit = (salePrice - holding.costBasis) * sharesToSell - commission - taxInHoldingCurrency;
-            const profitILS = convertToILS(profit, holding.currency);
+            const profitILS = profit * fx.rate;
 
             // שאלה: מה לעשות עם התמורה?
             const curSym = getCurrencySymbol(holding.currency);
@@ -9964,8 +9997,10 @@ ${msg}`, 'warning');
                 costBasis: holding.costBasis,
                 profit: profit,  // רווח במטבע מקורי (מחושב לפי נטו)
                 
-                // שווי בשקלים (לתאימות)
+                // שווי בשקלים (לתאימות) — בשער יום המכירה
                 amount: saleAmountILS,
+                ils_rate: fx.rate,
+                ils_rate_source: fx.source,
                 originalAmount: saleAmountForeign,  // הסכום במטבע המקורי
                 profitILS: profitILS,
                 originalProfit: profit,  // הרווח במטבע המקורי
@@ -10650,7 +10685,7 @@ ${msg}`, 'warning');
             editingPurchaseId = null;
         }
 
-        function submitEditPurchase() {
+        async function submitEditPurchase() {
             const purchase = portfolio.purchases.find(p => p.id === editingPurchaseId);
             if (!purchase) {
                 notify('❌ עסקה לא נמצאה', 'error');
@@ -10691,16 +10726,21 @@ ${msg}`, 'warning');
             const cashDelta = newCashImpact - oldCashImpact; // חיובי = צריך להוריד עוד מהמזומן
             const feeDelta = newFeeImpact - oldFeeImpact;
 
+            // Fetched before anything changes, so a slow or failed fetch leaves the record whole.
+            const newDateISO = new Date(newDate + 'T12:00:00.000Z').toISOString();
+            const fx = await tradeRateOn(currency, newDateISO);  // שער יום הקנייה, לא של היום
+
             // עדכון רשומת הקנייה
-            purchase.date = new Date(newDate + 'T12:00:00.000Z').toISOString();
+            purchase.date = newDateISO;
             purchase.shares = newShares;
             purchase.price = newPrice;
             purchase.original_price = newPrice;
             purchase.original_amount = newShares * newPrice;
             purchase.fee = newFee;
             const newAmountTotal = newShares * newPrice + newFee;
-            const newAmountILS = convertToILS(newAmountTotal, currency);
-            purchase.amount = newAmountILS;
+            purchase.amount = newAmountTotal * fx.rate;
+            purchase.ils_rate = fx.rate;
+            purchase.ils_rate_source = fx.source;
             purchase.originalAmount = newAmountTotal;
             purchase.note = `קנייה: ${newShares} × ${getCurrencySymbol(currency)}${newPrice.toFixed(2)}` +
                             (newFee > 0 ? ` + ${getCurrencySymbol(currency)}${newFee.toFixed(2)} עמלה` : '');
