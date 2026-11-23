@@ -170,6 +170,7 @@ git config core.hooksPath tools/hooks
 | `shared/data.js` | נורמליזציה של מערכי נתונים |
 | `shared/user-storage.js` | בידוד `localStorage` לפי משתמש |
 | `shared/ai-proposals.js` | החלה וביטול של הצעות העוזר — הכתיבה היחידה שהעוזר גורם לה |
+| `shared/sale-tax.js` | מס רווחי הון: אירועי מס מקושרים למכירות, השפעתם על המזומן, רווח אחרי מס, וקריאת מס ישן מתוך רשומת מכירה |
 
 <details>
 <summary>למה — שלוש דוגמאות אמיתיות</summary>
@@ -316,6 +317,7 @@ node tests/accrual-rules.test.mjs
 node tests/splits.test.mjs
 node tests/ai-finance-context.test.mjs
 node tests/ai-proposals.test.mjs
+node tests/sale-tax.test.mjs
 node tools/fetch-boi-rates.mjs      # לרענן את ריביות בנק ישראל
 node tools/fetch-boi-rates.mjs --check
 node tools/agent-relay.mjs --status # מי חייב תגובה למי

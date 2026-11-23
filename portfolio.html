@@ -42,6 +42,7 @@
     <script src="shared/splits.js" defer></script>
     <script src="shared/portfolio-twr.js" defer></script>
     <script src="shared/group-returns.js" defer></script>
+    <script src="shared/sale-tax.js" defer></script>
     <script src="shared/load-script.js"></script>
     <!-- SheetJS (~900KB) is no longer loaded here: it serves exactly one hidden
          file input in the holdings-import wizard. hiFileChange() fetches it. -->
@@ -3220,6 +3221,10 @@
                             </select>
                         </div>
                         <small style="color: var(--text-secondary); font-size: 0.8rem;">ברוקר ישראלי מנכה בשקלים — השאר ILS. ברוקר זר במטבע המקור — בחר בהתאם.</small>
+                        <label class="sale-tax-pending-toggle" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.85rem;">
+                            <input type="checkbox" id="sell-bond-tax-pending">
+                            המס עוד לא ידוע — אוסיף אותו אחר כך מטבלת העסקאות
+                        </label>
                     </div>
 
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -3275,6 +3280,10 @@
                             </select>
                         </div>
                         <small style="color: var(--text-secondary); font-size: 0.8rem;">ברוקר ישראלי מנכה בשקלים גם על מניה זרה — השאר ILS. ברוקר זר שמנכה במטבע המקור — בחר בהתאם.</small>
+                        <label class="sale-tax-pending-toggle" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 0.85rem;">
+                            <input type="checkbox" id="sell-shares-tax-pending">
+                            המס עוד לא ידוע — אוסיף אותו אחר כך מטבלת העסקאות
+                        </label>
                     </div>
 
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
@@ -3345,6 +3354,64 @@
                     <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
                         <button onclick="hideEditDateModal()" class="btn" style="background: var(--text-muted);">ביטול</button>
                         <button onclick="submitEditDate()" class="btn btn-success">💾 שמור שינויים</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capital-gains tax on a sale — logic in portfolio.html (recordTaxEvent), numbers in shared/sale-tax.js -->
+            <div id="sale-tax-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+                <div class="sale-tax-dialog" role="dialog" aria-labelledby="sale-tax-title" style="background: var(--bg-surface); border-radius: 12px; padding: 25px; max-width: 540px; width: 90%; max-height: 90vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.2);">
+                    <h3 id="sale-tax-title" style="margin-bottom: 16px;">🧾 מס רווחי הון</h3>
+
+                    <div id="sale-tax-sale-info" style="padding: 12px 15px; background: var(--bg-elevated); border-radius: 8px; margin-bottom: 12px; font-size: 0.9rem; line-height: 1.7;"></div>
+
+                    <div id="sale-tax-existing" style="margin-bottom: 16px;"></div>
+
+                    <h4 id="sale-tax-form-title" style="margin-bottom: 10px;">הוספת מס</h4>
+
+                    <div class="form-group">
+                        <label for="sale-tax-amount">סכום</label>
+                        <div class="sale-tax-amount-row" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <select id="sale-tax-kind" onchange="updateSaleTaxPreview()" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary);">
+                                <option value="charge">חיוב</option>
+                                <option value="refund">זיכוי</option>
+                            </select>
+                            <input type="number" id="sale-tax-amount" placeholder="0.00" step="0.01" min="0" inputmode="decimal" oninput="updateSaleTaxPreview()" style="flex: 1 1 110px; min-width: 0;">
+                            <select id="sale-tax-currency" onchange="updateSaleTaxPreview()" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary);">
+                                <option value="ILS">₪ ILS</option>
+                                <option value="USD">$ USD</option>
+                                <option value="EUR">€ EUR</option>
+                            </select>
+                        </div>
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">המטבע שממנו הסכום יורד (או אליו הזיכוי נכנס).</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sale-tax-date">התאריך שבו ירד מהיתרה</label>
+                        <input type="date" id="sale-tax-date" style="padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; width: 100%;">
+                        <small style="color: var(--text-secondary); font-size: 0.8rem;">אם הברוקר כבר הוריד אותו מהיתרה (גם כ"מס עתידי") — היום שבו זה קרה, או היום אם לא ידוע. הניכוי הסופי אצל הברוקר לא משנה שוב את היתרה.</small>
+                    </div>
+
+                    <label style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 0.85rem;">
+                        <input type="checkbox" id="sale-tax-provisional">
+                        סכום זמני — הברוקר עוד עשוי לעדכן אותו
+                    </label>
+
+                    <div class="form-group">
+                        <label>מכירות שהמס הזה חל עליהן</label>
+                        <div id="sale-tax-sales-list" style="max-height: 160px; overflow-y: auto;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="sale-tax-note">הערה (אופציונלי)</label>
+                        <input type="text" id="sale-tax-note" placeholder="למשל: מס מצטבר לפי דף הברוקר">
+                    </div>
+
+                    <div id="sale-tax-preview" aria-live="polite" style="padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; font-size: 0.85rem; line-height: 1.7; color: var(--text-secondary);"></div>
+
+                    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                        <button onclick="hideSaleTaxModal()" class="btn" style="background: var(--text-muted);">סגור</button>
+                        <button onclick="submitSaleTax()" class="btn btn-success">💾 שמור מס</button>
                     </div>
                 </div>
             </div>
@@ -5555,8 +5622,15 @@ function calculateTWRv3(startDate = null) {
                 });
             }
             
+            // אירועי מס (חיוב חיובי, זיכוי שלילי) — מהמטבע שלהם
+            if (Array.isArray(portfolio.taxEvents)) {
+                portfolio.taxEvents.forEach(e => {
+                    allEvents.push({ type: 'tax', date: new Date(e.date), amount: e.amount, currency: e.currency });
+                });
+            }
+
             allEvents.sort((a, b) => a.date - b.date);
-            
+
             const cash = { ILS: 0, USD: 0, EUR: 0 };
             const purchaseCountBySymbol = {};
             
@@ -5601,7 +5675,12 @@ function calculateTWRv3(startDate = null) {
                         cash[event.currency] += event.amount;
                         console.log(`💰 ${idx+1}. מכירה ${event.symbol}: +${event.amount.toFixed(2)} ${event.currency}`);
                         break;
-                        
+
+                    case 'tax':
+                        cash[event.currency] -= event.amount;
+                        console.log(`🧾 ${idx+1}. מס: -${event.amount.toFixed(2)} ${event.currency}`);
+                        break;
+
                     case 'exchange':
                         cash[event.fromCurrency] -= event.fromAmount;
                         cash[event.toCurrency] += event.toAmount;
@@ -5875,9 +5954,16 @@ function calculateTWRv3(startDate = null) {
                     .reduce((sum, s) => sum + (s.amount || 0), 0);
             }
             
-            return deposits - withdrawals - purchases + sales;
+            // Tax events: sales written since they exist hold proceeds before tax.
+            const tax = window.FTSaleTax
+                ? window.FTSaleTax.eventsILSByAssetType(portfolio.taxEvents, portfolio.sales)
+                : { stocks: 0, bonds: 0 };
+            const taxOut = (assetType === 'all' || assetType === 'stocks' ? tax.stocks : 0)
+                + (assetType === 'all' || assetType === 'bonds' ? tax.bonds : 0);
+
+            return deposits - withdrawals - purchases + sales - taxOut;
         }
-        
+
         // ✅ NEW: Calculate cash by currency (for display in Cash Flow tab)
         function getCashByCurrency(currency) {
             let deposits = 0;
@@ -7902,7 +7988,242 @@ function calculateTWRv3(startDate = null) {
                 return { ...current, failed: true };
             }
         }
-        
+
+        // ===========================================
+        // CAPITAL-GAINS TAX EVENTS — numbers live in shared/sale-tax.js;
+        // this only gathers rates, writes the record and moves the cash.
+        // ===========================================
+
+        /** ILS rate of each currency on `isoDate` (the day the tax left the balance). */
+        async function taxEventRates(isoDate, currencies) {
+            const rates = { ILS: 1 };
+            let source = 'ils', failed = false;
+            for (const cur of new Set(currencies)) {
+                if (!cur || cur === 'ILS') continue;
+                const fx = await tradeRateOn(cur, isoDate);
+                if (!(fx.rate > 0)) { failed = true; continue; }
+                rates[cur] = fx.rate;
+                source = fx.failed ? 'current' : (source === 'ils' ? fx.source : source);
+            }
+            return { rates, source, failed };
+        }
+
+        // Split weights compare gains in ILS. A sale written with its own day's
+        // rate uses that; only an old record without one falls back to today's.
+        const taxWeightRateFor = cur => (cur === 'ILS' ? 1 : portfolio.rates[cur]);
+
+        function nextTaxEventId() {
+            const max = (portfolio.taxEvents || []).reduce((m, e) => Math.max(m, Number(e.id) || 0), 0);
+            return Math.max(max + 1, Date.now() + 2);
+        }
+
+        /** Build, store and apply one tax event. Returns { event } or { errors }. */
+        function recordTaxEvent(o) {
+            const r = window.FTSaleTax.buildEvent({
+                id: o.id != null ? o.id : nextTaxEventId(),
+                date: o.date, amount: o.amount, currency: o.currency,
+                sales: o.sales, rates: o.rates, rateSource: o.rateSource,
+                weights: o.weights || window.FTSaleTax.allocationWeights(o.sales, taxWeightRateFor),
+                provisional: o.provisional, note: o.note,
+            });
+            if (r.errors) return r;
+            if (!Array.isArray(portfolio.taxEvents)) portfolio.taxEvents = [];
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+            const old = o.replaceId != null ? portfolio.taxEvents.find(e => e.id === o.replaceId) : null;
+            if (old) {
+                window.FTSaleTax.replaceInCash(portfolio.cash, old, r.event);
+                portfolio.taxEvents = portfolio.taxEvents.map(e => (e.id === old.id ? r.event : e));
+            } else {
+                window.FTSaleTax.applyToCash(portfolio.cash, r.event, 1);
+                portfolio.taxEvents.push(r.event);
+            }
+            console.log(`🧾 מס: ${r.event.amount} ${r.event.currency} → מכירות ${r.event.saleIds.join(', ')}`);
+            return r;
+        }
+
+        function deleteTaxEvent(id) {
+            const old = (portfolio.taxEvents || []).find(e => e.id === id);
+            if (!old) return false;
+            window.FTSaleTax.applyToCash(portfolio.cash, old, -1);
+            portfolio.taxEvents = portfolio.taxEvents.filter(e => e.id !== id);
+            return true;
+        }
+
+        /** '-$12.30' rather than '$-12.30'. */
+        function moneyText(sym, v) {
+            return `${v < 0 ? '-' : ''}${sym}${Math.abs(v).toFixed(2)}`;
+        }
+
+        function saleLabel(s) {
+            return s.symbol || s.fundName || 'נייר ערך';
+        }
+
+        let saleTaxState = { saleId: null, editingId: null };
+
+        function showSaleTaxModal(saleId) {
+            const sale = portfolio.sales.find(s => s.id === saleId);
+            if (!sale) return notify('❌ מכירה לא נמצאה', 'error');
+            saleTaxState = { saleId, editingId: null };
+            renderSaleTaxModal();
+            resetSaleTaxForm();
+            document.getElementById('sale-tax-modal').style.display = 'flex';
+        }
+
+        function hideSaleTaxModal() {
+            document.getElementById('sale-tax-modal').style.display = 'none';
+            saleTaxState = { saleId: null, editingId: null };
+        }
+
+        function resetSaleTaxForm(event) {
+            const sale = portfolio.sales.find(s => s.id === saleTaxState.saleId);
+            const T = window.FTSaleTax;
+            saleTaxState.editingId = event ? event.id : null;
+            document.getElementById('sale-tax-form-title').textContent = event ? 'עריכת אירוע מס' : 'הוספת מס';
+            document.getElementById('sale-tax-kind').value = event && event.amount < 0 ? 'refund' : 'charge';
+            document.getElementById('sale-tax-amount').value = event ? Math.abs(event.amount) : '';
+            document.getElementById('sale-tax-currency').value = event ? event.currency : T.saleCurrency(sale);
+            document.getElementById('sale-tax-date').value = event ? String(event.date).slice(0, 10) : localToday();
+            document.getElementById('sale-tax-provisional').checked = event ? !!event.provisional : false;
+            document.getElementById('sale-tax-note').value = event ? (event.note || '') : '';
+            renderSaleTaxSalesList(event ? event.saleIds : [sale.id]);
+            updateSaleTaxPreview();
+        }
+
+        function renderSaleTaxModal() {
+            const T = window.FTSaleTax;
+            const sale = portfolio.sales.find(s => s.id === saleTaxState.saleId);
+            const cur = T.saleCurrency(sale);
+            const sym = getCurrencySymbol(cur);
+            const embedded = T.embeddedTax(sale);
+            const pre = T.preTaxProfit(sale, taxWeightRateFor);
+            const net = T.netProfit(sale, portfolio.taxEvents, taxWeightRateFor);
+            document.getElementById('sale-tax-sale-info').innerHTML = `
+                <div><strong>${saleLabel(sale)}</strong> · ${new Date(sale.date).toLocaleDateString('he-IL')}</div>
+                <div>רווח לפני מס: <bdi dir="ltr">${moneyText(sym, pre)}</bdi> · רווח אחרי מס: <bdi dir="ltr">${moneyText(sym, net)}</bdi></div>
+                ${embedded ? `<div>מס שנרשם במכירה עצמה: <bdi dir="ltr">${getCurrencySymbol(embedded.currency)}${embedded.amount.toFixed(2)}</bdi> (כבר בתוך הרווח והמזומן)</div>` : ''}`;
+
+            const events = T.eventsForSale(sale.id, portfolio.taxEvents);
+            const list = document.getElementById('sale-tax-existing');
+            if (events.length === 0) {
+                list.innerHTML = '<div class="sale-tax-empty" style="color: var(--text-secondary); font-size: 0.85rem;">אין אירועי מס למכירה הזאת</div>';
+                return;
+            }
+            list.innerHTML = events.map(e => {
+                const others = e.saleIds.filter(id => id !== sale.id)
+                    .map(id => portfolio.sales.find(s => s.id === id)).filter(Boolean).map(saleLabel);
+                const share = T.allocatedTax(sale, [e])[0];
+                const kind = e.amount < 0 ? 'זיכוי' : 'חיוב';
+                return `<div class="sale-tax-event" style="display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border);">
+                    <div style="font-size: 0.85rem;">
+                        <div>${kind} <bdi dir="ltr">${getCurrencySymbol(e.currency)}${Math.abs(e.amount).toFixed(2)}</bdi> · ${new Date(e.date).toLocaleDateString('he-IL')}${e.provisional ? ' · זמני' : ''}</div>
+                        <div style="color: var(--text-secondary);">${others.length ? `משותף עם ${others.join(', ')} · מס מיוחס למכירה הזאת: <bdi dir="ltr">${getCurrencySymbol(e.currency)}${Math.abs(share.amount).toFixed(2)}</bdi>` : 'למכירה הזאת בלבד'}${e.note ? ` · ${e.note}` : ''}</div>
+                    </div>
+                    <div style="display: flex; gap: 6px; flex-shrink: 0;">
+                        <button type="button" class="action-btn" onclick="editSaleTaxEvent(${e.id})" title="ערוך">✏️</button>
+                        <button type="button" class="action-btn danger" onclick="removeSaleTaxEvent(${e.id})" title="מחק">×</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function renderSaleTaxSalesList(checkedIds) {
+            const sale = portfolio.sales.find(s => s.id === saleTaxState.saleId);
+            const t0 = new Date(sale.date).getTime();
+            const DAY = 86400000;
+            const nearby = portfolio.sales.filter(s =>
+                s.id === sale.id || checkedIds.includes(s.id) || Math.abs(new Date(s.date).getTime() - t0) <= 60 * DAY);
+            nearby.sort((a, b) => new Date(b.date) - new Date(a.date));
+            document.getElementById('sale-tax-sales-list').innerHTML = nearby.map(s => {
+                const sym = getCurrencySymbol(window.FTSaleTax.saleCurrency(s));
+                const pre = window.FTSaleTax.preTaxProfit(s, taxWeightRateFor);
+                return `<label style="display: flex; gap: 8px; align-items: center; font-size: 0.85rem; padding: 3px 0;">
+                    <input type="checkbox" class="sale-tax-sale" value="${s.id}" ${checkedIds.includes(s.id) ? 'checked' : ''} ${s.id === sale.id ? 'disabled' : ''} onchange="updateSaleTaxPreview()">
+                    ${saleLabel(s)} · ${new Date(s.date).toLocaleDateString('he-IL')} · רווח לפני מס <bdi dir="ltr">${moneyText(sym, pre)}</bdi>
+                </label>`;
+            }).join('');
+        }
+
+        function readSaleTaxForm() {
+            const raw = parseFloat(document.getElementById('sale-tax-amount').value);
+            const kind = document.getElementById('sale-tax-kind').value;
+            const ids = [...document.querySelectorAll('#sale-tax-sales-list .sale-tax-sale:checked')].map(i => Number(i.value));
+            if (!ids.includes(saleTaxState.saleId)) ids.unshift(saleTaxState.saleId);
+            return {
+                amount: Number.isFinite(raw) && raw > 0 ? (kind === 'refund' ? -raw : raw) : NaN,
+                currency: document.getElementById('sale-tax-currency').value,
+                date: document.getElementById('sale-tax-date').value,
+                provisional: document.getElementById('sale-tax-provisional').checked,
+                note: document.getElementById('sale-tax-note').value.trim(),
+                sales: ids.map(id => portfolio.sales.find(s => s.id === id)).filter(Boolean),
+            };
+        }
+
+        function updateSaleTaxPreview() {
+            const f = readSaleTaxForm();
+            const box = document.getElementById('sale-tax-preview');
+            if (!Number.isFinite(f.amount)) { box.textContent = 'הזן סכום כדי לראות מה ישתנה'; return; }
+            const sym = getCurrencySymbol(f.currency);
+            const old = saleTaxState.editingId != null ? portfolio.taxEvents.find(e => e.id === saleTaxState.editingId) : null;
+            const lines = [];
+            if (old) lines.push(`האירוע הקודם יבוטל: ${old.amount < 0 ? 'יירד' : 'יוחזר'} <bdi dir="ltr">${getCurrencySymbol(old.currency)}${Math.abs(old.amount).toFixed(2)}</bdi> ${old.amount < 0 ? 'מ' : 'ל'}יתרת ${old.currency}`);
+            lines.push(f.amount > 0
+                ? `יירד מיתרת ${f.currency}: <bdi dir="ltr">${sym}${f.amount.toFixed(2)}</bdi>`
+                : `יתווסף ליתרת ${f.currency}: <bdi dir="ltr">${sym}${Math.abs(f.amount).toFixed(2)}</bdi>`);
+            if (f.sales.length > 1) {
+                const w = window.FTSaleTax.allocationWeights(f.sales, taxWeightRateFor);
+                lines.push('חלוקה (מס מיוחס, לפי הרווח לפני מס): ' + f.sales.map(s =>
+                    `${saleLabel(s)} <bdi dir="ltr">${moneyText(sym, f.amount * w[s.id])}</bdi>`).join(' · '));
+            }
+            lines.push('לא נוצרת משיכה ולא snapshot; רשומת המכירה לא משתנה.');
+            box.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+        }
+
+        async function submitSaleTax() {
+            const f = readSaleTaxForm();
+            if (!Number.isFinite(f.amount)) return notify('❌ סכום לא תקין', 'error');
+            if (!f.date) return notify('❌ אנא בחר תאריך', 'error');
+            const fx = await taxEventRates(f.date, [f.currency, ...f.sales.map(s => window.FTSaleTax.saleCurrency(s))]);
+            if (fx.failed) return notify('⚠️ לא נמצא שער למטבע בתאריך הזה — המס לא נשמר', 'error');
+            const editing = saleTaxState.editingId;
+            const r = recordTaxEvent({
+                id: editing != null ? editing : undefined, replaceId: editing,
+                date: f.date, amount: f.amount, currency: f.currency, sales: f.sales,
+                rates: fx.rates, rateSource: fx.source, provisional: f.provisional, note: f.note,
+            });
+            if (r.errors) return notify('❌ לא נשמר: ' + r.errors.join(', '), 'error');
+            saveData();
+            renderTransactions();
+            renderSalesHistory();
+            renderCashFlow();
+            updateCapitalSummary();
+            updateOverview();
+            renderSaleTaxModal();
+            resetSaleTaxForm();
+            notify(editing != null ? '✅ אירוע המס עודכן' : '✅ המס נרשם', 'success');
+        }
+
+        function editSaleTaxEvent(id) {
+            const e = (portfolio.taxEvents || []).find(x => x.id === id);
+            if (e) resetSaleTaxForm(e);
+        }
+
+        function removeSaleTaxEvent(id) {
+            const e = (portfolio.taxEvents || []).find(x => x.id === id);
+            if (!e) return;
+            const sym = getCurrencySymbol(e.currency);
+            if (!confirm(`למחוק את אירוע המס? ${e.amount < 0 ? 'יירד' : 'יוחזר'} ${sym}${Math.abs(e.amount).toFixed(2)} ${e.amount < 0 ? 'מ' : 'ל'}יתרת ${e.currency}.`)) return;
+            deleteTaxEvent(id);
+            saveData();
+            renderTransactions();
+            renderSalesHistory();
+            renderCashFlow();
+            updateCapitalSummary();
+            updateOverview();
+            renderSaleTaxModal();
+            resetSaleTaxForm();
+            notify('✅ אירוע המס נמחק והמזומן הוחזר', 'success');
+        }
+
         function getTotalValueILS() {
             return portfolio.holdings.reduce((sum, h) => {
                 const value = h.shares * (h.currentPrice || h.costBasis);
@@ -7966,6 +8287,7 @@ function calculateTWRv3(startDate = null) {
                 withdrawals: portfolio.withdrawals || [],
                 purchases: portfolio.purchases || [],
                 sales: portfolio.sales || [],
+                taxEvents: portfolio.taxEvents || [],
                 splits: portfolio.splits || [],
                 snapshots: portfolio.snapshots || [],
                 cash: portfolio.cash || { ILS: 0, USD: 0, EUR: 0 },
@@ -9258,6 +9580,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-bond-commission').value = 0;
             document.getElementById('sell-bond-tax').value = 0;
             document.getElementById('sell-bond-tax-currency').value = 'ILS';
+            document.getElementById('sell-bond-tax-pending').checked = false;
             
             document.getElementById('sell-bond-units-modal').style.display = 'flex';
         }
@@ -9267,7 +9590,7 @@ ${msg}`, 'warning');
             sellingFromBondId = null;
         }
         
-        function submitSellBondUnits() {
+        async function submitSellBondUnits() {
             const bond = portfolio.bonds.find(b => b.id === sellingFromBondId);
             if (!bond) return notify('❌ אג"ח לא נמצא', 'error');
             
@@ -9287,22 +9610,24 @@ ${msg}`, 'warning');
             const saleDate = new Date(dateInput + 'T12:00:00.000Z').toISOString();
             const bondCurrency = bond.currency || 'ILS';
             const grossAmount = unitsNum * priceNum;
-            // Commission is in bond's currency. Tax may be in a different currency;
-            // if it is, it's handled separately via the cash ledger.
-            const taxInBondCurrency = convertBetweenCurrencies(tax, taxCurrency, bondCurrency);
-            const taxDeductedFromProceeds = (taxCurrency === bondCurrency) ? tax : 0;
-            const saleAmount = grossAmount - commission - taxDeductedFromProceeds;
-            const profit = (priceNum - bond.costBasis) * unitsNum - commission - taxInBondCurrency;
-            
-            const keepInPortfolio = confirm(`תמורת המכירה: ₪${saleAmount.toLocaleString()}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
-            
-            portfolio.sales.push({
+            // The sale record is before tax; tax entered here becomes a tax event
+            // (shared/sale-tax.js) on the sale date — same cash outcome as before.
+            const saleAmount = grossAmount - commission;  // לפני מס
+            const profit = (priceNum - bond.costBasis) * unitsNum - commission;  // לפני מס
+            const taxPending = tax === 0 && !!document.getElementById('sell-bond-tax-pending')?.checked;
+            const taxRates = tax > 0 ? await taxEventRates(saleDate, [taxCurrency, bondCurrency]) : null;
+            if (taxRates && taxRates.failed) return notify('⚠️ לא נמצא שער למטבע המס בתאריך המכירה — המכירה לא נשמרה', 'error');
+            const sameCurrencyTax = (tax > 0 && taxCurrency === bondCurrency) ? tax : 0;
+
+            const keepInPortfolio = confirm(`תמורת המכירה: ₪${(saleAmount - sameCurrencyTax).toLocaleString()}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
+
+            const sale = {
                 id: Date.now(),
                 date: saleDate,
-                amount: saleAmount,  // נטו אחרי עמלה ומס (במטבע האג"ח)
+                amount: saleAmount,  // אחרי עמלה, לפני מס (במטבע האג"ח)
                 originalAmount: saleAmount,
                 currency: bondCurrency,
-                profit: profit,
+                profit: profit,  // אחרי עמלה, לפני מס
                 assetType: 'bonds',
                 assetId: bond.id,
                 fundName: bond.symbol,
@@ -9310,38 +9635,42 @@ ${msg}`, 'warning');
                 salePrice: priceNum,   // מחיר ברוטו ליחידה (לפני עמלה/מס)
                 costBasis: bond.costBasis,
                 commission: commission,
-                tax: tax,
-                taxCurrency: taxCurrency
-            });
-            
+                tax: 0,  // המס נרשם כאירוע מס (portfolio.taxEvents)
+                taxPending: taxPending
+            };
+            if (bondCurrency !== 'ILS' && taxRates) sale.ils_rate = taxRates.rates[bondCurrency];
+            portfolio.sales.push(sale);
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+
             if (!keepInPortfolio) {
+                // What reached the investor: proceeds after a same-currency tax, as before.
+                const withdrawn = saleAmount - sameCurrencyTax;
                 portfolio.withdrawals.push({
                     id: Date.now() + 1,
                     date: saleDate,
-                    amount: saleAmount,
+                    amount: withdrawn,
                     assetType: 'bonds',
                     note: `משיכה ממכירת ${unitsNum} יחידות ${bond.symbol}`
                 });
                 (() => {
-                openSnapshotDataModal('withdrawal', -saleAmount, saleDate, `משיכה ממכירת ${bond.symbol}`, (snapshot) => {
+                openSnapshotDataModal('withdrawal', -withdrawn, saleDate, `משיכה ממכירת ${bond.symbol}`, (snapshot) => {
                     saveData();
                     updateOverview();
                 });
             })();
-            }
-            
-            bond.units -= unitsNum;
-
-            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
-            if (keepInPortfolio) {
+                // The tax part stayed in the account to pay the event below.
+                if (sameCurrencyTax) portfolio.cash[bondCurrency] = (portfolio.cash[bondCurrency] || 0) + sameCurrencyTax;
+            } else {
                 portfolio.cash[bondCurrency] = (portfolio.cash[bondCurrency] || 0) + saleAmount;
             }
-            // אם המס במטבע שונה מהאג"ח — הוא לא הופחת מ-saleAmount, אז מפחיתים אותו
-            // בנפרד מיתרת המזומן של מטבע המס (גם אם בחרת משיכה מיידית).
-            if (tax > 0 && taxCurrency !== bondCurrency) {
-                portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
-                console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} מיתרת המזומן`);
+
+            bond.units -= unitsNum;
+
+            if (tax > 0) {
+                const r = recordTaxEvent({ date: saleDate.slice(0, 10), amount: tax, currency: taxCurrency, sales: [sale], rates: taxRates.rates, rateSource: taxRates.source });
+                if (r.errors) console.warn('⚠️ tax event not recorded:', r.errors);
             }
+            const taxInBondCurrency = tax > 0 ? tax * taxRates.rates[taxCurrency] / taxRates.rates[bondCurrency] : 0;
             
             bond.lastUpdate = new Date().toISOString();
             
@@ -9358,7 +9687,8 @@ ${msg}`, 'warning');
             
             hideSellBondUnitsModal();
             
-            const profitText = profit >= 0 ? `+₪${profit.toFixed(2)}` : `₪${profit.toFixed(2)}`;
+            const netShown = profit - taxInBondCurrency;  // אחרי מס, כמו לפני אירועי המס
+            const profitText = netShown >= 0 ? `+₪${netShown.toFixed(2)}` : `₪${netShown.toFixed(2)}`;
             const actionText = keepInPortfolio ? 'נשאר בתיק' : 'נמשך';
             notify(`✅ נמכרו ${unitsNum} יחידות מ-${bond.symbol}\nרווח: ${profitText}\n${actionText}`, 'success');
         }
@@ -9887,6 +10217,7 @@ ${msg}`, 'warning');
             document.getElementById('sell-shares-commission').value = '0';
             document.getElementById('sell-shares-tax').value = '0';
             document.getElementById('sell-shares-tax-currency').value = 'ILS';
+            document.getElementById('sell-shares-tax-pending').checked = false;
 
             // Set date to today
             const today = localToday();
@@ -9945,57 +10276,62 @@ ${msg}`, 'warning');
             const saleDate = new Date(dateInput + 'T12:00:00.000Z').toISOString();
 
             // Calculate amounts.
-            // Commission is always in the holding's native currency and subtracts from
-            // the foreign proceeds. Tax may be in a different currency (e.g. ILS on a
-            // USD position, typical for Israeli brokers). In that case the foreign
-            // proceeds are NOT reduced — instead the tax is deducted from the cash
-            // ledger of its own currency (below).
+            // The sale record is written before tax: commission comes off the
+            // proceeds and the profit, tax does not. Tax entered here becomes a
+            // tax event (shared/sale-tax.js) on the sale date, which takes it off
+            // its own currency's cash — the same cash outcome as before, but now
+            // recorded, editable and reversible.
             const grossAmount = sharesToSell * salePrice;                              // ברוטו במטבע ההחזקה
-            const taxInHoldingCurrency = convertBetweenCurrencies(tax, taxCurrency, holding.currency);
-            const taxDeductedFromForeign = (taxCurrency === holding.currency) ? tax : 0;
-            const saleAmountForeign = grossAmount - commission - taxDeductedFromForeign;
+            const saleAmountForeign = grossAmount - commission;                        // לפני מס
             const netPricePerShare = saleAmountForeign / sharesToSell;
             const fx = await tradeRateOn(holding.currency, saleDate);  // the sale day's rate, not today's
             const saleAmountILS = saleAmountForeign * fx.rate;
-            // Profit always reflects the *real* net after commission + tax (regardless of tax currency)
-            const profit = (salePrice - holding.costBasis) * sharesToSell - commission - taxInHoldingCurrency;
+            const profit = (salePrice - holding.costBasis) * sharesToSell - commission;  // לפני מס
             const profitILS = profit * fx.rate;
+            const taxPending = tax === 0 && !!document.getElementById('sell-shares-tax-pending')?.checked;
+            const taxRates = tax > 0 ? await taxEventRates(saleDate, [taxCurrency, holding.currency]) : null;
+            if (taxRates && taxRates.failed) {
+                notify('⚠️ לא נמצא שער למטבע המס בתאריך המכירה — המכירה לא נשמרה', 'error');
+                return;
+            }
+            const taxInHoldingCurrency = tax > 0 ? tax * taxRates.rates[taxCurrency] / taxRates.rates[holding.currency] : 0;
 
             // שאלה: מה לעשות עם התמורה?
             const curSym = getCurrencySymbol(holding.currency);
             const taxSym = getCurrencySymbol(taxCurrency);
             const feesParts = [];
             if (commission > 0) feesParts.push(`עמלה: ${curSym}${commission.toFixed(2)}`);
-            if (tax > 0)        feesParts.push(`מס: ${taxSym}${tax.toFixed(2)}${taxCurrency !== holding.currency ? ` (יופחת מיתרת ${taxCurrency})` : ''}`);
+            if (tax > 0)        feesParts.push(`מס: ${taxSym}${tax.toFixed(2)} (יופחת מיתרת ${taxCurrency})`);
+            if (taxPending)     feesParts.push('מס: ממתין');
             const feesText = feesParts.length ? `\n${feesParts.join(' | ')}` : '';
-            const keepInPortfolio = confirm(`תמורת המכירה (נטו): ${curSym}${saleAmountForeign.toFixed(2)} (₪${Math.round(saleAmountILS).toLocaleString()})${feesText}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
+            const keepInPortfolio = confirm(`תמורת המכירה (לפני מס): ${curSym}${saleAmountForeign.toFixed(2)} (₪${Math.round(saleAmountILS).toLocaleString()})${feesText}\n\nהאם להשאיר בתיק כמזומן?\n\nלחץ אישור להשאיר בתיק, ביטול למשוך מייד.`);
 
             // רישום המכירה — עם מידע מלא
             const deductionParts = [];
             if (commission > 0) deductionParts.push(`עמלה ${curSym}${commission.toFixed(2)}`);
             if (tax > 0)        deductionParts.push(`מס ${taxSym}${tax.toFixed(2)}`);
             const deductionText = deductionParts.length ? ` - ${deductionParts.join(' - ')}` : '';
-            const noteText = `מכירה: ${sharesToSell} × ${curSym}${salePrice.toFixed(2)}${deductionText} = ${curSym}${saleAmountForeign.toFixed(2)}`;
-            
+            const noteText = `מכירה: ${sharesToSell} × ${curSym}${salePrice.toFixed(2)}${deductionText}`;
+
             const sale = {
                 id: Date.now(),
                 date: saleDate,
                 symbol: holding.symbol,
                 shares: sharesToSell,
-                
+
                 // מטבע מקורי
                 original_currency: holding.currency,
                 original_price: salePrice,  // מחיר מכירה למניה (ברוטו)
-                net_price: netPricePerShare,  // מחיר נטו למניה (אחרי עמלה)
-                original_amount: saleAmountForeign,  // סכום נטו במטבע מקורי
+                net_price: netPricePerShare,  // מחיר למניה אחרי עמלה, לפני מס
+                original_amount: saleAmountForeign,  // סכום אחרי עמלה, לפני מס, במטבע מקורי
                 gross_amount: grossAmount,  // סכום ברוטו לפני עמלה ומס
                 commission: commission,  // עמלת מכירה (במטבע ההחזקה)
-                tax: tax,  // מס רווחי הון שנוכה (במטבע שלו — ראה taxCurrency)
-                taxCurrency: taxCurrency,  // מטבע המס (לרוב ILS לברוקר ישראלי)
-                
+                tax: 0,  // המס נרשם כאירוע מס (portfolio.taxEvents), לא כאן
+                taxPending: taxPending,  // המס עוד לא נוכה
+
                 // עלות ורווח
                 costBasis: holding.costBasis,
-                profit: profit,  // רווח במטבע מקורי (מחושב לפי נטו)
+                profit: profit,  // רווח במטבע מקורי, אחרי עמלה ולפני מס
                 
                 // שווי בשקלים (לתאימות) — בשער יום המכירה
                 amount: saleAmountILS,
@@ -10011,42 +10347,41 @@ ${msg}`, 'warning');
                 note: noteText
             };
             portfolio.sales.push(sale);
-            
+            if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+
+            // Same-currency tax never reached the investor: in "withdraw now" mode
+            // the withdrawal is the proceeds after it, exactly as before tax events.
+            const sameCurrencyTax = (tax > 0 && taxCurrency === holding.currency) ? tax : 0;
+
             // אם בחר למשוך - יצירת משיכה ו-snapshot
             if (!keepInPortfolio) {
+                const withdrawalILS = (saleAmountForeign - sameCurrencyTax) * fx.rate;
                 const withdrawal = {
                     id: Date.now() + 1,
                     date: saleDate,
-                    amount: saleAmountILS,
+                    amount: withdrawalILS,
                     assetType: 'stocks',
                     note: `משיכה ממכירת ${sharesToSell} ${holding.symbol}`
                 };
                 portfolio.withdrawals.push(withdrawal);
                 (() => {
-                    openSnapshotDataModal('withdrawal', -saleAmountILS, saleDate, `משיכה ממכירת ${holding.symbol}`, (snapshot) => {
+                    openSnapshotDataModal('withdrawal', -withdrawalILS, saleDate, `משיכה ממכירת ${holding.symbol}`, (snapshot) => {
                         saveData();
                         updateOverview();
                     });
                 })();
-            }
-            
-            // עדכן portfolio.cash — הוסף את תמורת המכירה ליתרת המטבע של ההחזקה.
-            // אם המס שולם במטבע אחר (למשל ILS על מכירת USD) — הוא לא כבר הופחת
-            // מ-saleAmountForeign, אז נפחית אותו מיתרת המטבע הנכונה בנפרד.
-            if (keepInPortfolio) {
-                if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
+                // The tax part of the proceeds stayed in the account to pay the tax
+                // event below, so the two net to zero in this currency.
+                if (sameCurrencyTax) portfolio.cash[holding.currency] = (portfolio.cash[holding.currency] || 0) + sameCurrencyTax;
+            } else {
                 portfolio.cash[holding.currency] = (portfolio.cash[holding.currency] || 0) + saleAmountForeign;
                 console.log(`💰 מכירה: נוסף ${saleAmountForeign.toFixed(2)} ${holding.currency} ליתרת המזומן`);
+            }
 
-                if (tax > 0 && taxCurrency !== holding.currency) {
-                    portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
-                    console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} מיתרת המזומן`);
-                }
-            } else if (tax > 0 && taxCurrency !== holding.currency) {
-                // גם במצב "משיכה מיידית" המס משולם ממטבע נפרד — נרשום אותו כמשיכה נוספת
-                if (!portfolio.cash) portfolio.cash = { ILS: 0, USD: 0, EUR: 0 };
-                portfolio.cash[taxCurrency] = (portfolio.cash[taxCurrency] || 0) - tax;
-                console.log(`💸 מס: הופחת ${tax.toFixed(2)} ${taxCurrency} (גם במצב משיכה)`);
+            // The tax itself: one event, taken off its own currency's cash.
+            if (tax > 0) {
+                const r = recordTaxEvent({ date: saleDate.slice(0, 10), amount: tax, currency: taxCurrency, sales: [sale], rates: taxRates.rates, rateSource: taxRates.source });
+                if (r.errors) console.warn('⚠️ tax event not recorded:', r.errors);
             }
             
             // Update holding
@@ -10064,8 +10399,9 @@ ${msg}`, 'warning');
             updateOverview();
             
             hideSellSharesModal();
-            
-            const profitText = profit >= 0 ? `רווח: +${getCurrencySymbol(holding.currency)}${profit.toFixed(2)}` : `הפסד: ${getCurrencySymbol(holding.currency)}${profit.toFixed(2)}`;
+
+            const netShown = profit - taxInHoldingCurrency;  // אחרי מס, כמו לפני אירועי המס
+            const profitText = netShown >= 0 ? `רווח: +${getCurrencySymbol(holding.currency)}${netShown.toFixed(2)}` : `הפסד: ${getCurrencySymbol(holding.currency)}${netShown.toFixed(2)}`;
             const actionText = keepInPortfolio ? 'נשאר בתיק' : 'נמשך';
             notify(`✅ נמכרו ${sharesToSell} ${holding.symbol}\n${profitText}\n${actionText}`, 'success');
         }
@@ -10418,13 +10754,19 @@ ${msg}`, 'warning');
             
             if (currentTransactionFilter === 'all' || currentTransactionFilter === 'sales') {
                 portfolio.sales.forEach(s => {
+                    const T = window.FTSaleTax;
+                    const net = T.netProfit(s, portfolio.taxEvents, taxWeightRateFor);
+                    const sym = getCurrencySymbol(T.saleCurrency(s));
+                    const taxILS = T.totalTaxILS(s, portfolio.taxEvents, taxWeightRateFor);
+                    const taxPart = T.isPending(s, portfolio.taxEvents) ? ' · ממתין למס'
+                        : (taxILS !== 0 ? ` · מס ${taxILS < 0 ? 'זיכוי ' : ''}<bdi dir="ltr">₪${Math.round(Math.abs(taxILS)).toLocaleString()}</bdi>` : '');
                     transactions.push({
                         id: s.id,
                         date: s.date,
                         type: 'sale',
                         amount: s.amount,
-                        profit: s.profit,
-                        note: `${s.symbol || s.fundName} (רווח: ${s.profit >= 0 ? '+' : ''}₪${Math.round(s.profit).toLocaleString()})`,
+                        profit: net,
+                        note: `${s.symbol || s.fundName} (רווח אחרי מס: <bdi dir="ltr">${net >= 0 ? '+' : '-'}${sym}${Math.round(Math.abs(net)).toLocaleString()}</bdi>${taxPart})`,
                         assetType: s.assetType,
                         icon: '💸',
                         color: '#f59e0b'
@@ -10472,6 +10814,10 @@ ${msg}`, 'warning');
                             `<button onclick="showEditTransactionDate('${t.type}', ${t.id})"
                                 style="background: var(--info); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 5px;">
                                 ✏️ ערוך תאריך
+                            </button>
+                            <button onclick="showSaleTaxModal(${t.id})" class="sale-tax-btn"
+                                style="background: var(--bg-elevated); color: var(--text-primary); border: 1px solid var(--border); padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                                🧾 מס
                             </button>` :
                             `<button onclick="showEditTransactionDate('${t.type}', ${t.id})"
                                 style="background: var(--info); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 5px;">
@@ -11357,23 +11703,26 @@ ${msg}`, 'warning');
                 let totalRealizedStocks = 0;
                 sortedStocks.forEach(s => {
                     const date = new Date(s.date).toLocaleDateString('he-IL');
-                    const profitText = `${getCurrencySymbol(s.currency)}${s.profit.toFixed(2)} (${s.profitPercent}%)`;
+                    const net = window.FTSaleTax.netProfit(s, portfolio.taxEvents, taxWeightRateFor);
+                    const profitText = `${getCurrencySymbol(s.currency)}${net.toFixed(2)} (${s.profitPercent}%)`;
                     const rate = s.currency === 'ILS' ? 1 : (portfolio.rates[s.currency] || 1);
-                    totalRealizedStocks += s.profit * rate;
+                    totalRealizedStocks += net * rate;
+                    const pending = window.FTSaleTax.isPending(s, portfolio.taxEvents);
 
                     html += `<div class="tx-card">
                         <div class="tx-icon sell">↘</div>
                         <div class="tx-details">
-                            <div class="tx-title">${s.symbol} · ${s.shares} מניות</div>
+                            <div class="tx-title">${s.symbol} · ${s.shares} מניות${pending ? ' · <span class="sale-tax-pending-badge">ממתין למס</span>' : ''}</div>
                             <div class="tx-sub">${date} · קנייה: ${getCurrencySymbol(s.currency)}${s.costBasis.toFixed(2)} → מכירה: ${getCurrencySymbol(s.currency)}${s.salePrice.toFixed(2)}</div>
                         </div>
-                        <span class="tx-badge ${s.profit >= 0 ? 'buy' : 'sell'}">${profitText}</span>
+                        <span class="tx-badge ${net >= 0 ? 'buy' : 'sell'}">${profitText}</span>
+                        <button onclick="showSaleTaxModal(${s.id})" class="action-btn" title="מס" style="flex-shrink:0;">🧾</button>
                         <button onclick="deleteSale(${s.id})" class="action-btn danger" title="מחק" style="flex-shrink:0;">×</button>
                     </div>`;
                 });
 
                 html += `<div style="margin: 12px 0 20px; padding: 14px 20px; background: var(--bg-elevated); border-radius: var(--radius-sm); text-align: center; border: 1px solid var(--border);">
-                    <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ רווח ממומש ממניות:</span>
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">סה"כ רווח ממומש ממניות (אחרי מס):</span>
                     <strong style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace; margin-right: 8px;">₪${Math.round(totalRealizedStocks).toLocaleString()}</strong>
                 </div>`;
             }
@@ -11412,7 +11761,7 @@ ${msg}`, 'warning');
             if (hasStockSales && hasBondSales) {
                 const totalStocks = portfolio.sales.reduce((sum, s) => {
                     const rate = s.currency === 'ILS' ? 1 : (portfolio.rates[s.currency] || 1);
-                    return sum + (s.profit * rate);
+                    return sum + (window.FTSaleTax.netProfit(s, portfolio.taxEvents, taxWeightRateFor) * rate);
                 }, 0);
                 const totalBonds = portfolio.bondsSales.reduce((sum, s) => sum + s.profit, 0);
                 const grandTotal = totalStocks + totalBonds;
@@ -11502,6 +11851,11 @@ ${msg}`, 'warning');
         }
         
         function deleteSale(id) {
+            // A tax event already moved cash; deleting its sale would orphan it.
+            if (window.FTSaleTax.eventsForSale(id, portfolio.taxEvents).length > 0) {
+                notify('⚠️ למכירה הזאת יש אירוע מס. מחק אותו קודם מחלון המס (🧾) — כך המזומן יחזור.', 'error');
+                return;
+            }
             if (!confirm('האם למחוק מכירה זו מההיסטוריה?')) return;
             
             portfolio.sales = portfolio.sales.filter(s => s.id !== id);
@@ -11532,7 +11886,7 @@ ${msg}`, 'warning');
             const stocksRealizedProfit = portfolio.sales ?
                 portfolio.sales.reduce((sum, s) => {
                     const rate = s.currency === 'ILS' ? 1 : (portfolio.rates[s.currency] || 1);
-                    return sum + (s.profit * rate);
+                    return sum + (window.FTSaleTax.netProfit(s, portfolio.taxEvents, taxWeightRateFor) * rate);
                 }, 0) : 0;
             const stocksCost = portfolio.holdings.reduce((sum, h) => {
                 const cost = h.shares * h.costBasis;
@@ -12822,6 +13176,7 @@ ${msg}`, 'warning');
                 withdrawals: [],
                 purchases: [],
                 sales: [],
+                taxEvents: [],
                 splits: [],
                 snapshots: [],
                 watchlist: []
@@ -16719,6 +17074,12 @@ ${msg}`, 'warning');
         window.showEditTransactionDate = showEditTransactionDate;
         window.hideEditDateModal = hideEditDateModal;
         window.submitEditDate = submitEditDate;
+        window.showSaleTaxModal = showSaleTaxModal;
+        window.hideSaleTaxModal = hideSaleTaxModal;
+        window.submitSaleTax = submitSaleTax;
+        window.editSaleTaxEvent = editSaleTaxEvent;
+        window.removeSaleTaxEvent = removeSaleTaxEvent;
+        window.updateSaleTaxPreview = updateSaleTaxPreview;
         window.showEditPurchaseModal = showEditPurchaseModal;
         window.hideEditPurchaseModal = hideEditPurchaseModal;
         window.submitEditPurchase = submitEditPurchase;

@@ -97,6 +97,10 @@
             withdrawals: Array.isArray(loaded.withdrawals) ? loaded.withdrawals : [],
             purchases: Array.isArray(loaded.purchases) ? loaded.purchases : [],
             sales: Array.isArray(loaded.sales) ? loaded.sales : [],
+            // Capital-gains tax charges/refunds linked to sales (shared/sale-tax.js).
+            // Each one has already moved a cash balance; dropping them here would
+            // leave the cash moved with no record of why.
+            taxEvents: Array.isArray(loaded.taxEvents) ? loaded.taxEvents : [],
             // Splits restate old trades in today's units (shared/splits.js). Without
             // this line the rebuild drops them and the holding falls back to old units.
             splits: Array.isArray(loaded.splits) ? loaded.splits : [],
