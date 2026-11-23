@@ -302,7 +302,7 @@ const aiWithout = raw(aiPortfolio);
 check('no splits → no events line, the raw block is otherwise unchanged',
   [aiWithout.includes('אירועי איחוד'), aiWithout.split('\n').filter(Boolean).map(l => l.split(':')[0])],
   [false, ['=== נתוני תיק השקעות (גלם) ===', 'אחזקות מניות', 'אגרות חוב', 'מזומן בתיק', 'שערי מט"ח', 'קבוצות הקצאה (groups)',
-    'פקדונות', 'רכישות אחרונות (עד 20)', 'מכירות אחרונות (עד 20)', 'תמונות מצב (snapshots)', 'רשימת מעקב (watchlist)', 'דיבידנדים', '=== סוף נתוני השקעות ===']]);
+    'פקדונות', 'רכישות אחרונות (עד 20)', 'מכירות אחרונות (עד 20)', 'אירועי מס רווחי הון (עד 20; amount חיובי = חיוב, שלילי = זיכוי, ירד מיתרת currency בתאריך date; saleIds = המכירות שעליהן חל, weights = החלוקה ביניהן. מכירה עם tax 0 רשומה לפני מס; tax חיובי במכירה ישנה כבר בתוך profit)', 'תמונות מצב (snapshots)', 'רשימת מעקב (watchlist)', 'דיבידנדים', '=== סוף נתוני השקעות ===']]);
 const aiWithSplit = raw({ ...aiPortfolio, splits: [{ ...SPLIT, tz: 'America/New_York' }] });
 const evLine = aiWithSplit.split('\n').find(l => l.startsWith('אירועי איחוד/פיצול מניות:'));
 check('the events reach the assistant: symbol, day, ratio, exchange',

@@ -1199,7 +1199,8 @@ ${shown.join('\n')}
 קבוצות הקצאה (groups): ${JSON.stringify(portfolioData.groups || [])}
 פקדונות: ${JSON.stringify(portfolioData.deposits || [])}
 רכישות אחרונות (עד 20): ${JSON.stringify((portfolioData.purchases || []).slice(-20))}
-מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}${splitsSection}
+מכירות אחרונות (עד 20): ${JSON.stringify((portfolioData.sales || []).slice(-20))}
+אירועי מס רווחי הון (עד 20; amount חיובי = חיוב, שלילי = זיכוי, ירד מיתרת currency בתאריך date; saleIds = המכירות שעליהן חל, weights = החלוקה ביניהן. מכירה עם tax 0 רשומה לפני מס; tax חיובי במכירה ישנה כבר בתוך profit):${JSON.stringify((portfolioData.taxEvents || []).slice(-20))}${splitsSection}
 תמונות מצב (snapshots): ${JSON.stringify((portfolioData.portfolioSnapshots || portfolioData.snapshots || []).slice(-12).map(({ positions, ...s }) => s))}
 רשימת מעקב (watchlist): ${JSON.stringify(portfolioData.watchlist || [])}
 דיבידנדים: ${JSON.stringify((portfolioData.dividends || []).slice(-20))}
