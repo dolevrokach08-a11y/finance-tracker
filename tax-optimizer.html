@@ -129,6 +129,9 @@ a { color: var(--accent); }
   try {
     const demoModule = await import('./demo-data.js');
     _isDemoMode = demoModule.isDemoMode();
+    // Read by the screen only to word a refused save: demo mode blocks every write
+    // (__savePayslip returns false), which must not read as "save failed".
+    window.__taxDemoMode = _isDemoMode;
     if (_isDemoMode) {
       demoModule.ensureDemoStorageSandbox();
       _demoFinanceData = demoModule.generateDemoFinanceData();
