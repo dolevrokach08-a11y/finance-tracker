@@ -40,24 +40,26 @@ function getTaxParams(year) {
 // Default bracket set (current year) — used by the waterfall when no prop given.
 const TAX_BRACKETS = getTaxParams(CURRENT_YEAR).brackets;
 
-function fatherChildPoints(age) {
-  if (age < 0) return 0;
-  if (age === 0) return 2.5;
-  if (age <= 2) return 4.5;
-  if (age === 3) return 3.5;
-  if (age <= 5) return 2.5;
-  return 0;
-}
-
-function motherChildPoints(age) {
-  if (age < 0) return 0;
-  if (age === 0) return 2.5;
-  if (age <= 2) return 4.5;
-  if (age === 3) return 3.5;
-  if (age <= 5) return 2.5;
-  if (age <= 17) return 1;
-  if (age === 18) return 0.5;
-  return 0;
+// Child credit points per parent, by the age the child reaches in the tax year.
+// The law changed twice inside TAX_YEARS, so the year matters:
+//   2022 (חוק ההסדרים) — ages 6–12: father 0→1, mother 1→2.
+//   2024 (חוק הגדלת נקודות זיכוי להורים, התשפ"ג–2023) — birth year +1, ages 1–2 +2,
+//        age 3 +1, for each parent; ages 13–17: father 0→1, mother 1→2.
+// Ages 0–5 were already equal for both parents before 2024 (1.5 / 2.5).
+// Only age 18 goes to the mother alone. The optional form-116ד deferral of one
+// birth-year point to the following year is NOT modelled here.
+function childCreditPoints(age, year) {
+  const toddlerReform = year >= 2024;
+  const same = (p) => ({ father: p, mother: p });
+  if (!Number.isFinite(age) || age < 0) return same(0);
+  if (age === 0) return same(1.5 + (toddlerReform ? 1 : 0));
+  if (age <= 2) return same(2.5 + (toddlerReform ? 2 : 0));
+  if (age === 3) return same(2.5 + (toddlerReform ? 1 : 0));
+  if (age <= 5) return same(2.5);
+  if (age <= 12) return year >= 2022 ? { father: 1, mother: 2 } : { father: 0, mother: 1 };
+  if (age <= 17) return year >= 2024 ? { father: 1, mother: 2 } : { father: 0, mother: 1 };
+  if (age === 18) return { father: 0, mother: 0.5 };
+  return same(0);
 }
 
 function calcTax(annual, brackets = TAX_BRACKETS) {
@@ -1458,7 +1460,7 @@ function App() {
     const calc = (monthly, isMother) => {
       const annual = monthly * 12;
       const baseP = isMother ? 2.75 : 2.25;
-      const childP = ages.reduce((s, a) => s + (isMother ? motherChildPoints(a) : fatherChildPoints(a)), 0);
+      const childP = ages.reduce((s, a) => s + childCreditPoints(a, taxParams.year)[isMother ? 'mother' : 'father'], 0);
       const totalP = baseP + childP;
       // הפרדה לפי החוק:
       // • נק' תושב/אישה (בסיס) — מקזזות כל הכנסה חייבת, כולל מס רווחי הון (סע' 34, 36א)
@@ -2215,44 +2217,55 @@ function App() {
 
         {/* DETAIL TABLE */}
         <button className="tax-view tax-view--plan tax-detail-toggle" onClick={() => setDet(!det)} style={{ width: "100%", padding: "12px", borderRadius: 10, cursor: "pointer", fontSize: 13, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.07)", color: "hsl(215, 12%, 52%)", fontWeight: 600, marginBottom: 16 }}>
-          {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל (רפורמת 2024)
+          {det ? "▲ הסתר" : "▼ הצג"} טבלת נקודות זיכוי לפי גיל — שנת המס {taxParams.year}
         </button>
-        {det && (
+        {det && (() => {
+          // Values come from childCreditPoints — the same function the calculation uses —
+          // so the table cannot drift from the numbers above it.
+          const y = taxParams.year;
+          const reform = y >= 2024;
+          const rows = [
+            ["birth", "שנת הלידה", 0, reform ? "1.5 בסיס ועוד 1 מרפורמת 2024" : "לפני רפורמת 2024. מ-2024: 2.5"],
+            ["1-2", "1–2", 1, reform ? "2.5 בסיס ועוד 2 מרפורמת 2024" : "לפני רפורמת 2024. מ-2024: 4.5"],
+            ["3", "3", 3, reform ? "2.5 בסיס ועוד 1 מרפורמת 2024" : "לפני רפורמת 2024. מ-2024: 3.5"],
+            ["4-5", "4–5", 4, "אין שינוי"],
+            ["6-12", "6–12", 6, "הוגדל ב-2022. לפני כן היו 0 לאב ו-1 לאם"],
+            ["13-17", "13–17", 13, reform ? "הוגדל ב-2024. לפני כן היו 0 לאב ו-1 לאם" : "מ-2024: 1 לאב ו-2 לאם"],
+            ["18", "18", 18, "אין שינוי"],
+          ];
+          const birth = childCreditPoints(0, y).mother, nextYear = childCreditPoints(1, y).mother;
+          return (
           <div className="tax-panel tax-view tax-view--plan tax-table-wrap" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16, overflowX: "auto" }}>
             <table className="tax-data-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
               <thead>
                 <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.15)" }}>
-                  {["גיל", "אב בסיס", "רפורמה", "אב סה״כ", "אם בסיס", "רפורמה", "אם סה״כ"].map(h => (
-                    <th key={h} style={{ padding: "8px 4px", textAlign: "center", color: "hsl(215, 12%, 52%)", fontSize: 11 }}>{h}</th>
+                  {["גיל הילד בשנת המס", "אב", "אם", "הערה"].map((h, i) => (
+                    <th key={h} style={{ padding: "8px 6px", textAlign: i === 1 || i === 2 ? "center" : "start", color: "hsl(215, 12%, 52%)", fontSize: 11 }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ["לידה", 1.5, 1, 2.5, 1.5, 1, 2.5],
-                  ["1-2", 2.5, 2, 4.5, 2.5, 2, 4.5],
-                  ["3", 2.5, 1, 3.5, 2.5, 1, 3.5],
-                  ["4-5", 2.5, 0, 2.5, 2.5, 0, 2.5],
-                  ["6-17", 0, 0, 0, 1, 0, 1],
-                  ["18", 0, 0, 0, 0.5, 0, 0.5],
-                ].map(row => (
-                  <tr key={row[0]} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "6px 4px", fontWeight: 600, textAlign: "center" }}>{row[0]}</td>
-                    <td style={{ textAlign: "center", color: "#7ab8e0" }}>{row[1]}</td>
-                    <td style={{ textAlign: "center", color: row[2] ? "#5ab85a" : "#4a4a5a" }}>{row[2] ? `+${row[2]}` : "\u2014"}</td>
-                    <td style={{ textAlign: "center", color: "#7ab8e0", fontWeight: 700 }}>{row[3]}</td>
-                    <td style={{ textAlign: "center", color: "#d898c8" }}>{row[4]}</td>
-                    <td style={{ textAlign: "center", color: row[5] ? "#5ab85a" : "#4a4a5a" }}>{row[5] ? `+${row[5]}` : "\u2014"}</td>
-                    <td style={{ textAlign: "center", color: "#d898c8", fontWeight: 700 }}>{row[6]}</td>
-                  </tr>
-                ))}
+                {rows.map(([key, label, age, note]) => {
+                  const p = childCreditPoints(age, y);
+                  return (
+                    <tr key={key} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <td style={{ padding: "7px 6px", fontWeight: 600, textAlign: "start" }}>{age === 0 ? label : <span dir="ltr">{label}</span>}</td>
+                      <td style={{ textAlign: "center", color: "#7ab8e0", fontWeight: 700 }}><span dir="ltr">{p.father}</span></td>
+                      <td style={{ textAlign: "center", color: "#d898c8", fontWeight: 700 }}><span dir="ltr">{p.mother}</span></td>
+                      <td style={{ padding: "7px 6px", textAlign: "start", color: "hsl(215, 12%, 52%)", fontSize: 11 }}>{note}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
-            <p style={{ fontSize: 11, color: "#6a6a8a", marginTop: 10, marginBottom: 0 }}>
-              * עד גיל 5 סה״כ זהה לשני ההורים (מסעיפים שונים). מגיל 6 רק האם מקבלת.
+            <p style={{ fontSize: 11, color: "#6a6a8a", marginTop: 10, marginBottom: 0, lineHeight: 1.6 }}>
+              * כל הורה מקבל את הנקודות שלו לפי הטבלה. רק בגיל 18 האם לבדה מקבלת.
+              <br />
+              * האם יכולה לדחות נקודה אחת משנת הלידה לשנה שאחריה (טופס 116ד), ואז מקבלת {birth - 1} בשנת הלידה ו-{nextYear + 1} בשנה שאחריה. המחשבון אינו מניח דחייה.
             </p>
           </div>
-        )}
+          );
+        })()}
 
         {/* STEPS */}
         <section className="tax-panel tax-view tax-view--plan tax-steps" style={{ background: "rgba(255,255,255,0.035)", borderRadius: 14, border: "1px solid rgba(255,255,255,0.07)", padding: "18px", marginBottom: 16 }}>
@@ -2272,7 +2285,7 @@ function App() {
         </section>
 
         <div className="tax-view tax-view--plan tax-disclaimer" style={{ padding: "12px", borderRadius: 10, background: "rgba(200,140,80,0.05)", border: "1px solid rgba(200,140,80,0.12)", fontSize: 11, color: "#908070", lineHeight: 1.7 }}>
-          <strong>⚠️</strong> סכומי המענק הם הערכה. הכנסת בן/בת הזוג משפיעה על המענק. נקודות הזיכוי מדויקות לפי רפורמת 2024.
+          <strong>⚠️</strong> סכומי המענק הם הערכה. הכנסת בן/בת הזוג משפיעה על המענק. נקודות הזיכוי לילדים לפי החוק בשנת המס הנבחרת.
           מדרגות המס ושווי נקודת זיכוי עשויים להשתנות משנה לשנה — עדכן בהתאם. אין לראות בזה ייעוץ מס — התייעצו עם רו״ח.
         </div>
       </main>
