@@ -62,6 +62,48 @@ function childCreditPoints(age, year) {
   return same(0);
 }
 
+// One earner's payslips for one tax year → the monthly gross the calculation uses
+// (it multiplies by 12). A month counts when it has a payslip with a gross, or an
+// explicit "no income" mark, which counts as 0 — maternity leave paid in one lump,
+// unpaid leave, between jobs. A month with neither is not counted, so the average
+// fills it in: right for a month still ahead, wrong for one that passed with no
+// income. Passed months with neither are returned as `missingPast`, so the screen
+// names them instead of filling them in silently. They are deliberately NOT taken
+// as 0: a payslip simply not uploaded would then lower the income and inflate the
+// refund, and nothing on screen would look wrong.
+const NO_INCOME_SOURCE = 'no-income';
+// Demo mode refuses every save on purpose; say that instead of reporting a failure.
+const saveFailedMessage = () => window.__taxDemoMode ? 'מצב הדגמה — שמירה חסומה, שום דבר לא נשמר' : 'שגיאה בשמירה';
+function currentMonthKey(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function earnerYearIncome(payslips, earner, year, todayMonth) {
+  const prefix = `${year}-`;
+  const byMonth = {};
+  let count = 0;
+  for (const p of payslips || []) {
+    if (!p || p.earner !== earner || !p.month || !p.month.startsWith(prefix)) continue;
+    if (p.source === NO_INCOME_SOURCE) {
+      if (!(p.month in byMonth)) byMonth[p.month] = 0;
+    } else if (p.gross) {
+      byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
+      count++;
+    }
+  }
+  const keys = Object.keys(byMonth).sort();
+  const total = keys.reduce((s, k) => s + byMonth[k], 0);
+  const noIncome = keys.filter(k => byMonth[k] === 0);
+  const missingPast = [];
+  for (let m = 1; m <= 12; m++) {
+    const k = `${prefix}${String(m).padStart(2, '0')}`;
+    if (k < todayMonth && !(k in byMonth)) missingPast.push(k);
+  }
+  // Marks alone (no payslip at all) say nothing about the salary, so they must not
+  // drive the slider to 0 over income that came from the finance data instead.
+  const avg = count > 0 ? Math.round(total / keys.length) : null;
+  return { avg, count, months: keys.length, total, noIncome, missingPast };
+}
+
 function calcTax(annual, brackets = TAX_BRACKETS) {
   let tax = 0, prev = 0;
   for (const b of brackets) {
@@ -1311,15 +1353,9 @@ function App() {
   // payslips. Reading a single payslip's gross into the slider understated a month
   // that has more than one.
   const applyEarnerAverage = useCallback((earner, year) => {
-    const slips = (window.__payslipData?.payslips || []).filter(p =>
-      p.earner === earner && p.month && p.month.startsWith(year + '-') && p.gross
-    );
-    if (slips.length === 0) return;
-    const byMonth = {};
-    for (const p of slips) byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
-    const monthTotals = Object.values(byMonth);
-    const avgGross = monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length;
-    const rounded = Math.round(avgGross / 250) * 250;
+    const { avg } = earnerYearIncome(window.__payslipData?.payslips || [], earner, year, currentMonthKey());
+    if (avg == null) return;
+    const rounded = Math.round(avg / 250) * 250;
     if (earner === 'father') setFM(rounded);
     else if (earner === 'mother') setMM(rounded);
   }, []);
@@ -1361,13 +1397,48 @@ function App() {
       applyEarnerAverage(earner, year);
       setTimeout(() => setPayslipStatus(''), 3000);
     } else {
-      setPayslipStatus('שגיאה בשמירה');
+      setPayslipStatus(saveFailedMessage());
       setTimeout(() => setPayslipStatus(''), 3000);
     }
   }, [pendingPayslip, payslipEarner, applyEarnerAverage, payslipSyncMessage]);
 
+  // A month the earner really had no income in — not a payslip with a made-up 0.
+  // The fixed source + file name make it one record per earner and month: marking
+  // the same month twice replaces it (see samePayslip in shared/payslip-sync.js).
+  const markNoIncome = useCallback(async (earner, monthKey) => {
+    if (!earner) { setPayslipStatus('יש לבחור בן זוג'); setTimeout(() => setPayslipStatus(''), 3000); return false; }
+    setPayslipStatus('שומר...');
+    const ok = await window.__savePayslip({
+      id: Date.now(),
+      month: monthKey,
+      gross: 0,
+      net: 0,
+      totalDeductions: 0,
+      deductions: {},
+      earner,
+      fileName: 'ללא הכנסה',
+      source: NO_INCOME_SOURCE,
+      time: new Date().toISOString()
+    });
+    if (ok) {
+      setPayslips([...window.__payslipData.payslips]);
+      setPayslipStatus(`${payslipSyncMessage(window.__payslipSyncState) || 'נשמר במכשיר'} — ${monthKey} ללא הכנסה`);
+      applyEarnerAverage(earner, monthKey.slice(0, 4));
+    } else {
+      setPayslipStatus(saveFailedMessage());
+    }
+    setTimeout(() => setPayslipStatus(''), 3000);
+    return ok;
+  }, [applyEarnerAverage, payslipSyncMessage]);
+
   const confirmPayslipUpload = useCallback(async () => {
     if (!pendingPayslip) return;
+    if (pendingPayslip._noIncome) {
+      if (!pendingPayslip.month || !pendingPayslip.year) { setPayslipStatus('יש לבחור חודש'); setTimeout(() => setPayslipStatus(''), 3000); return; }
+      const ok = await markNoIncome(pendingPayslip.earner || payslipEarner, `${pendingPayslip.year}-${pendingPayslip.month}`);
+      if (ok) setPendingPayslip(null);
+      return;
+    }
     if (!pendingPayslip.gross && !pendingPayslip.net) { setPayslipStatus('יש להזין ברוטו או נטו'); return; }
     const monthKey = pendingPayslip.month && pendingPayslip.year
       ? `${pendingPayslip.year}-${pendingPayslip.month}`
@@ -1406,10 +1477,10 @@ function App() {
       if (payslip.gross && payslip.earner) applyEarnerAverage(payslip.earner, monthKey.slice(0, 4));
       setTimeout(() => setPayslipStatus(''), 2500);
     } else {
-      setPayslipStatus('שגיאה בשמירה');
+      setPayslipStatus(saveFailedMessage());
       setTimeout(() => setPayslipStatus(''), 3000);
     }
-  }, [pendingPayslip, payslipEarner, applyEarnerAverage, payslipSyncMessage]);
+  }, [pendingPayslip, payslipEarner, applyEarnerAverage, payslipSyncMessage, markNoIncome]);
 
   const handleDeletePayslip = useCallback(async (id) => {
     if (!confirm('למחוק את התלוש?')) return;
@@ -1422,24 +1493,16 @@ function App() {
   const payslipAverages = useMemo(() => {
     const yearPayslips = payslips.filter(p => p.month && p.month.startsWith(selectedYear + '-'));
 
-    const calcAvg = (earner) => {
-      const slips = yearPayslips.filter(p => p.earner === earner && p.gross);
-      if (slips.length === 0) return { avg: null, count: slips.length, months: 0 };
-      // Group by month: sum gross from multiple employers in the same month
-      const byMonth = {};
-      for (const p of slips) {
-        byMonth[p.month] = (byMonth[p.month] || 0) + p.gross;
-      }
-      const monthTotals = Object.values(byMonth);
-      const avg = Math.round(monthTotals.reduce((s, v) => s + v, 0) / monthTotals.length);
-      return { avg, count: slips.length, months: monthTotals.length };
-    };
-
-    const f = calcAvg('father'), m = calcAvg('mother');
+    const today = currentMonthKey();
+    const f = earnerYearIncome(yearPayslips, 'father', selectedYear, today);
+    const m = earnerYearIncome(yearPayslips, 'mother', selectedYear, today);
     return {
       fatherAvg: f.avg, motherAvg: m.avg,
       fatherCount: f.count, motherCount: m.count,
-      fatherMonths: f.months, motherMonths: m.months
+      fatherMonths: f.months, motherMonths: m.months,
+      fatherNoIncome: f.noIncome.length, motherNoIncome: m.noIncome.length,
+      fatherMissing: f.avg == null ? [] : f.missingPast,
+      motherMissing: m.avg == null ? [] : m.missingPast,
     };
   }, [payslips, selectedYear]);
 
@@ -1674,6 +1737,12 @@ function App() {
                   padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
                   border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "hsl(215, 12%, 52%)"
                 }}>הזנה ידנית</button>
+                <button onClick={() => setPendingPayslip({ _manualEntry: true, _noIncome: true, fileName: 'ללא הכנסה', deductions: {} })}
+                  title="חודש שבו לא הייתה הכנסה — למשל חופשת לידה שדמי הלידה עליה שולמו בחודש אחר"
+                  style={{
+                  padding: "5px 10px", borderRadius: 8, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.05)", color: "hsl(215, 12%, 52%)"
+                }}>חודש ללא הכנסה</button>
               </div>
             </div>
 
@@ -1724,6 +1793,20 @@ function App() {
                         padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
                         border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
                       }}>בטל</button>
+                    </div>
+                  </>
+                ) : pendingPayslip._noIncome ? (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "#7ab8e0", marginBottom: 6 }}>חודש ללא הכנסה:</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 11 }}>
+                      <input type="month" value={pendingPayslip.year && pendingPayslip.month ? `${pendingPayslip.year}-${pendingPayslip.month}` : ''}
+                        onChange={e => { const [y,m]=(e.target.value||'').split('-'); setPendingPayslip(p=>({...p,month:m||null,year:y||null})); }}
+                        style={{ background:"rgba(0,0,0,0.3)",border:"1px solid rgba(255,255,255,0.15)",color:"hsl(210, 20%, 92%)",borderRadius:4,padding:"4px 6px",fontSize:11,fontFamily:"inherit" }}
+                      />
+                      {!payslipEarner && <span style={{ color: "#e07070", fontSize: 10 }}>יש לבחור בן זוג (אב/אם) למעלה</span>}
+                    </div>
+                    <div style={{ fontSize: 10, color: "hsl(215, 12%, 52%)", marginTop: 6, lineHeight: 1.5 }}>
+                      החודש ייספר כ-0 בממוצע, במקום שיושלם לפי שאר החודשים. למשל חודשי חופשת לידה כשדמי הלידה הוזנו בחודש שבו שולמו.
                     </div>
                   </>
                 ) : pendingPayslip._manualEntry ? (
@@ -1805,13 +1888,20 @@ function App() {
                 )}
                 {!pendingPayslip._isForm106 && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+                    {(() => {
+                      const blocked = pendingPayslip._noIncome
+                        ? !(pendingPayslip.month && pendingPayslip.year && payslipEarner)
+                        : (!pendingPayslip.gross && !pendingPayslip.net);
+                      return (
                     <button onClick={confirmPayslipUpload}
-                      disabled={!pendingPayslip.gross && !pendingPayslip.net}
+                      disabled={blocked}
                       style={{
-                        padding: "5px 16px", borderRadius: 6, cursor: (!pendingPayslip.gross && !pendingPayslip.net) ? "default" : "pointer", fontSize: 11, fontWeight: 600,
+                        padding: "5px 16px", borderRadius: 6, cursor: blocked ? "default" : "pointer", fontSize: 11, fontWeight: 600,
                         border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.15)", color: "#5ab85a",
-                        opacity: (!pendingPayslip.gross && !pendingPayslip.net) ? 0.4 : 1
+                        opacity: blocked ? 0.4 : 1
                     }}>אשר ושמור</button>
+                      );
+                    })()}
                     <button onClick={() => setPendingPayslip(null)} style={{
                       padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontSize: 11,
                       border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "hsl(215, 12%, 52%)"
@@ -1826,7 +1916,7 @@ function App() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, fontSize: 11, marginBottom: 8 }}>
                 {payslipAverages.fatherAvg && (
                   <span style={{ background: "rgba(122,184,224,0.1)", border: "1px solid rgba(122,184,224,0.2)", padding: "3px 8px", borderRadius: 6, color: "#7ab8e0" }}>
-                    👨 ברוטו ממוצע: ₪{payslipAverages.fatherAvg.toLocaleString()} ({payslipAverages.fatherMonths} חודשים{payslipAverages.fatherCount > payslipAverages.fatherMonths ? `, ${payslipAverages.fatherCount} תלושים` : ''})
+                    👨 ברוטו ממוצע: ₪{payslipAverages.fatherAvg.toLocaleString()} ({payslipAverages.fatherMonths} חודשים{payslipAverages.fatherNoIncome ? `, ${payslipAverages.fatherNoIncome} ללא הכנסה` : ''}{payslipAverages.fatherCount > payslipAverages.fatherMonths - payslipAverages.fatherNoIncome ? `, ${payslipAverages.fatherCount} תלושים` : ''})
                     <button onClick={() => setFM(Math.round(payslipAverages.fatherAvg / 250) * 250)} style={{
                       marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
@@ -1835,7 +1925,7 @@ function App() {
                 )}
                 {payslipAverages.motherAvg && (
                   <span style={{ background: "rgba(216,152,200,0.1)", border: "1px solid rgba(216,152,200,0.2)", padding: "3px 8px", borderRadius: 6, color: "#d898c8" }}>
-                    👩 ברוטו ממוצע: ₪{payslipAverages.motherAvg.toLocaleString()} ({payslipAverages.motherMonths} חודשים{payslipAverages.motherCount > payslipAverages.motherMonths ? `, ${payslipAverages.motherCount} תלושים` : ''})
+                    👩 ברוטו ממוצע: ₪{payslipAverages.motherAvg.toLocaleString()} ({payslipAverages.motherMonths} חודשים{payslipAverages.motherNoIncome ? `, ${payslipAverages.motherNoIncome} ללא הכנסה` : ''}{payslipAverages.motherCount > payslipAverages.motherMonths - payslipAverages.motherNoIncome ? `, ${payslipAverages.motherCount} תלושים` : ''})
                     <button onClick={() => setMM(Math.round(payslipAverages.motherAvg / 250) * 250)} style={{
                       marginRight: 4, padding: "1px 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
                       border: "1px solid rgba(90,184,90,0.4)", background: "rgba(90,184,90,0.1)", color: "#5ab85a"
@@ -1844,6 +1934,24 @@ function App() {
                 )}
               </div>
             )}
+
+            {/* Passed months with no payslip and no "no income" mark. The average fills
+                them in; say so by name rather than let a missing payslip pass for a salary. */}
+            {[['father', '👨', payslipAverages.fatherMissing], ['mother', '👩', payslipAverages.motherMissing]]
+              .filter(([, , missing]) => missing.length > 0)
+              .map(([earner, icon, missing]) => (
+                <div key={earner} className="tax-payslip-missing" style={{ fontSize: 11, color: "#d0a060", background: "rgba(200,140,80,0.06)", border: "1px solid rgba(200,140,80,0.18)", borderRadius: 6, padding: "6px 8px", marginBottom: 8, lineHeight: 1.7 }}>
+                  ⚠️ {icon} {missing.length === 1
+                    ? 'אין נתון לחודש שכבר עבר, והוא מושלם לפי ממוצע שאר החודשים. אם לא הייתה בו הכנסה, לחץ עליו:'
+                    : `אין נתון ל-${missing.length} חודשים שכבר עברו, והם מושלמים לפי ממוצע שאר החודשים. אם לא הייתה בהם הכנסה, לחץ על החודש:`}{' '}
+                  {missing.map(k => (
+                    <button key={k} onClick={() => markNoIncome(earner, k)} title={`סמן ${k} כחודש ללא הכנסה`} style={{
+                      margin: "0 2px", padding: "0 6px", borderRadius: 4, cursor: "pointer", fontSize: 10, fontWeight: 600,
+                      border: "1px solid rgba(200,140,80,0.35)", background: "rgba(200,140,80,0.1)", color: "#d0a060"
+                    }}><span dir="ltr">{k.slice(5)}/{k.slice(0, 4)}</span></button>
+                  ))}
+                </div>
+              ))}
 
             {/* Payslip History */}
             {payslips.length > 0 && (
@@ -1860,10 +1968,14 @@ function App() {
                           <span title={p.fileName} style={{ fontSize: 9, opacity: 0.6, maxWidth: 130, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.fileName}</span>
                         )}
                       </span>
+                      {p.source === NO_INCOME_SOURCE ? (
+                        <span style={{ color: "hsl(215, 12%, 52%)" }}>ללא הכנסה — נספר כ-0</span>
+                      ) : (
                       <span>
                         <span style={{ color: "hsl(215, 12%, 52%)" }}>ברוטו: </span><strong style={{ color: "#5ab85a" }}>₪{p.gross?.toLocaleString() || '?'}</strong>
                         <span style={{ color: "hsl(215, 12%, 52%)", marginRight: 8 }}> נטו: </span><strong>₪{p.net?.toLocaleString() || '?'}</strong>
                       </span>
+                      )}
                       <button onClick={() => handleDeletePayslip(p.id)} style={{
                         width: 18, height: 18, borderRadius: "50%", cursor: "pointer", fontSize: 11,
                         border: "1px solid rgba(224,112,112,0.3)", background: "rgba(224,112,112,0.1)",
